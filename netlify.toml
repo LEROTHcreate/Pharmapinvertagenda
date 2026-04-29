@@ -10,3 +10,12 @@
   # Évite des erreurs Prisma en CI : on génère le client juste avant le build
   # (postinstall le fait déjà, mais on s'assure que c'est bien à jour).
   PRISMA_GENERATE_DATAPROXY = "false"
+  # ─── Secret scanning ───
+  # Ces variables ne sont pas des secrets : ce sont des contacts publics
+  # (expéditeur d'emails, téléphone/email d'assistance) qui sont volontairement
+  # intégrés dans les emails sortants et donc visibles dans le build output.
+  SECRETS_SCAN_OMIT_KEYS = "EMAIL_FROM,ADMIN_CONTACT_EMAIL,ADMIN_CONTACT_PHONE,ADMIN_CONTACT_NAME"
+  # On exclut aussi les fichiers de seed (script ponctuel) et .env.example
+  # du scan : ils contiennent des placeholders et des emails de démo, pas de
+  # vrais secrets.
+  SECRETS_SCAN_OMIT_PATHS = ".env.example,prisma/seed.ts,prisma/update-admin.ts"
