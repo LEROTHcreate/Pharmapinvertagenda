@@ -33,12 +33,20 @@ describe("role-task-rules", () => {
       }
     });
 
-    it("autorise MISE_A_PRIX aux 4 rôles éligibles (préparateur, livreur, back-office, secrétaire)", () => {
+    it("MISE_A_PRIX (Mail/App/Préparatoire) autorisé seulement au préparateur", () => {
       expect(isTaskAllowed("PREPARATEUR", "MISE_A_PRIX")).toBe(true);
-      expect(isTaskAllowed("LIVREUR", "MISE_A_PRIX")).toBe(true);
-      expect(isTaskAllowed("BACK_OFFICE", "MISE_A_PRIX")).toBe(true);
-      expect(isTaskAllowed("SECRETAIRE", "MISE_A_PRIX")).toBe(true);
+      expect(isTaskAllowed("LIVREUR", "MISE_A_PRIX")).toBe(false);
+      expect(isTaskAllowed("BACK_OFFICE", "MISE_A_PRIX")).toBe(false);
+      expect(isTaskAllowed("SECRETAIRE", "MISE_A_PRIX")).toBe(false);
       expect(isTaskAllowed("PHARMACIEN", "MISE_A_PRIX")).toBe(false);
+    });
+
+    it("MISE_EN_RAYON et VERIFICATION_STOCKS sont réservés au livreur", () => {
+      expect(isTaskAllowed("LIVREUR", "MISE_EN_RAYON")).toBe(true);
+      expect(isTaskAllowed("LIVREUR", "VERIFICATION_STOCKS")).toBe(true);
+      expect(isTaskAllowed("PREPARATEUR", "MISE_EN_RAYON")).toBe(false);
+      expect(isTaskAllowed("BACK_OFFICE", "VERIFICATION_STOCKS")).toBe(false);
+      expect(isTaskAllowed("SECRETAIRE", "MISE_EN_RAYON")).toBe(false);
     });
 
     it("autorise LIVRAISON au livreur ET au titulaire (couverture en l'absence du livreur)", () => {

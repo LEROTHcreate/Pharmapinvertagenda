@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   ABSENCE_ICONS,
@@ -106,6 +107,21 @@ export const PlanningGrid = memo(function PlanningGrid({
 
   const employeeIds = useMemo(() => employees.map((e) => e.id), [employees]);
 
+  // Effectif comptoir : on ne compte QUE pharmaciens + préparateurs.
+  // Les livreurs, secrétaires, back-office, étudiants… ne couvrent pas le
+  // comptoir → exclus du compteur "min" affiché à droite de la grille.
+  const counterStaff = useMemo(
+    () =>
+      employees.filter(
+        (e) => e.status === "PHARMACIEN" || e.status === "PREPARATEUR"
+      ),
+    [employees]
+  );
+  const counterStaffIds = useMemo(
+    () => counterStaff.map((e) => e.id),
+    [counterStaff]
+  );
+
   // Pré-calcule heures jour + heures semaine par collaborateur (utilisées dans le
   // <thead>) — sinon recalculées inline pour chaque cellule d'en-tête à chaque
   // render (selection drag, hover, etc.). 1 seul passage par collaborateur.
@@ -126,11 +142,11 @@ export const PlanningGrid = memo(function PlanningGrid({
   const slotStaffing = useMemo(() => {
     const map = new Map<string, { staff: number; level: "ok" | "warning" | "critical" }>();
     for (const slot of TIME_SLOTS) {
-      const staff = staffingForSlot(date, slot, employeeIds, index);
+      const staff = staffingForSlot(date, slot, counterStaffIds, index);
       map.set(slot, { staff, level: staffingLevel(staff, minStaff) });
     }
     return map;
-  }, [date, employeeIds, index, minStaff]);
+  }, [date, counterStaffIds, index, minStaff]);
 
   const isTodayDisplayed = useMemo(() => {
     const today = new Date();
@@ -297,9 +313,14 @@ export const PlanningGrid = memo(function PlanningGrid({
                     )}
                     title={`${e.firstName} ${e.lastName} · ${STATUS_LABELS[e.status]} · contrat ${e.weeklyHours}h · jour ${dailyH.toFixed(1)}h · semaine ${weeklyH.toFixed(1)}h${
                       Math.abs(delta) >= 0.5 ? ` (${delta > 0 ? "+" : ""}${delta.toFixed(1)}h)` : ""
-                    }`}
+                    } — Cliquer pour voir son planning`}
                   >
-                    <div className="flex flex-col items-stretch gap-0.5 min-w-0">
+                    {/* Lien vers la fiche planning du collaborateur — la
+                        plage horaire reprend la semaine courante */}
+                    <Link
+                      href={`/planning/collaborateur/${e.id}?view=week&week=${weekDates[0] ?? ""}`}
+                      className="flex flex-col items-stretch gap-0.5 min-w-0 rounded-md px-1 -mx-1 py-1 -my-1 hover:bg-zinc-50 transition-colors cursor-pointer"
+                    >
                       {/* Nom + pastille couleur (légèrement renforcés sur ma colonne) */}
                       <div className="flex items-center gap-1 justify-center min-w-0">
                         <span
@@ -348,7 +369,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                           )}
                         </span>
                       </div>
-                    </div>
+                    </Link>
                   </th>
                 );
               })}
@@ -461,7 +482,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         </span>
                       </TooltipTrigger>
                       <TooltipContent side="left" className="text-[11px]">
-                        {breakdownLabel(date, slot, employees, index)}
+                        {breakdownLabel(date, slot, counterStaff, index)}
                       </TooltipContent>
                     </Tooltip>
                   </td>

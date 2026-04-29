@@ -65,9 +65,9 @@ const TASK_POOL: Partial<Record<EmployeeStatus, TaskCode[]>> = {
   TITULAIRE: ["COMPTOIR", "PARAPHARMACIE", "REUNION_FOURNISSEUR"],
   PREPARATEUR: ["COMPTOIR", "PARAPHARMACIE", "MAIL", "MISE_A_PRIX", "ROBOT"],
   ETUDIANT: ["COMPTOIR"],
-  LIVREUR: ["LIVRAISON", "MISE_A_PRIX"],
-  BACK_OFFICE: ["COMMANDE", "MISE_A_PRIX"],
-  SECRETAIRE: ["SECRETARIAT", "COMMANDE", "MISE_A_PRIX"],
+  LIVREUR: ["LIVRAISON", "MISE_EN_RAYON", "VERIFICATION_STOCKS"],
+  BACK_OFFICE: ["COMMANDE"],
+  SECRETAIRE: ["SECRETARIAT", "COMMANDE"],
 };
 
 // Créneaux de 30 min de 07:30 à 22:00
@@ -177,9 +177,12 @@ function shouldWork(
 
 function pickTask(status: EmployeeStatus, dayOfWeek: number, slot: string): TaskCode {
   const pool = TASK_POOL[status] ?? ["COMPTOIR"];
-  // Livreur : majoritairement LIVRAISON, MISE_A_PRIX entre deux tournées (créneau "creux")
+  // Livreur : majoritairement LIVRAISON, MISE_EN_RAYON / VERIFICATION_STOCKS
+  // entre deux tournées (créneaux "creux" en milieu/fin d'après-midi).
   if (status === EmployeeStatus.LIVREUR) {
-    return slot >= "16:30" && slot < "17:30" ? "MISE_A_PRIX" : "LIVRAISON";
+    if (slot >= "16:30" && slot < "17:30") return "MISE_EN_RAYON";
+    if (slot >= "18:30" && slot < "19:30") return "VERIFICATION_STOCKS";
+    return "LIVRAISON";
   }
   // Soirée (18:00-20:00) : poste principal (comptoir / dispensation)
   if (slot >= "18:00") return pool[0];

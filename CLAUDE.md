@@ -184,20 +184,19 @@ Chaque statut d'employé n'a accès qu'à un ensemble restreint de postes. Ces r
 - Livraison ✅ (assure les tournées en l'absence du livreur)
 - Tout le reste ❌
 
-**SECRETAIRE** — Administratif + étiquetage :
+**SECRETAIRE** — Administratif :
 - Secrétariat ✅
 - Commandes ✅
-- Mise à prix ✅
 - Tout le reste ❌
 
 **BACK_OFFICE** — Commandes :
 - Commandes ✅
-- Mise à prix ✅
 - Tout le reste ❌
 
-**LIVREUR** — Logistique + étiquetage :
+**LIVREUR** — Logistique + rayonnage :
 - Livraison ✅
-- Mise à prix ✅ (étiquetage entre deux tournées)
+- Mise en rayon ✅ (entre deux tournées)
+- Vérification des stocks ✅
 - Tout le reste ❌
 
 > **Échange de poste** : seuls les pharmaciens peuvent utiliser le code `ECHANGE` (échange de garde). Pour les autres rôles, on ne propose plus ce poste.
@@ -219,8 +218,10 @@ Les postes suivants sont transversaux et peuvent être affectés à n'importe qu
 | COMMANDE | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | SECRETARIAT | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | MAIL | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| MISE_A_PRIX | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| MISE_A_PRIX (Mail/App/Préparatoire) | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | LIVRAISON | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| MISE_EN_RAYON | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| VERIFICATION_STOCKS | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | ROBOT | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | REUNION_FOURNISSEUR | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | ECHANGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |

@@ -14,11 +14,10 @@ const ROLE_SPECIFIC_TASKS: Record<EmployeeStatus, TaskCode[]> = {
   TITULAIRE: ["COMPTOIR", "PARAPHARMACIE", "REUNION_FOURNISSEUR", "LIVRAISON"],
   PREPARATEUR: ["COMPTOIR", "PARAPHARMACIE", "MAIL", "MISE_A_PRIX", "ROBOT"],
   ETUDIANT: ["COMPTOIR"],
-  // Livreur : peut aussi faire de l'étiquetage (MAP) entre deux tournées
-  LIVREUR: ["LIVRAISON", "MISE_A_PRIX"],
-  BACK_OFFICE: ["COMMANDE", "MISE_A_PRIX"],
-  // Secrétaire : peut également aider sur l'étiquetage
-  SECRETAIRE: ["SECRETARIAT", "COMMANDE", "MISE_A_PRIX"],
+  // Livreur : livraisons + mise en rayon + vérification des stocks
+  LIVREUR: ["LIVRAISON", "MISE_EN_RAYON", "VERIFICATION_STOCKS"],
+  BACK_OFFICE: ["COMMANDE"],
+  SECRETAIRE: ["SECRETARIAT", "COMMANDE"],
 };
 
 /** Liste complète des postes autorisés pour un rôle donné */

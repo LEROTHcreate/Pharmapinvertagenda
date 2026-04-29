@@ -2,7 +2,14 @@
 // Schéma de données PharmaPlanning
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // engineType=library = client Prisma standard (lit DATABASE_URL en
+  // postgresql://). Empêche Netlify d'auto-générer en mode Data Proxy
+  // qui exigerait une URL prisma://.
+  engineType    = "library"
+  // Cibles binaires : native (dev local Windows/Mac) + RHEL OpenSSL 3
+  // (runtime des Netlify Functions sur AWS Lambda).
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -49,6 +56,8 @@ enum TaskCode {
   FORMATION
   HEURES_SUP
   LIVRAISON
+  MISE_EN_RAYON       // Mise en rayon (livreur)
+  VERIFICATION_STOCKS // Vérification des stocks (livreur)
   ROBOT
   REMPLACEMENT
   ECHANGE
