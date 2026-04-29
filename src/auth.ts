@@ -34,6 +34,11 @@ const credentialsSchema = z.object({
 
 const nextAuth = NextAuth({
   ...authConfig,
+  // Netlify (et autres reverse proxies) modifient les headers Host/X-Forwarded.
+  // `trustHost: true` désactive la vérification stricte de l'host : utile
+  // car NextAuth, sinon, refuse les requêtes dont l'host ne matche pas
+  // exactement NEXTAUTH_URL (problème classique en serverless behind un CDN).
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
