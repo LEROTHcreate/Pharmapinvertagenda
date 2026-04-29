@@ -1,4 +1,3 @@
-import type { EmployeeStatus } from "@prisma/client";
 import type { EmployeeDTO } from "@/types";
 import type { EmployeeDayMap } from "@/lib/planning-utils";
 
