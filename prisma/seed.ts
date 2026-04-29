@@ -240,8 +240,12 @@ async function main() {
   );
 
   console.log("→ Création des comptes utilisateurs...");
-  const adminHash = await bcrypt.hash("fondationthor!", 10);
-  const employeeHash = await bcrypt.hash("employe123", 10);
+  // Les mots de passe ne doivent JAMAIS être hardcodés (Netlify secret scan).
+  // En dev, ils sont lus depuis .env (cf. .env.example).
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "changeMe-admin";
+  const employeePassword = process.env.SEED_EMPLOYEE_PASSWORD ?? "changeMe-emp";
+  const adminHash = await bcrypt.hash(adminPassword, 10);
+  const employeeHash = await bcrypt.hash(employeePassword, 10);
 
   // IDs fixes pour ces deux comptes démo : les sessions JWT existantes
   // (avec ces IDs en payload) restent valides après un re-seed.

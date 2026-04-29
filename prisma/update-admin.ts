@@ -10,10 +10,19 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 const NEW_EMAIL = "pharmapinvert.agenda@gmail.com";
-const NEW_PASSWORD = "fondationthor!";
+// ⚠ Pas de mot de passe en clair (Netlify secret scan).
+// Lance avec : SEED_ADMIN_PASSWORD=monMdp npx tsx prisma/update-admin.ts
+const NEW_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "";
 const OLD_EMAIL = "admin@pharmacie-demo.fr";
 
 async function main() {
+  if (!NEW_PASSWORD) {
+    console.error(
+      "✗ SEED_ADMIN_PASSWORD non défini. Lance avec :\n" +
+        "  SEED_ADMIN_PASSWORD='tonMotDePasse' npx tsx prisma/update-admin.ts"
+    );
+    process.exit(1);
+  }
   console.log(`→ Recherche du compte admin existant...`);
 
   // Cherche le compte admin par son ID démo OU par son ancien email
