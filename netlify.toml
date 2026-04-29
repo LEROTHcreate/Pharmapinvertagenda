@@ -7,9 +7,13 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  # Évite des erreurs Prisma en CI : on génère le client juste avant le build
-  # (postinstall le fait déjà, mais on s'assure que c'est bien à jour).
+  # ─── Prisma : mode normal (pas Data Proxy) ───
+  # Sans ces flags, Netlify (via l'extension Neon) génère un client en mode
+  # Data Proxy qui exige une URL `prisma://...`. Ça casse la connexion à
+  # Supabase qui est en `postgresql://...`. On force le mode "library".
+  PRISMA_CLIENT_ENGINE_TYPE = "library"
   PRISMA_GENERATE_DATAPROXY = "false"
+  PRISMA_GENERATE_NO_ENGINE = "false"
   # ─── Secret scanning ───
   # Ces variables ne sont pas des secrets : ce sont des contacts publics
   # (expéditeur d'emails, téléphone/email d'assistance) qui sont volontairement
