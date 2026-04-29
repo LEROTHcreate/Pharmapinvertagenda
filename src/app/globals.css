@@ -2,26 +2,456 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 250 65% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 250 60% 96%;
+    --accent-foreground: 250 65% 35%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 250 65% 55%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 250 70% 65%;
+    --primary-foreground: 240 10% 4%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 250 70% 65%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* Touch UX iOS / Android :
+       - manipulation : supprime le délai de 300 ms du double-tap zoom
+         (le pinch-zoom système reste dispo via le viewport meta)
+       - tap-highlight transparent : pas de flash bleu disgracieux au tap
+       - overscroll-behavior : empêche le pull-to-refresh involontaire en
+         scrollant vers le haut dans la grille (iOS Safari le déclenche sinon) */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Affine globalement les icônes Lucide → 1.5 (au lieu du 2 par défaut)
+     pour un rendu plus "SF Symbols / Apple". Possibilité de surcharge ponctuelle
+     via la prop `strokeWidth={2}` sur une instance. */
+  svg.lucide {
+    stroke-width: 1.5;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  /* Padding qui respecte la safe-area iOS (notch + home bar) pour les barres
+     flottantes en bas d'écran. À utiliser à la place de `pb-X` quand l'élément
+     est en position fixed bottom. */
+  .safe-pb {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+  .safe-bottom {
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* Cellules / boutons de la grille planning : on garde le tap rapide même
+     si l'élément a sa propre logique de clic. */
+  .touch-cell {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+  }
+
+  /* --- Auth / Apple-like animations --- */
+  /* Conteneur des blobs : isolation paint pour éviter de propager
+     les coûts de compositing sur le reste de la page. */
+  .blob-stage {
+    contain: layout paint style;
+    transform: translateZ(0);
+  }
+  .animate-blob {
+    animation: blob-drift 22s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+    will-change: transform;
+    transform: translateZ(0);
+  }
+  .animate-blob-slow {
+    animation: blob-drift 32s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate-reverse;
+    will-change: transform;
+    transform: translateZ(0);
+  }
+  .animate-fade-up {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: fade-up 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .animate-fade-in {
+    opacity: 0;
+    animation: fade-in 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .animate-shake {
+    animation: shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  }
+  .delay-75 { animation-delay: 75ms; }
+  .delay-150 { animation-delay: 150ms; }
+  .delay-225 { animation-delay: 225ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-450 { animation-delay: 450ms; }
+  .delay-600 { animation-delay: 600ms; }
+
+  /* Bordure brillante (sweep) façon Apple */
+  .shine-border {
+    position: relative;
+    isolation: isolate;
+  }
+  .shine-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from var(--shine-angle, 0deg),
+      transparent 0deg,
+      hsl(250 90% 70% / 0.55) 60deg,
+      transparent 120deg,
+      transparent 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    animation: shine-rotate 9s linear infinite;
+    pointer-events: none;
+    z-index: -1;
+    will-change: --shine-angle;
+  }
+
+  /* Effet "noise" léger pour casser les dégradés */
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+}
+
+@keyframes blob-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(40px, -30px, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-30px, 40px, 0) scale(0.96);
+  }
+}
+
+@keyframes fade-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+@property --shine-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes shine-rotate {
+  to { --shine-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-blob,
+  .animate-blob-slow,
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-shake,
+  .shine-border::before {
+    animation: none !important;
+  }
+  .animate-fade-up,
+  .animate-fade-in {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ─── Impression / PDF ─────────────────────────────────────────── */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  /* Masque tout sauf la grille planning */
+  aside,
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  main {
+    overflow: visible !important;
+  }
+
+  /* Compresse la grille pour tenir sur A4 paysage */
+  table {
+    font-size: 8pt !important;
+  }
+
+  table th,
+  table td {
+    padding: 1pt 2pt !important;
+  }
+
+  /* Forcer l'impression des couleurs de fond */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Pas de scroll, tout doit rentrer */
+  .overflow-x-auto,
+  .overflow-y-auto {
+    overflow: visible !important;
+  }
+}
+
+/* ─── Mode focus : cache la sidebar et la nav mobile pour maximiser la grille ─── */
+body[data-focus="true"] aside,
+body[data-focus="true"] header.md\:hidden,
+body[data-focus="true"] .md\:hidden header {
+  display: none !important;
+}
+
+/* ─── Animation flash sur cellule planning fraîchement enregistrée ─── */
+@keyframes cell-flash {
+  0% {
+    box-shadow: inset 0 0 0 2px rgb(139 92 246 / 0.7);
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+    transform: scale(1);
+  }
+}
+.animate-cell-flash {
+  animation: cell-flash 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center;
+}
+
+/* ─── Skeleton shimmer (façon iOS) ─── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    rgba(228, 228, 231, 0.5) 0%,
+    rgba(228, 228, 231, 0.85) 50%,
+    rgba(228, 228, 231, 0.5) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  border-radius: inherit;
+}
+
+/* ─── Hover lift uniformisé pour cards interactives ─── */
+.hover-lift {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 200ms ease;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px -12px rgba(124, 58, 237, 0.18);
+}
+
+/* ─── Page transitions : fade-up subtil ─── */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-transition {
+  animation: page-fade-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─── Mesh gradient lent en arrière-plan du dashboard ─── */
+.mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  contain: layout paint style;
+  transform: translateZ(0);
+}
+.mesh-bg::before,
+.mesh-bg::after,
+.mesh-bg > span {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.35;
+  will-change: transform;
+}
+.mesh-bg::before {
+  top: -10%;
+  left: -10%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(circle, rgb(167 139 250 / 0.45), transparent 70%);
+  animation: blob-drift 28s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+.mesh-bg::after {
+  bottom: -10%;
+  right: -10%;
+  width: 55%;
+  height: 55%;
+  background: radial-gradient(circle, rgb(129 140 248 / 0.4), transparent 70%);
+  animation: blob-drift 36s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate-reverse;
+}
+.mesh-bg > span {
+  top: 30%;
+  left: 40%;
+  width: 40%;
+  height: 40%;
+  background: radial-gradient(circle, rgb(244 114 182 / 0.25), transparent 70%);
+  animation: blob-drift 42s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+/* ─── Toast (glass) ─── */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+.animate-toast-in { animation: toast-in 280ms cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-toast-out { animation: toast-out 200ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+
+/* ─── Transition de thème fluide (clair ↔ sombre) ─── */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 280ms ease,
+    border-color 280ms ease,
+    color 280ms ease,
+    fill 280ms ease,
+    stroke 280ms ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer,
+  .mesh-bg::before,
+  .mesh-bg::after,
+  .mesh-bg > span,
+  .animate-toast-in,
+  .animate-toast-out,
+  .page-transition {
+    animation: none !important;
+  }
+  .page-transition {
+    opacity: 1;
+    transform: none;
   }
 }

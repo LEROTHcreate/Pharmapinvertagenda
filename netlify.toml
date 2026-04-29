@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Évite des erreurs Prisma en CI : on génère le client juste avant le build
+  # (postinstall le fait déjà, mais on s'assure que c'est bien à jour).
+  PRISMA_GENERATE_DATAPROXY = "false"

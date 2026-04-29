@@ -1,0 +1,38 @@
+{
+  "name": "PharmaPlanning",
+  "short_name": "Planning",
+  "description": "Gestion de planning d'équipe pour officines de pharmacie",
+  "start_url": "/planning",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#7c3aed",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Planning",
+      "url": "/planning",
+      "description": "Voir le planning de la semaine"
+    },
+    {
+      "name": "Absences",
+      "url": "/absences",
+      "description": "Gérer les absences"
+    }
+  ]
+}

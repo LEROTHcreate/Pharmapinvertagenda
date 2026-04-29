@@ -1,0 +1,375 @@
+// prisma/schema.prisma
+// Schéma de données PharmaPlanning
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN    // Dirigeant / Titulaire — accès complet (peut gérer le planning)
+  EMPLOYEE // Personnel — lecture + demandes (ne peut pas gérer le planning)
+}
+
+enum UserStatus {
+  PENDING   // Inscription en attente d'examen par un admin
+  APPROVED  // Compte validé — peut se connecter
+  REJECTED  // Demande refusée
+}
+
+enum EmployeeStatus {
+  PHARMACIEN
+  PREPARATEUR
+  ETUDIANT
+  LIVREUR
+  BACK_OFFICE
+  SECRETAIRE
+  TITULAIRE
+}
+
+enum ScheduleType {
+  TASK     // Poste de travail (Comptoir, Commande, etc.)
+  ABSENCE  // Absence (Congé, Maladie, etc.)
+}
+
+enum TaskCode {
+  COMPTOIR
+  COMMANDE
+  MISE_A_PRIX
+  PARAPHARMACIE
+  SECRETARIAT
+  MAIL
+  FORMATION
+  HEURES_SUP
+  LIVRAISON
+  ROBOT
+  REMPLACEMENT
+  ECHANGE
+  REUNION_FOURNISSEUR
+}
+
+enum AbsenceCode {
+  ABSENT
+  CONGE
+  MALADIE
+  FORMATION_ABS
+}
+
+enum AbsenceRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WeekType {
+  S1
+  S2
+}
+
+enum MessageType {
+  TEXT          // Message texte simple
+  SWAP_REQUEST  // Message structuré portant une demande d'échange
+  SYSTEM        // Notification système dans la conv (ex: "X a rejoint")
+}
+
+enum SwapStatus {
+  PENDING_TARGET   // En attente d'accord du collègue sollicité
+  REJECTED_TARGET  // Refusé par le collègue
+  PENDING_ADMIN    // Accepté par le collègue, en attente validation admin
+  APPROVED         // Approuvé par l'admin → planning mis à jour
+  REJECTED_ADMIN   // Refusé par l'admin
+  CANCELLED        // Annulé par le demandeur
+}
+
+// ─── MODELS ──────────────────────────────────────────────────────
+
+/// Pharmacie — entité multi-tenant racine
+model Pharmacy {
+  id        String   @id @default(cuid())
+  name      String                         // Ex: "Pharmacie du Pin Vert"
+  address   String?
+  phone     String?
+  siret     String?  @unique
+  minStaff  Int      @default(4)           // Seuil minimum d'effectif par créneau
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  employees      Employee[]
+  scheduleEntries ScheduleEntry[]
+  absenceRequests AbsenceRequest[]
+  weekTemplates  WeekTemplate[]
+  conversations  Conversation[]
+  swapRequests   ShiftSwapRequest[]
+
+  @@map("pharmacies")
+}
+
+/// Compte utilisateur (connexion)
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  hashedPassword String
+  name           String
+  role           UserRole   @default(EMPLOYEE)
+  status         UserStatus @default(PENDING)   // Workflow d'inscription
+  isActive       Boolean    @default(true)       // Désactivation post-approbation
+  rejectionNote  String?                         // Motif optionnel en cas de refus
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  reviewedAt     DateTime?                       // Date de validation/refus
+  reviewedById   String?                         // Admin ayant validé (référence libre)
+  lastLoginAt    DateTime?                       // Mis à jour à chaque connexion réussie (audit)
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  // Relation optionnelle 1:1 avec Employee
+  // Un admin peut ne pas être un employé planifié
+  employeeId String?   @unique
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  // Messagerie interne
+  conversationsCreated   Conversation[]       @relation("conversationsCreated")
+  conversationMemberships ConversationMember[]
+  messages               Message[]
+  swapsRequested         ShiftSwapRequest[]   @relation("swapsRequested")
+  swapsTargeted          ShiftSwapRequest[]   @relation("swapsTargeted")
+  swapsReviewed          ShiftSwapRequest[]   @relation("swapsReviewed")
+
+  @@index([pharmacyId])
+  @@index([pharmacyId, status])
+  @@map("users")
+}
+
+/// Employé — profil métier (apparaît comme colonne dans le planning)
+model Employee {
+  id           String         @id @default(cuid())
+  firstName    String
+  lastName     String
+  status       EmployeeStatus
+  weeklyHours  Float                          // Heures contractuelles hebdomadaires
+  displayColor String         @default("#6366f1") // Couleur dans le planning
+  displayOrder Int            @default(0)      // Ordre d'affichage dans la grille
+  isActive     Boolean        @default(true)
+  hireDate     DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  user             User?
+  scheduleEntries  ScheduleEntry[]
+  absenceRequests  AbsenceRequest[]
+  templateEntries  WeekTemplateEntry[]
+
+  @@index([pharmacyId])
+  @@index([pharmacyId, isActive])
+  @@map("employees")
+}
+
+/// Entrée de planning — UNE cellule de la grille
+/// Contrainte unique : un seul poste/absence par employé + date + créneau
+model ScheduleEntry {
+  id       String       @id @default(cuid())
+  date     DateTime     @db.Date              // Date du jour (sans heure)
+  timeSlot String                              // "HH:MM" — ex: "08:30", "14:00"
+  type     ScheduleType                        // TASK ou ABSENCE
+  taskCode    TaskCode?                        // Rempli si type = TASK
+  absenceCode AbsenceCode?                     // Rempli si type = ABSENCE
+  notes    String?                             // Note optionnelle sur le créneau
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  // Un seul enregistrement par employé + date + créneau
+  @@unique([employeeId, date, timeSlot])
+  // Index pour requêtes fréquentes
+  @@index([pharmacyId, date])
+  @@index([employeeId, date])
+  @@map("schedule_entries")
+}
+
+/// Demande d'absence — workflow employé → admin
+model AbsenceRequest {
+  id          String               @id @default(cuid())
+  dateStart   DateTime             @db.Date
+  dateEnd     DateTime             @db.Date
+  absenceCode AbsenceCode
+  status      AbsenceRequestStatus @default(PENDING)
+  reason      String?                          // Motif (optionnel pour l'employé)
+  adminNote   String?                          // Note de l'admin (ex: raison refus)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  reviewedAt  DateTime?                        // Date de validation/refus
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId, status])
+  @@index([employeeId])
+  @@map("absence_requests")
+}
+
+/// Template de semaine type (S1 ou S2) — pour pré-remplissage rapide.
+/// On peut désormais avoir PLUSIEURS gabarits par type (ex: "S1 standard",
+/// "S1 vacances scolaires", "S2 été"...) — chacun avec son nom personnalisé.
+model WeekTemplate {
+  id       String   @id @default(cuid())
+  name     String                              // Ex: "Semaine type S1 standard"
+  weekType WeekType                            // S1 ou S2
+  isActive Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  entries WeekTemplateEntry[]
+
+  @@index([pharmacyId, weekType])
+  @@map("week_templates")
+}
+
+/// Entrée d'un template de semaine — un créneau type
+model WeekTemplateEntry {
+  id          String       @id @default(cuid())
+  dayOfWeek   Int                               // 0=Lundi, 1=Mardi, ..., 5=Samedi
+  timeSlot    String                             // "HH:MM"
+  type        ScheduleType
+  taskCode    TaskCode?
+  absenceCode AbsenceCode?
+
+  templateId String
+  template   WeekTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, employeeId, dayOfWeek, timeSlot])
+  @@map("week_template_entries")
+}
+
+// ─── MESSAGERIE INTERNE ──────────────────────────────────────────
+
+/// Conversation — 1-1 (membres=2) ou groupe (membres>2). Toujours scopé par pharmacie.
+/// L'admin peut consulter toutes les conversations en lecture (modération harcèlement).
+model Conversation {
+  id          String   @id @default(cuid())
+  name        String?                              // Null pour 1-1, défini pour groupe
+  isGroup     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt                  // Bumpé à chaque message → tri par récence
+
+  pharmacyId  String
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User     @relation("conversationsCreated", fields: [createdById], references: [id], onDelete: Cascade)
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([pharmacyId, updatedAt])
+  @@map("conversations")
+}
+
+/// Membre d'une conversation — table d'association User <-> Conversation
+model ConversationMember {
+  id             String       @id @default(cuid())
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?                         // Pour calculer les unread
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+/// Message dans une conversation
+model Message {
+  id        String      @id @default(cuid())
+  body      String                                  // Texte du message (vide pour SWAP_REQUEST/SYSTEM)
+  type      MessageType @default(TEXT)
+  createdAt DateTime    @default(now())
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  // Si type=SWAP_REQUEST, le message est associé à une demande d'échange
+  swapRequestId String?           @unique
+  swapRequest   ShiftSwapRequest? @relation(fields: [swapRequestId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+/// Demande d'échange de créneau — workflow demandeur → cible → admin
+/// 1. Créée par le demandeur dans une conversation (status=PENDING_TARGET)
+/// 2. La cible accepte (PENDING_ADMIN) ou refuse (REJECTED_TARGET)
+/// 3. L'admin valide (APPROVED → planning maj) ou refuse (REJECTED_ADMIN)
+model ShiftSwapRequest {
+  id        String     @id @default(cuid())
+  // Plage concernée
+  date      DateTime   @db.Date                    // Jour de l'échange
+  startTime String?                                 // "HH:MM" (null si journée entière)
+  endTime   String?                                 // "HH:MM" (null si journée entière)
+  fullDay   Boolean    @default(false)
+  reason    String?                                 // Motif optionnel
+
+  status        SwapStatus @default(PENDING_TARGET)
+  acceptedAt    DateTime?                          // Quand la cible accepte
+  reviewedAt    DateTime?                          // Quand l'admin tranche
+  rejectionNote String?                             // Motif de refus (cible ou admin)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  // Demandeur (celui qui veut s'absenter)
+  requesterId String
+  requester   User   @relation("swapsRequested", fields: [requesterId], references: [id], onDelete: Cascade)
+
+  // Cible (celui qui prendrait le créneau)
+  targetId String
+  target   User   @relation("swapsTargeted", fields: [targetId], references: [id], onDelete: Cascade)
+
+  // Admin ayant tranché (optionnel)
+  reviewedById String?
+  reviewedBy   User?   @relation("swapsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  // Message d'origine dans la conversation (back-relation)
+  message Message?
+
+  @@index([pharmacyId, status])
+  @@index([requesterId])
+  @@index([targetId])
+  @@map("shift_swap_requests")
+}

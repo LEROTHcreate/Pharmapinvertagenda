@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# Annule les runs en cours sur la même branche quand un nouveau push arrive
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # Évite que Prisma essaie de joindre la BDD au postinstall
+          PRISMA_SKIP_POSTINSTALL_GENERATE: "0"
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build (Next.js)
+        run: npm run build
+        env:
+          # Variables minimales pour que le build passe ; pas de vraies données.
+          # Le DATABASE_URL pointe vers une BDD fictive — Next n'exécute pas
+          # de requête au build (les pages sont force-dynamic).
+          DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
+          NEXTAUTH_SECRET: "ci-only-secret-not-used-in-production-32chars-min"
+          AUTH_SECRET: "ci-only-secret-not-used-in-production-32chars-min"
+          NEXTAUTH_URL: "http://localhost:3000"
+          DEMO_MODE: "0"
