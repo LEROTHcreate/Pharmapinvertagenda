@@ -12,7 +12,8 @@ type Props = {
 };
 
 const PERIOD_OPTIONS: Array<{ value: StatsPeriod; label: string }> = [
-  { value: "month", label: "Mois en cours" },
+  { value: "week", label: "Semaine" },
+  { value: "month", label: "Mois" },
   { value: "semester", label: "Semestre" },
   { value: "all", label: "Tout" },
 ];

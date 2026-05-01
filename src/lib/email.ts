@@ -438,7 +438,46 @@ export async function sendRejectionEmail(params: {
   });
 }
 
-/** ✉️ 7. Reset password — lien magique pour réinitialiser son mot de passe */
+/** ✉️ 7. Nouvelle inscription — notifie tous les admins de la pharmacie */
+export async function sendNewSignupAdminNotification(params: {
+  to: string[];
+  newUserName: string;
+  newUserEmail: string;
+  pharmacyName: string;
+}): Promise<void> {
+  if (params.to.length === 0) return;
+
+  const reviewUrl = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/utilisateurs`;
+
+  const html = layout({
+    title: "Nouvelle demande d'inscription",
+    bodyHtml: [
+      h1("👋 Nouvelle demande d'inscription"),
+      p(
+        `${params.newUserName} souhaite rejoindre la ${params.pharmacyName} sur PharmaPlanning.`
+      ),
+      `<div style="background:#f5f3ff; border-left:3px solid #7c3aed; border-radius:8px; padding:12px 16px; margin:16px 0;">
+        <p style="margin:0 0 4px; font-size:13px; color:#6d28d9; font-weight:600;">Nom</p>
+        <p style="margin:0 0 8px; font-size:14px; color:#3f3f46;">${escapeHtml(params.newUserName)}</p>
+        <p style="margin:0 0 4px; font-size:13px; color:#6d28d9; font-weight:600;">Email</p>
+        <p style="margin:0; font-size:14px; color:#3f3f46;">${escapeHtml(params.newUserEmail)}</p>
+      </div>`,
+      p(
+        "Examinez la demande pour approuver ou refuser l'accès, et lier le compte à une fiche planning si besoin."
+      ),
+      cta(reviewUrl, "Examiner la demande"),
+    ].join(""),
+  });
+
+  await safeSend({
+    to: params.to,
+    subject: `👋 Nouvelle inscription — ${params.newUserName}`,
+    html,
+    tag: "new-signup-admin",
+  });
+}
+
+/** ✉️ 8. Reset password — lien magique pour réinitialiser son mot de passe */
 export async function sendPasswordResetEmail(params: {
   to: string;
   name: string;

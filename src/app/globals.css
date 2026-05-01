@@ -270,12 +270,15 @@
 
   /* Compresse la grille pour tenir sur A4 paysage */
   table {
-    font-size: 8pt !important;
+    font-size: 7pt !important;
+    width: 100% !important;
+    table-layout: fixed !important;
   }
 
   table th,
   table td {
-    padding: 1pt 2pt !important;
+    padding: 0.5pt 1pt !important;
+    word-break: break-word;
   }
 
   /* Forcer l'impression des couleurs de fond */
@@ -288,6 +291,38 @@
   .overflow-x-auto,
   .overflow-y-auto {
     overflow: visible !important;
+  }
+
+  /* Évite les sauts de page au milieu de la grille */
+  table,
+  thead,
+  tbody,
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Force le contenu principal à tenir sur une page :
+     scale automatique si le contenu déborde. */
+  main {
+    transform: scale(0.92);
+    transform-origin: top left;
+    width: 108.7%;
+  }
+}
+
+/* ─── Largeur de colonne employé : compact sur mobile, confort sur desktop ─── */
+:root {
+  --col-w: 48px;
+}
+@media (min-width: 640px) {
+  :root {
+    --col-w: 64px;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --col-w: 72px;
   }
 }
 

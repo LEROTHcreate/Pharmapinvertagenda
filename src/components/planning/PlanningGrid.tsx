@@ -120,15 +120,35 @@ export const PlanningGrid = memo(function PlanningGrid({
 }: Props) {
   const dndEnabled = canEdit && !!onMoveTask;
 
-  // Pointer (souris/stylet) avec un seuil de 6px pour distinguer click vs drag.
-  // TouchSensor avec un délai de 200 ms : on évite que le scroll vertical du
-  // tableau sur tablette ne déclenche un drag par accident.
+  // Détection device tactile : `(pointer: coarse)` couvre téléphone + tablette.
+  // SSR-safe (le matchMedia n'existe que côté client).
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches);
+  }, []);
+
+  // Sensors : UNIQUEMENT TouchSensor (pas de PointerSensor) pour que le
+  // mouse drag continue d'utiliser la sélection rectangulaire — le DnD est
+  // exclusif au tactile, déclenché par un long-press de 350 ms.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 6 },
+      activationConstraint: { delay: 350, tolerance: 8 },
     })
   );
+
+  // Feedback haptique léger (10ms) quand le long-press déclenche le DnD :
+  // l'utilisateur sent que la cellule est "saisie" sans avoir à regarder.
+  // Silencieusement ignoré sur les devices sans Vibration API (iOS Safari).
+  const handleDragStart = useCallback(() => {
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate?.(15);
+      } catch {
+        // Certaines plateformes throw si l'utilisateur a désactivé les vibrations
+      }
+    }
+  }, []);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -320,16 +340,20 @@ export const PlanningGrid = memo(function PlanningGrid({
     );
   }
 
-  // Largeur minimum garantie par colonne employé (lisibilité tactile mobile).
-  // Si l'écran est plus large, les colonnes s'étirent pour remplir.
-  const minTableWidth = employees.length * 72 + 96; // 72px / employé + 52 (heure) + 44 (staffing)
+  // Largeur minimum garantie par colonne employé.
+  // Mobile (<640px) : 48px/colonne — compact, scrollable.
+  // Tablette+ : 72px/colonne — confort tactile + lisibilité.
+  // Le calcul se fait en CSS pour s'adapter sans JS au resize.
 
   const grid = (
     <div className="select-none rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)] overflow-hidden">
       <div className="overflow-x-auto scrollbar-thin overscroll-x-contain">
         <table
-          className="w-full border-collapse text-[12px]"
-          style={{ tableLayout: "fixed", minWidth: `${minTableWidth}px` }}
+          className="w-full border-collapse text-[10.5px] sm:text-[12px]"
+          style={{
+            tableLayout: "fixed",
+            minWidth: `calc(${employees.length} * var(--col-w, 56px) + 96px)`,
+          }}
         >
           <colgroup>
             <col style={{ width: "52px" }} />
@@ -446,10 +470,16 @@ export const PlanningGrid = memo(function PlanningGrid({
               const staff = staffData?.staff ?? 0;
               const level = staffData?.level ?? "ok";
               const isCurrent = slotIdx === currentSlotIdx;
+              // Zebra : alternance demi-heure → fond blanc / fond gris léger.
+              // Une cellule TASK / ABSENCE pose son propre fond par-dessus,
+              // donc seules les cases vides montrent l'alternance.
+              const zebraClass = slotIdx % 2 === 0
+                ? "[&>td:not(.has-content)]:bg-white dark:[&>td:not(.has-content)]:bg-zinc-900"
+                : "[&>td:not(.has-content)]:bg-zinc-100/70 dark:[&>td:not(.has-content)]:bg-zinc-800/50";
               return (
                 <tr
                   key={slot}
-                  className="group/row transition-colors"
+                  className={cn("group/row transition-colors", zebraClass)}
                   style={
                     isCurrent
                       ? { boxShadow: "inset 0 1.5px 0 0 rgb(244 63 94 / 0.85)" }
@@ -511,6 +541,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         nextEntry={nextEntry}
                         canEdit={canEdit}
                         dndEnabled={dndEnabled}
+                        isTouchDevice={isTouchDevice}
                         isSelected={isSelected}
                         isOvertime={isOvertime}
                         isPrevOvertime={prevOvertime}
@@ -565,7 +596,7 @@ export const PlanningGrid = memo(function PlanningGrid({
   if (!dndEnabled) return grid;
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       {grid}
     </DndContext>
   );
@@ -584,6 +615,7 @@ const Cell = memo(function Cell({
   nextEntry,
   canEdit,
   dndEnabled,
+  isTouchDevice,
   isSelected,
   isOvertime,
   isPrevOvertime,
@@ -604,6 +636,7 @@ const Cell = memo(function Cell({
   nextEntry: ScheduleEntryDTO | null;
   canEdit: boolean;
   dndEnabled: boolean;
+  isTouchDevice: boolean;
   isSelected: boolean;
   isOvertime: boolean;
   isPrevOvertime: boolean;
@@ -641,11 +674,11 @@ const Cell = memo(function Cell({
   const isDragging = draggable.isDragging;
   const isOver = droppable.isOver;
 
-  // En mode DnD : sur cellule TASK, on remplace les handlers de sélection
-  // rectangulaire par les listeners DnD + un onClick natif (pour ouvrir le
-  // TaskSelector si le user a cliqué sans drag — le PointerSensor distingue
-  // click vs drag via son activationConstraint distance: 6).
-  const taskCellUsesDnd = dndEnabled && isTask;
+  // DnD activé UNIQUEMENT sur tactile (téléphone/tablette).
+  // - Mouse : taskCellUsesDnd = false → rect-select 30min×30min fonctionne
+  // - Touch : taskCellUsesDnd = true → long-press 350ms démarre le drag
+  //   (tap rapide reste un click → ouvre TaskSelector pour modifier/supprimer)
+  const taskCellUsesDnd = dndEnabled && isTask && isTouchDevice;
   const isContinuation =
     !!entry &&
     !!prevEntry &&
@@ -664,11 +697,9 @@ const Cell = memo(function Cell({
     "px-1 h-9 text-center font-medium text-[11px] transition-all relative",
     canEdit && "cursor-pointer",
     isSelected && "ring-2 ring-violet-500/80 ring-inset z-[5]",
-    isRecent && "animate-cell-flash",
-    // Trait horaire : appliqué sur chaque cellule pour traverser visuellement
-    // toute la largeur de la grille (les fonds des cellules colorées sinon
-    // masqueraient un border posé sur le <tr>).
-    isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70"
+    isRecent && "animate-cell-flash"
+    // Trait horaire ajouté UNIQUEMENT sur les cellules vides — sur les
+    // cellules TASK / ABSENCE le bloc coloré reste continu et propre.
   );
 
   // Cellules TASK en mode DnD : les listeners de drag remplacent les handlers
@@ -696,7 +727,9 @@ const Cell = memo(function Cell({
       ? "ring-2 ring-violet-500/70 ring-inset"
       : "";
 
-  // Cellule vide — ultra-minimal, juste un hover discret + wash warm doux
+  // Cellule vide — ultra-minimal, juste un hover discret + wash warm doux.
+  // Trait horaire visible UNIQUEMENT ici : sur les cellules TASK/ABSENCE,
+  // on veut garder le bloc coloré continu et lisible.
   if (!entry) {
     return (
       <td
@@ -705,6 +738,7 @@ const Cell = memo(function Cell({
         className={cn(
           baseClasses,
           "border-b border-b-zinc-100/80",
+          isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70",
           canEdit && "hover:bg-zinc-50/80",
           isMyColumn && "bg-amber-50/50",
           dropTargetRing
@@ -757,6 +791,7 @@ const Cell = memo(function Cell({
         onClick={taskCellUsesDnd ? onCellClickDirect : undefined}
         className={cn(
           baseClasses,
+          "has-content",
           isLastOfBlock && "border-b border-b-white",
           dropTargetRing,
           isDragging && "opacity-40",
@@ -800,7 +835,7 @@ const Cell = memo(function Cell({
       <td
         ref={setNodeRef}
         {...handlers}
-        className={cn(baseClasses, isLastOfBlock && "border-b border-b-white")}
+        className={cn(baseClasses, "has-content", isLastOfBlock && "border-b border-b-white")}
         style={{
           backgroundColor: s.bg,
           backgroundImage: layers.join(", "),

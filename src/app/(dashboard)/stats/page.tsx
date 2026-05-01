@@ -6,7 +6,7 @@ import { StatsView } from "@/components/stats/StatsView";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Statistiques — PharmaPlanning" };
 
-const VALID_PERIODS: StatsPeriod[] = ["month", "semester", "all"];
+const VALID_PERIODS: StatsPeriod[] = ["week", "month", "semester", "all"];
 
 export default async function StatsPage({
   searchParams,

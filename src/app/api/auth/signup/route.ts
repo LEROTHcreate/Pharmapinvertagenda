@@ -4,7 +4,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { signupSchema } from "@/validators/auth";
-import { sendSignupConfirmation } from "@/lib/email";
+import {
+  sendSignupConfirmation,
+  sendNewSignupAdminNotification,
+} from "@/lib/email";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -21,9 +24,15 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   // ─── Rate limit avant toute lecture du body ───
+  // Note : le bucket est par IP. Comme une pharmacie partage une IP NAT
+  // pour tous ses appareils (PC, tablettes, mobiles), une limite trop
+  // serrée bloque tout le monde dès qu'un utilisateur fait quelques essais
+  // ratés. On garde une fenêtre généreuse (30 tentatives / 10 min) qui
+  // bloque toujours les bots / spammers automatisés sans gêner les
+  // utilisateurs légitimes en multi-appareil.
   const ip = getClientIp(req);
   const rl = checkRateLimit(`signup:${ip}`, {
-    max: 5,
+    max: 30,
     windowMs: 10 * 60 * 1000,
   });
   if (!rl.allowed) {
@@ -108,6 +117,32 @@ export async function POST(req: Request) {
     name,
     pharmacyName: pharmacy.name,
   });
+
+  // Notification aux admins de la pharmacie — best-effort en arrière-plan
+  // pour ne pas bloquer la réponse au signup (les requêtes DB + envoi mail
+  // peuvent prendre 1-2s, on ne fait pas attendre l'utilisateur pour ça).
+  void (async () => {
+    try {
+      const admins = await prisma.user.findMany({
+        where: {
+          pharmacyId: pharmacy.id,
+          role: "ADMIN",
+          isActive: true,
+          status: "APPROVED",
+        },
+        select: { email: true },
+      });
+      if (admins.length === 0) return;
+      await sendNewSignupAdminNotification({
+        to: admins.map((a) => a.email),
+        newUserName: name,
+        newUserEmail: email,
+        pharmacyName: pharmacy.name,
+      });
+    } catch (e) {
+      console.error("[signup-admin-email] échec envoi notif admin:", e);
+    }
+  })();
 
   return NextResponse.json({ ok: true }, { status: 201 });
 }

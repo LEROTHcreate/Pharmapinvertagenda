@@ -952,15 +952,17 @@ export function PlanningView({
         </div>
       )}
 
-      {/* Bandeau "jour férié" — affiché si le jour sélectionné en est un.
-          Subtil mais visible pour éviter de planifier sans réfléchir dessus. */}
+      {/* Bandeau "jour férié" — badge "FR" stylé (pas d'emoji drapeau qui
+          rend mal sur Windows), alignement centré, design Apple-épuré. */}
       {selectedDayHoliday && (
-        <div className="rounded-2xl border border-rose-200/70 bg-rose-50/60 px-4 py-2.5 text-[13px] text-rose-800 flex items-center gap-2">
-          <span className="text-base leading-none">🇫🇷</span>
-          <span>
-            <span className="font-semibold">{selectedDayHoliday.name}</span>{" "}
-            <span className="text-rose-600/80">· jour férié</span>
+        <div className="flex items-center gap-3 rounded-2xl border border-rose-200/70 bg-rose-50/60 px-4 py-3 text-[13px] text-rose-900">
+          <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-rose-500 text-white text-[10.5px] font-bold tracking-[0.04em] shrink-0">
+            FR
           </span>
+          <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
+            <span className="font-semibold">{selectedDayHoliday.name}</span>
+            <span className="text-[12px] text-rose-600/85">· jour férié</span>
+          </div>
         </div>
       )}
 

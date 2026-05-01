@@ -3,7 +3,7 @@ import { ScheduleType } from "@prisma/client";
 import { SLOT_HOURS } from "@/types";
 import type { EmployeeStatus } from "@prisma/client";
 
-export type StatsPeriod = "month" | "semester" | "all";
+export type StatsPeriod = "week" | "month" | "semester" | "all";
 
 export type EmployeeStat = {
   id: string;
@@ -34,6 +34,30 @@ export type PeriodInfo = {
 export function getPeriodRange(period: StatsPeriod, now = new Date()): PeriodInfo {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth(); // 0-11
+  if (period === "week") {
+    // Lundi de la semaine courante (pharma fermée dimanche, on aligne sur ISO)
+    const day = now.getUTCDay(); // 0=dim, 1=lun…6=sam
+    const diff = day === 0 ? -6 : 1 - day;
+    const monday = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    );
+    monday.setUTCDate(monday.getUTCDate() + diff);
+    const nextMonday = new Date(monday);
+    nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
+    const sat = new Date(monday);
+    sat.setUTCDate(monday.getUTCDate() + 5);
+    return {
+      start: monday,
+      end: nextMonday,
+      label: `Semaine du ${monday.toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "short",
+      })} au ${sat.toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "short",
+      })}`,
+    };
+  }
   if (period === "month") {
     return {
       start: new Date(Date.UTC(year, month, 1)),
