@@ -49,6 +49,24 @@ const nextAuth = NextAuth({
         const parsed = credentialsSchema.safeParse(creds);
         if (!parsed.success) return null;
 
+        // ─── Rate-limit anti brute-force ───
+        // 10 tentatives / 15 min par email + 30 / 15 min par IP (en best-effort,
+        // l'IP n'est pas toujours dispo dans authorize()). Bloque les attaques
+        // simples sans gêner l'utilisateur normal.
+        const { checkRateLimit } = await import("@/lib/rate-limit");
+        const emailKey = `login:email:${parsed.data.email.toLowerCase()}`;
+        const limit = checkRateLimit(emailKey, {
+          max: 10,
+          windowMs: 15 * 60 * 1000,
+        });
+        if (!limit.allowed) {
+          // Refus silencieux : on log côté serveur sans révéler à l'attaquant
+          // que l'email est rate-limited (différence comportementale = info
+          // exploitable pour énumération).
+          console.warn(`[auth] login rate-limited for ${parsed.data.email}`);
+          return null;
+        }
+
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email },
         });

@@ -35,5 +35,36 @@ export const applyTemplateInput = z.object({
   overwrite: z.boolean().default(false),
 });
 
+/**
+ * Application combinée S1 + S2 sur plusieurs semaines.
+ *
+ * - `s1TemplateId` : si défini, sera appliqué sur chaque semaine S1 (impaire)
+ *   parmi les semaines ciblées
+ * - `s2TemplateId` : idem pour les semaines S2 (paires)
+ * - `weeks` : nombre d'occurrences à appliquer
+ *     - Si un seul des deux IDs est défini → N semaines de ce type
+ *       (ex : N=4 + S1 seul = 4 semaines S1 = 8 semaines calendaires)
+ *     - Si les deux IDs sont définis → N semaines calendaires consécutives
+ *       (alternance automatique S1/S2 selon la parité ISO)
+ * - `overwrite` : remplace les créneaux existants si true (sinon les modifs
+ *   manuelles sont préservées)
+ */
+export const applyBatchInput = z
+  .object({
+    s1TemplateId: z.string().min(1).optional(),
+    s2TemplateId: z.string().min(1).optional(),
+    weekStart: isoDate,
+    weeks: z.number().int().min(1).max(52),
+    overwrite: z.boolean().default(false),
+    /** Si true, supprime aussi les absences (cellules ABSENCE + demandes
+     *  AbsenceRequest approuvées) sur la plage. Par défaut `false`, ce
+     *  qui préserve les absences (un congé approuvé prime sur le gabarit). */
+    deleteAbsences: z.boolean().default(false),
+  })
+  .refine((v) => v.s1TemplateId || v.s2TemplateId, {
+    message: "Au moins un gabarit (S1 ou S2) doit être sélectionné",
+  });
+
 export type TemplateEntryInput = z.infer<typeof templateEntryInput>;
 export type UpsertTemplateInput = z.infer<typeof upsertTemplateInput>;
+export type ApplyBatchInput = z.infer<typeof applyBatchInput>;

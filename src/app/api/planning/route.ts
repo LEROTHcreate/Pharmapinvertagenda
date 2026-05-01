@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaDirect } from "@/lib/prisma";
 import { bulkPlanningInput, weekQuery } from "@/validators/planning";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import type { ScheduleEntryDTO } from "@/types";
@@ -89,36 +89,110 @@ export async function POST(req: Request) {
     }
   }
 
-  // Upsert en transaction
-  await prisma.$transaction(
-    parsed.data.entries.map((e) =>
-      prisma.scheduleEntry.upsert({
-        where: {
-          employeeId_date_timeSlot: {
-            employeeId: e.employeeId,
-            date: new Date(`${e.date}T00:00:00Z`),
-            timeSlot: e.timeSlot,
-          },
-        },
-        update: {
-          type: e.type,
-          taskCode: e.type === "TASK" ? e.taskCode ?? null : null,
-          absenceCode: e.type === "ABSENCE" ? e.absenceCode ?? null : null,
-          notes: e.notes ?? null,
-        },
-        create: {
-          pharmacyId: session.user.pharmacyId,
+  // ─── Détection des conflits avec des absences APPROUVÉES ──────────────
+  // Si l'admin tente d'écrire un TASK sur un (employeeId, date) couvert par
+  // une AbsenceRequest APPROVED, on retourne 409 sauf si `force: true` est
+  // explicitement envoyé. Ça évite d'écraser silencieusement un congé déjà
+  // validé.
+  const taskEntries = parsed.data.entries.filter((e) => e.type === "TASK");
+  const conflicts: Array<{
+    employeeId: string;
+    employeeName: string;
+    date: string;
+    timeSlot: string;
+    absenceCode: string;
+  }> = [];
+  if (taskEntries.length > 0) {
+    const empIds = Array.from(new Set(taskEntries.map((e) => e.employeeId)));
+    const dates = Array.from(new Set(taskEntries.map((e) => e.date)));
+    const minDate = new Date(`${dates.reduce((a, b) => (a < b ? a : b))}T00:00:00Z`);
+    const maxDate = new Date(`${dates.reduce((a, b) => (a > b ? a : b))}T00:00:00Z`);
+
+    const absences = await prisma.absenceRequest.findMany({
+      where: {
+        pharmacyId: session.user.pharmacyId,
+        employeeId: { in: empIds },
+        status: "APPROVED",
+        // Toute absence dont la plage chevauche au moins une des dates ciblées
+        dateStart: { lte: maxDate },
+        dateEnd: { gte: minDate },
+      },
+      select: {
+        employeeId: true,
+        dateStart: true,
+        dateEnd: true,
+        absenceCode: true,
+        employee: { select: { firstName: true, lastName: true } },
+      },
+    });
+
+    for (const e of taskEntries) {
+      const targetDate = new Date(`${e.date}T00:00:00Z`);
+      const match = absences.find(
+        (a) =>
+          a.employeeId === e.employeeId &&
+          a.dateStart <= targetDate &&
+          a.dateEnd >= targetDate
+      );
+      if (match) {
+        conflicts.push({
           employeeId: e.employeeId,
-          date: new Date(`${e.date}T00:00:00Z`),
+          employeeName:
+            `${match.employee.firstName} ${match.employee.lastName}`.trim(),
+          date: e.date,
           timeSlot: e.timeSlot,
-          type: e.type,
-          taskCode: e.type === "TASK" ? e.taskCode ?? null : null,
-          absenceCode: e.type === "ABSENCE" ? e.absenceCode ?? null : null,
-          notes: e.notes ?? null,
+          absenceCode: match.absenceCode,
+        });
+      }
+    }
+
+    if (conflicts.length > 0 && !parsed.data.force) {
+      return NextResponse.json(
+        {
+          error: "ABSENCE_CONFLICT",
+          conflicts,
         },
-      })
-    )
-  );
+        { status: 409 }
+      );
+    }
+  }
+
+  // ─── Bulk upsert : delete + createMany (2 round-trips fixes) ───────
+  // Avant : `prisma.$transaction([upsert × N])` = N round-trips séquentiels.
+  // Pour un drag-select de 30 cellules + latence transatlantique (~150ms),
+  // ça donne 4.5s d'attente perçue.
+  //
+  // Maintenant : deleteMany (1 RT) + createMany (1 RT) = ~300ms total quel
+  // que soit le nombre de cellules. Pas besoin de transaction explicite :
+  // delete puis insert sur les MÊMES clés (employeeId, date, timeSlot) est
+  // équivalent à un upsert et ne peut pas créer d'incohérence (la contrainte
+  // unique nous protège).
+  const keys = parsed.data.entries.map((e) => ({
+    employeeId: e.employeeId,
+    date: new Date(`${e.date}T00:00:00Z`),
+    timeSlot: e.timeSlot,
+  }));
+
+  await prismaDirect.scheduleEntry.deleteMany({
+    where: {
+      pharmacyId: session.user.pharmacyId,
+      OR: keys,
+    },
+  });
+
+  await prismaDirect.scheduleEntry.createMany({
+    data: parsed.data.entries.map((e) => ({
+      pharmacyId: session.user.pharmacyId,
+      employeeId: e.employeeId,
+      date: new Date(`${e.date}T00:00:00Z`),
+      timeSlot: e.timeSlot,
+      type: e.type,
+      taskCode: e.type === "TASK" ? e.taskCode ?? null : null,
+      absenceCode: e.type === "ABSENCE" ? e.absenceCode ?? null : null,
+      notes: e.notes ?? null,
+    })),
+    skipDuplicates: false,
+  });
 
   return NextResponse.json({ ok: true, count: parsed.data.entries.length });
 }

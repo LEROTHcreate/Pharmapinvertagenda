@@ -137,6 +137,11 @@ model User {
   reviewedById   String?                         // Admin ayant validé (référence libre)
   lastLoginAt    DateTime?                       // Mis à jour à chaque connexion réussie (audit)
 
+  // Reset password : on stocke le HASH SHA-256 du token (jamais le token brut).
+  // Si la BDD fuite, les liens déjà émis ne sont pas exploitables.
+  passwordResetTokenHash String?
+  passwordResetExpires   DateTime?
+
   pharmacyId String
   pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 

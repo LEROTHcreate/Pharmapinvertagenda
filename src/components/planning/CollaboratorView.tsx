@@ -23,6 +23,7 @@ import {
   weekDays,
   isoWeekNumber,
 } from "@/lib/planning-utils";
+import { holidaysIndexForDates } from "@/lib/holidays-fr";
 
 type Collaborator = {
   id: string;
@@ -466,7 +467,7 @@ function Cell({
  * ════════════════════════════════════════════════════════════════ */
 
 function MonthView({
-  collaborator,
+  collaborator: _collaborator,
   entries,
   month,
   urlForMonth,
@@ -575,6 +576,13 @@ function MonthView({
 
   const todayIso = toIsoDate(new Date());
 
+  // Index des jours fériés couvrant les cellules visibles (fin/début mois
+  // adjacents inclus pour ne pas perdre un Lundi de Pâques en bord de page)
+  const holidaysIndex = useMemo(
+    () => holidaysIndexForDates(cells.map((c) => c.iso)),
+    [cells]
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -638,14 +646,18 @@ function MonthView({
             const dominantColors = dominant ? TASK_COLORS[dominant] : null;
             const hours = summary?.taskHours ?? 0;
             const isWeekend = i % 7 === 6; // dimanche
+            const holiday = holidaysIndex.get(c.iso) ?? null;
 
             return (
               <div
                 key={i}
+                title={holiday && c.inMonth ? `${holiday.name} (jour férié)` : undefined}
                 className={cn(
                   "relative min-h-[78px] md:min-h-[92px] p-1.5 border-r border-b border-zinc-100",
                   !c.inMonth && "bg-zinc-50/40 text-zinc-300",
                   isWeekend && c.inMonth && "bg-zinc-50/30",
+                  // Jour férié dans le mois : fond rosé subtil
+                  holiday && c.inMonth && "bg-rose-50/40",
                   isToday && "ring-2 ring-inset ring-violet-300"
                 )}
               >
@@ -655,9 +667,11 @@ function MonthView({
                       "text-[12px] font-semibold tabular-nums",
                       isToday
                         ? "text-violet-700"
-                        : c.inMonth
-                          ? "text-zinc-700"
-                          : "text-zinc-300"
+                        : holiday && c.inMonth
+                          ? "text-rose-700"
+                          : c.inMonth
+                            ? "text-zinc-700"
+                            : "text-zinc-300"
                     )}
                   >
                     {c.date.getUTCDate()}
@@ -668,6 +682,13 @@ function MonthView({
                     </span>
                   )}
                 </div>
+
+                {/* Étiquette férié — apparaît au-dessus du bloc poste/absence */}
+                {holiday && c.inMonth && (
+                  <div className="mt-0.5 text-[9.5px] font-medium uppercase tracking-wide text-rose-600/80 truncate">
+                    {holiday.short}
+                  </div>
+                )}
 
                 {c.inMonth && isAbsent && summary?.absent && (
                   <div

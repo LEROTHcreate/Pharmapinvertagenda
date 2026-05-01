@@ -7,6 +7,17 @@ export const signupSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+/** Demande de réinitialisation : on prend juste l'email. */
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+});
+
+/** Réinitialisation effective avec le token reçu par email. */
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20).max(200),
+  password: z.string().min(8).max(128),
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;
 
 /** Schéma de validation d'une demande par un admin. */

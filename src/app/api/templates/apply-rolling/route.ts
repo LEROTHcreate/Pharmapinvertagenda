@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaDirect } from "@/lib/prisma";
 import { ScheduleType, type WeekType } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 
 export const runtime = "nodejs";
+// Bulk de 26 semaines × 1000+ entries peut prendre ~5-10s
+export const maxDuration = 60;
 
 const inputSchema = z.object({
   /** Lundi de la 1re semaine cible (ISO YYYY-MM-DD) */
@@ -126,15 +128,25 @@ export async function POST(req: Request) {
   }
 
   const startMonday = new Date(`${weekStart}T00:00:00Z`);
-  let totalApplied = 0;
   let totalSkipped = 0;
   const breakdown: Array<{ weekStart: string; weekType: WeekType; applied: number }> = [];
 
-  // Pour chaque semaine, on choisit le gabarit selon l'alternance
+  // ─── 1) Construit le batch complet en mémoire (pas de I/O) ────────────
+  // Avant : pour chaque semaine, on faisait deleteMany + createMany OU
+  // une transaction de N upserts. Avec 26 semaines × 1000 entries, ça
+  // donnait jusqu'à 26 000 round-trips séquentiels = > 1 min en local.
+  //
+  // Maintenant : on calcule TOUS les rows d'abord, puis 2 round-trips
+  // au total (deleteMany global + createMany global avec chunks).
+  type Row = ReturnType<typeof buildEntries>["rows"][number];
+  const allRows: Row[] = [];
+  let lastWeekMonday = startMonday;
+
   for (let w = 0; w < weeks; w++) {
     const weekMonday = new Date(startMonday);
     weekMonday.setUTCDate(startMonday.getUTCDate() + w * 7);
     const weekIso = weekMonday.toISOString().slice(0, 10);
+    lastWeekMonday = weekMonday;
 
     const expectedType: WeekType =
       w % 2 === 0
@@ -143,65 +155,61 @@ export async function POST(req: Request) {
           ? "S2"
           : "S1";
 
-    // Fallback : si le gabarit attendu n'existe pas, on prend l'autre.
     const tpl =
-      latestByType.get(expectedType) ?? latestByType.get(
-        expectedType === "S1" ? "S2" : "S1"
-      );
+      latestByType.get(expectedType) ??
+      latestByType.get(expectedType === "S1" ? "S2" : "S1");
     if (!tpl) continue;
 
     const { rows, skipped } = buildEntries(tpl, weekMonday);
     totalSkipped += skipped;
-
-    // Si overwrite, supprime les créneaux existants des collaborateurs du gabarit pour cette semaine
-    if (overwrite) {
-      const empIds = Array.from(new Set(rows.map((r) => r.employeeId)));
-      const weekEnd = new Date(weekMonday);
-      weekEnd.setUTCDate(weekMonday.getUTCDate() + 5);
-      if (empIds.length > 0) {
-        await prisma.scheduleEntry.deleteMany({
-          where: {
-            pharmacyId: pharmacyId,
-            employeeId: { in: empIds },
-            date: { gte: weekMonday, lte: weekEnd },
-          },
-        });
-      }
-      // Bulk insert
-      const CHUNK = 250;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        await prisma.scheduleEntry.createMany({
-          data: rows.slice(i, i + CHUNK),
-          skipDuplicates: true,
-        });
-      }
-    } else {
-      // Upsert un par un — préserve les modifs manuelles existantes
-      await prisma.$transaction(
-        rows.map((d) =>
-          prisma.scheduleEntry.upsert({
-            where: {
-              employeeId_date_timeSlot: {
-                employeeId: d.employeeId,
-                date: d.date,
-                timeSlot: d.timeSlot,
-              },
-            },
-            update: {},
-            create: d,
-          })
-        )
-      );
-    }
-
-    totalApplied += rows.length;
-    breakdown.push({ weekStart: weekIso, weekType: tpl.weekType, applied: rows.length });
+    allRows.push(...rows);
+    breakdown.push({
+      weekStart: weekIso,
+      weekType: tpl.weekType,
+      applied: rows.length,
+    });
   }
+
+  // ─── 2) DB : opérations bulk via la connexion DIRECTE (bypass pgbouncer)
+  // pgbouncer en mode transaction (port 6543) tue la perf des inserts en
+  // masse. Le client `prismaDirect` parle directement à Postgres
+  // (port 5432) et règle ce problème (cf. apply-batch).
+  if (overwrite && allRows.length > 0) {
+    const empIds = Array.from(new Set(allRows.map((r) => r.employeeId)));
+    const lastSat = new Date(lastWeekMonday);
+    lastSat.setUTCDate(lastWeekMonday.getUTCDate() + 5);
+    console.time(`[apply-rolling] deleteMany`);
+    await prismaDirect.scheduleEntry.deleteMany({
+      where: {
+        pharmacyId,
+        employeeId: { in: empIds },
+        date: { gte: startMonday, lte: lastSat },
+      },
+    });
+    console.timeEnd(`[apply-rolling] deleteMany`);
+  }
+
+  // createMany en chunks de 8000 (limite Postgres : 65535 params / 7 cols
+  // = 9362 max). Si overwrite=true, le deleteMany précédent garantit
+  // qu'aucun conflit ne reste → skipDuplicates inutile (plus rapide).
+  console.time(`[apply-rolling] insert ${allRows.length} rows`);
+  const CHUNK = 8000;
+  for (let i = 0; i < allRows.length; i += CHUNK) {
+    const chunk = allRows.slice(i, i + CHUNK);
+    const label = `[apply-rolling] chunk ${Math.floor(i / CHUNK) + 1} (${chunk.length} rows)`;
+    console.time(label);
+    await prismaDirect.scheduleEntry.createMany({
+      data: chunk,
+      skipDuplicates: !overwrite,
+    });
+    console.timeEnd(label);
+  }
+  console.timeEnd(`[apply-rolling] insert ${allRows.length} rows`);
 
   return NextResponse.json({
     ok: true,
     weeks,
-    applied: totalApplied,
+    applied: allRows.length,
     skipped: totalSkipped,
     breakdown,
   });

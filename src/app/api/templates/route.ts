@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaDirect } from "@/lib/prisma";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { upsertTemplateInput } from "@/validators/template";
 
 export const runtime = "nodejs";
+// Sur Vercel free le défaut est 10 s, ce qui peut être tendu si la BDD a
+// un cold-start. On autorise jusqu'à 60 s (Pro tier sur Netlify/Vercel).
+export const maxDuration = 60;
 
 /** GET /api/templates — liste des gabarits (admin) */
 export async function GET() {
@@ -110,21 +113,41 @@ export async function POST(req: Request) {
     templateId = created.id;
   }
 
-  // Remplacement complet des entrées (UPSERT comportement)
-  await prisma.$transaction([
-    prisma.weekTemplateEntry.deleteMany({ where: { templateId } }),
-    prisma.weekTemplateEntry.createMany({
-      data: parsed.data.entries.map((e) => ({
-        templateId,
-        employeeId: e.employeeId,
-        dayOfWeek: e.dayOfWeek,
-        timeSlot: e.timeSlot,
-        type: e.type,
-        taskCode: e.type === "TASK" ? e.taskCode ?? null : null,
-        absenceCode: e.type === "ABSENCE" ? e.absenceCode ?? null : null,
-      })),
-    }),
-  ]);
+  // Remplacement complet des entrées :
+  //  1. Delete des anciennes en une seule requête (pas de transaction Prisma
+  //     pour éviter le timeout de 5s par défaut sur Supabase pgbouncer)
+  //  2. CreateMany chunké + parallélisé pour gros volumes (jusqu'à 2000 entries)
+  //
+  // Si le createMany partiel échoue après le delete, le gabarit reste vide
+  // (état récupérable : l'utilisateur peut re-sauver). Préférable au timeout
+  // qui laisse l'UI bloquée.
+  // Bulk delete + insert via la connexion directe (bypass pgbouncer).
+  await prismaDirect.weekTemplateEntry.deleteMany({ where: { templateId } });
 
-  return NextResponse.json({ ok: true, templateId });
+  const rows = parsed.data.entries.map((e) => ({
+    templateId,
+    employeeId: e.employeeId,
+    dayOfWeek: e.dayOfWeek,
+    timeSlot: e.timeSlot,
+    type: e.type,
+    taskCode: e.type === "TASK" ? e.taskCode ?? null : null,
+    absenceCode: e.type === "ABSENCE" ? e.absenceCode ?? null : null,
+  }));
+
+  // Le delete précédent garantit un état vide → aucun conflit possible,
+  // skipDuplicates inutile. Chunks de 8000 (limite Postgres ~9362 rows
+  // pour 7 colonnes).
+  const CHUNK = 8000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await prismaDirect.weekTemplateEntry.createMany({
+      data: rows.slice(i, i + CHUNK),
+      skipDuplicates: false,
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    templateId,
+    entryCount: rows.length,
+  });
 }

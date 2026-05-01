@@ -2,6 +2,16 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import {
   ABSENCE_ICONS,
@@ -23,6 +33,17 @@ import { ScheduleType, type TaskCode } from "@prisma/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type CellKey = string; // "employeeId|date|timeSlot"
+
+export type ParsedCell = {
+  employeeId: string;
+  date: string;
+  timeSlot: string;
+};
+
+function parseCellKey(k: CellKey): ParsedCell {
+  const [employeeId, date, timeSlot] = k.split("|");
+  return { employeeId, date, timeSlot };
+}
 
 export function makeCellKey(
   employeeId: string,
@@ -73,6 +94,13 @@ type Props = {
   recentlySaved?: Set<CellKey>;
   /** ID de l'Employee correspondant au user connecté — sa colonne sera mise en valeur */
   currentEmployeeId?: string | null;
+  /**
+   * Quand fourni + canEdit, active le drag & drop : l'admin peut traîner une
+   * cellule TASK vers une autre cellule (vide ou TASK). Les cellules ABSENCE
+   * ne sont ni source ni cible. Le parent gère la mutation (mise à jour
+   * optimiste + appel API + rollback en cas d'échec).
+   */
+  onMoveTask?: (source: ParsedCell, target: ParsedCell) => void;
 };
 
 export const PlanningGrid = memo(function PlanningGrid({
@@ -88,7 +116,33 @@ export const PlanningGrid = memo(function PlanningGrid({
   overtimeCells,
   recentlySaved,
   currentEmployeeId,
+  onMoveTask,
 }: Props) {
+  const dndEnabled = canEdit && !!onMoveTask;
+
+  // Pointer (souris/stylet) avec un seuil de 6px pour distinguer click vs drag.
+  // TouchSensor avec un délai de 200 ms : on évite que le scroll vertical du
+  // tableau sur tablette ne déclenche un drag par accident.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 6 },
+    })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (!onMoveTask) return;
+      const { active, over } = event;
+      if (!over || !active) return;
+      if (active.id === over.id) return;
+      onMoveTask(
+        parseCellKey(active.id as string),
+        parseCellKey(over.id as string)
+      );
+    },
+    [onMoveTask]
+  );
   const dragRef = useRef<{
     startEmpIdx: number;
     startSlotIdx: number;
@@ -104,8 +158,6 @@ export const PlanningGrid = memo(function PlanningGrid({
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
-
-  const employeeIds = useMemo(() => employees.map((e) => e.id), [employees]);
 
   // Effectif comptoir : on ne compte QUE pharmaciens + préparateurs.
   // Les livreurs, secrétaires, back-office, étudiants… ne couvrent pas le
@@ -260,8 +312,8 @@ export const PlanningGrid = memo(function PlanningGrid({
 
   if (employees.length === 0) {
     return (
-      <div className="rounded-2xl border border-zinc-200/70 bg-white/60 backdrop-blur-sm p-12 text-center">
-        <p className="text-sm text-zinc-500">
+      <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-12 text-center">
+        <p className="text-sm text-muted-foreground">
           Aucun collaborateur actif. Ajoutez des collaborateurs pour commencer.
         </p>
       </div>
@@ -272,8 +324,8 @@ export const PlanningGrid = memo(function PlanningGrid({
   // Si l'écran est plus large, les colonnes s'étirent pour remplir.
   const minTableWidth = employees.length * 72 + 96; // 72px / employé + 52 (heure) + 44 (staffing)
 
-  return (
-    <div className="select-none rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)] overflow-hidden">
+  const grid = (
+    <div className="select-none rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)] overflow-hidden">
       <div className="overflow-x-auto scrollbar-thin overscroll-x-contain">
         <table
           className="w-full border-collapse text-[12px]"
@@ -288,8 +340,8 @@ export const PlanningGrid = memo(function PlanningGrid({
           </colgroup>
           <thead>
             {/* Ligne unique : nom · statut · contrat · jour · semaine */}
-            <tr className="bg-white/80 backdrop-blur-md">
-              <th className="sticky left-0 z-20 bg-white/95 backdrop-blur-md px-3 py-3 text-left w-16 min-w-16 align-bottom">
+            <tr className="bg-card/80 backdrop-blur-md">
+              <th className="sticky left-0 z-20 bg-card/95 backdrop-blur-md px-3 py-3 text-left w-16 min-w-16 align-bottom">
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-zinc-400">
                   Heure
                 </span>
@@ -373,7 +425,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                   </th>
                 );
               })}
-              <th className="sticky right-0 z-20 bg-white/95 backdrop-blur-md px-3 py-3 w-12 min-w-12 align-bottom">
+              <th className="sticky right-0 z-20 bg-card/95 backdrop-blur-md px-3 py-3 w-12 min-w-12 align-bottom">
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-zinc-400">
                   Eff
                 </span>
@@ -397,10 +449,7 @@ export const PlanningGrid = memo(function PlanningGrid({
               return (
                 <tr
                   key={slot}
-                  className={cn(
-                    "group/row transition-colors",
-                    isHourMark && "border-t border-t-zinc-100"
-                  )}
+                  className="group/row transition-colors"
                   style={
                     isCurrent
                       ? { boxShadow: "inset 0 1.5px 0 0 rgb(244 63 94 / 0.85)" }
@@ -409,7 +458,12 @@ export const PlanningGrid = memo(function PlanningGrid({
                 >
                   <td
                     className={cn(
-                      "sticky left-0 z-10 bg-white px-3 py-1 font-mono text-right tabular-nums select-none",
+                      "sticky left-0 z-10 bg-card px-3 py-1 font-mono text-right tabular-nums select-none",
+                      // Trait horaire renforcé sur toute la largeur de la grille
+                      // — appliqué directement sur chaque <td> car les cellules
+                      // TASK / colonnes sticky ont leur propre fond qui
+                      // masquerait un border-t posé sur le <tr>.
+                      isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70",
                       isHourMark
                         ? "text-zinc-900 font-semibold"
                         : "text-zinc-300 text-[10.5px]",
@@ -449,25 +503,38 @@ export const PlanningGrid = memo(function PlanningGrid({
                     return (
                       <Cell
                         key={emp.id}
+                        cellKey={key}
                         empIdx={empIdx}
                         slotIdx={slotIdx}
                         entry={entry}
                         prevEntry={prevEntry}
                         nextEntry={nextEntry}
                         canEdit={canEdit}
+                        dndEnabled={dndEnabled}
                         isSelected={isSelected}
                         isOvertime={isOvertime}
                         isPrevOvertime={prevOvertime}
                         isNextOvertime={nextOvertime}
                         isRecent={isRecent}
                         isMyColumn={isMyColumn}
+                        isHourMark={isHourMark}
                         onMouseDown={handleCellMouseDown}
                         onMouseEnter={handleCellMouseEnter}
                         onMouseUp={handleCellMouseUp}
+                        onCellClickDirect={
+                          onCellClick && employees[empIdx]
+                            ? () => onCellClick(employees[empIdx].id, date, TIME_SLOTS[slotIdx])
+                            : undefined
+                        }
                       />
                     );
                   })}
-                  <td className="sticky right-0 z-10 bg-white px-2 py-1 text-center select-none">
+                  <td
+                    className={cn(
+                      "sticky right-0 z-10 bg-card px-2 py-1 text-center select-none",
+                      isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70"
+                    )}
+                  >
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
@@ -494,6 +561,14 @@ export const PlanningGrid = memo(function PlanningGrid({
       </div>
     </div>
   );
+
+  if (!dndEnabled) return grid;
+
+  return (
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      {grid}
+    </DndContext>
+  );
 });
 
 /* ------------------------------------------------------------------ */
@@ -501,38 +576,76 @@ export const PlanningGrid = memo(function PlanningGrid({
 /* ------------------------------------------------------------------ */
 
 const Cell = memo(function Cell({
+  cellKey,
   empIdx,
   slotIdx,
   entry,
   prevEntry,
   nextEntry,
   canEdit,
+  dndEnabled,
   isSelected,
   isOvertime,
   isPrevOvertime,
   isNextOvertime,
   isRecent,
   isMyColumn,
+  isHourMark,
   onMouseDown,
   onMouseEnter,
   onMouseUp,
+  onCellClickDirect,
 }: {
+  cellKey: CellKey;
   empIdx: number;
   slotIdx: number;
   entry: ScheduleEntryDTO | null;
   prevEntry: ScheduleEntryDTO | null;
   nextEntry: ScheduleEntryDTO | null;
   canEdit: boolean;
+  dndEnabled: boolean;
   isSelected: boolean;
   isOvertime: boolean;
   isPrevOvertime: boolean;
   isNextOvertime: boolean;
   isRecent: boolean;
   isMyColumn: boolean;
+  isHourMark: boolean;
   onMouseDown: (e: React.MouseEvent, empIdx: number, slotIdx: number) => void;
   onMouseEnter: (empIdx: number, slotIdx: number) => void;
   onMouseUp: (empIdx: number, slotIdx: number) => void;
+  onCellClickDirect?: () => void;
 }) {
+  // Hooks DnD : toujours appelés (rules of hooks), désactivés si pas pertinent.
+  // - draggable : seulement les cellules TASK (on ne déplace pas une absence
+  //   ni une cellule vide).
+  // - droppable : cellules TASK et vides ; absences refusent le drop pour
+  //   protéger les jours de congé/maladie validés.
+  const isAbsence = entry?.type === "ABSENCE";
+  const isTask = entry?.type === "TASK";
+
+  const draggable = useDraggable({
+    id: cellKey,
+    disabled: !dndEnabled || !isTask,
+  });
+  const droppable = useDroppable({
+    id: cellKey,
+    disabled: !dndEnabled || isAbsence,
+  });
+
+  const setNodeRef = (node: HTMLElement | null) => {
+    draggable.setNodeRef(node);
+    droppable.setNodeRef(node);
+  };
+
+  const isDragging = draggable.isDragging;
+  const isOver = droppable.isOver;
+
+  // En mode DnD : sur cellule TASK, on remplace les handlers de sélection
+  // rectangulaire par les listeners DnD + un onClick natif (pour ouvrir le
+  // TaskSelector si le user a cliqué sans drag — le PointerSensor distingue
+  // click vs drag via son activationConstraint distance: 6).
+  const taskCellUsesDnd = dndEnabled && isTask;
   const isContinuation =
     !!entry &&
     !!prevEntry &&
@@ -551,32 +664,50 @@ const Cell = memo(function Cell({
     "px-1 h-9 text-center font-medium text-[11px] transition-all relative",
     canEdit && "cursor-pointer",
     isSelected && "ring-2 ring-violet-500/80 ring-inset z-[5]",
-    isRecent && "animate-cell-flash"
+    isRecent && "animate-cell-flash",
+    // Trait horaire : appliqué sur chaque cellule pour traverser visuellement
+    // toute la largeur de la grille (les fonds des cellules colorées sinon
+    // masqueraient un border posé sur le <tr>).
+    isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70"
   );
 
-  const handlers = canEdit
+  // Cellules TASK en mode DnD : les listeners de drag remplacent les handlers
+  // mouseDown/Enter/Up de la sélection rectangulaire. Sur cellules vides ou
+  // ABSENCE, ces handlers sont conservés pour que la sélection rectangulaire
+  // continue de fonctionner librement. Les attributs DnD (data-*) sont aussi
+  // appliqués pour l'accessibilité clavier.
+  const selectionHandlers = canEdit
     ? {
         onMouseDown: (e: React.MouseEvent) => onMouseDown(e, empIdx, slotIdx),
         onMouseEnter: () => onMouseEnter(empIdx, slotIdx),
         onMouseUp: () => onMouseUp(empIdx, slotIdx),
       }
     : {};
+  const handlers = taskCellUsesDnd ? {} : selectionHandlers;
 
   // Wash cream/warm-neutral très subtil — colore toute la colonne du user
   // connecté façon "lane Apple Notes". Quasi imperceptible sur les couleurs
   // de postes mais suffisant pour scanner sa colonne d'un coup d'œil.
   const myColumnWash = "rgba(252, 211, 77, 0.08)"; // amber-300 @ 8%
 
+  // Indicateur visuel quand la cellule est survolée par un drag
+  const dropTargetRing =
+    isOver && dndEnabled && !isAbsence
+      ? "ring-2 ring-violet-500/70 ring-inset"
+      : "";
+
   // Cellule vide — ultra-minimal, juste un hover discret + wash warm doux
   if (!entry) {
     return (
       <td
+        ref={setNodeRef}
         {...handlers}
         className={cn(
           baseClasses,
           "border-b border-b-zinc-100/80",
           canEdit && "hover:bg-zinc-50/80",
-          isMyColumn && "bg-amber-50/50"
+          isMyColumn && "bg-amber-50/50",
+          dropTargetRing
         )}
         aria-label="Vide"
       />
@@ -614,10 +745,23 @@ const Cell = memo(function Cell({
     if (isMyColumn) overlays.push(`linear-gradient(${myColumnWash}, ${myColumnWash})`);
     const background =
       overlays.length > 0 ? `${overlays.join(", ")}, ${c.bg}` : c.bg;
+    // Listeners DnD si actif sur TASK ; sinon handlers de sélection rect
+    const dndProps = taskCellUsesDnd
+      ? { ...draggable.listeners, ...draggable.attributes }
+      : {};
     return (
       <td
+        ref={setNodeRef}
         {...handlers}
-        className={cn(baseClasses, isLastOfBlock && "border-b border-b-white")}
+        {...dndProps}
+        onClick={taskCellUsesDnd ? onCellClickDirect : undefined}
+        className={cn(
+          baseClasses,
+          isLastOfBlock && "border-b border-b-white",
+          dropTargetRing,
+          isDragging && "opacity-40",
+          taskCellUsesDnd && "touch-none"
+        )}
         style={{
           background,
           color: c.text,
@@ -654,6 +798,7 @@ const Cell = memo(function Cell({
     }
     return (
       <td
+        ref={setNodeRef}
         {...handlers}
         className={cn(baseClasses, isLastOfBlock && "border-b border-b-white")}
         style={{
@@ -670,6 +815,7 @@ const Cell = memo(function Cell({
 
   return (
     <td
+      ref={setNodeRef}
       {...handlers}
       className={cn(baseClasses, isMyColumn && "bg-amber-50/50")}
     />

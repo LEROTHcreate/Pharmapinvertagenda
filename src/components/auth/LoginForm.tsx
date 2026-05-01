@@ -154,7 +154,7 @@ export function LoginForm() {
 
       <div className="pt-2 text-center">
         <a
-          href="#"
+          href="/forgot-password"
           className="text-[13px] font-medium text-zinc-500 transition-colors hover:text-violet-600"
         >
           Mot de passe oublié&nbsp;?

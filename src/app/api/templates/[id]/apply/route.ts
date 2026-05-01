@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaDirect } from "@/lib/prisma";
 import { applyTemplateInput } from "@/validators/template";
 import { ScheduleType } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 /** POST /api/templates/[id]/apply — applique un gabarit à une semaine (admin) */
 export async function POST(
@@ -44,12 +45,12 @@ export async function POST(
   });
 
   // Si overwrite=true, on efface d'abord les entrées existantes des collaborateurs
-  // concernés sur la semaine cible.
+  // concernés sur la semaine cible. Bypass pgbouncer pour la perf.
   if (parsed.data.overwrite) {
     const employeeIds = Array.from(
       new Set(template.entries.map((e) => e.employeeId))
     );
-    await prisma.scheduleEntry.deleteMany({
+    await prismaDirect.scheduleEntry.deleteMany({
       where: {
         pharmacyId: session.user.pharmacyId,
         employeeId: { in: employeeIds },
@@ -103,31 +104,18 @@ export async function POST(
     absenceCode: e.type === ScheduleType.ABSENCE ? e.absenceCode : null,
   }));
 
-  if (parsed.data.overwrite) {
-    const CHUNK = 250;
-    for (let i = 0; i < data.length; i += CHUNK) {
-      await prisma.scheduleEntry.createMany({
-        data: data.slice(i, i + CHUNK),
-        skipDuplicates: true,
-      });
-    }
-  } else {
-    // Upsert un par un — les modifs manuelles existantes sont préservées
-    await prisma.$transaction(
-      data.map((d) =>
-        prisma.scheduleEntry.upsert({
-          where: {
-            employeeId_date_timeSlot: {
-              employeeId: d.employeeId,
-              date: d.date,
-              timeSlot: d.timeSlot,
-            },
-          },
-          update: {},
-          create: d,
-        })
-      )
-    );
+  // Insertion via la connexion directe (bypass pgbouncer) en gros chunks.
+  // - overwrite=true → deleteMany fait juste avant, aucun conflit possible
+  //   → skipDuplicates inutile (plus rapide).
+  // - overwrite=false → la contrainte unique (employeeId, date, timeSlot)
+  //   fait que les entrées existantes (modifs manuelles) sont
+  //   silencieusement préservées.
+  const CHUNK = 8000;
+  for (let i = 0; i < data.length; i += CHUNK) {
+    await prismaDirect.scheduleEntry.createMany({
+      data: data.slice(i, i + CHUNK),
+      skipDuplicates: !parsed.data.overwrite,
+    });
   }
 
   return NextResponse.json({

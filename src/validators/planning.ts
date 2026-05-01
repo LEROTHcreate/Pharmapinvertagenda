@@ -47,6 +47,12 @@ export const scheduleEntryInput = z
 
 export const bulkPlanningInput = z.object({
   entries: z.array(scheduleEntryInput).max(500),
+  /**
+   * Si true, on force l'écriture même en cas de conflit avec une absence
+   * approuvée. Le client envoie ce flag après confirmation explicite par
+   * l'admin via le dialog de conflit.
+   */
+  force: z.boolean().optional(),
 });
 
 export const deleteEntryInput = z.object({

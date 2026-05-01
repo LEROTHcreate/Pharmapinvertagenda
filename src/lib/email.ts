@@ -1,21 +1,46 @@
 /**
- * Module d'envoi d'emails transactionnels via Resend.
+ * Module d'envoi d'emails transactionnels via Gmail SMTP (Nodemailer).
  *
- * Phase 1 — emails liés à l'auth :
- *  - Confirmation d'une demande d'inscription
- *  - Approbation par l'admin
- *  - Refus par l'admin (avec motif optionnel)
+ * Pourquoi Gmail SMTP plutôt qu'un service dédié (Resend, SendGrid, etc.) ?
+ *  - 100% gratuit, pas de domaine à acheter / vérifier
+ *  - 500 emails/jour avec un Gmail standard, 2000/jour avec Workspace
+ *    → largement suffisant pour une officine ~20 collaborateurs
+ *  - Setup en 2 minutes : activer 2FA + créer un "Mot de passe d'application"
  *
- * Tous les envois sont best-effort : si Resend est down ou la clé manque,
+ * À noter pour la suite :
+ *  - Si la pharmacie scale (>500 emails/jour) ou veut un from "pro"
+ *    (noreply@pharmacie.fr), basculer sur Resend avec domaine vérifié.
+ *  - Gmail peut throttler / blacklister si volume soudain anormal — c'est
+ *    fait pour de la transactionnelle légère, pas pour de la newsletter.
+ *
+ * Tous les envois sont best-effort : si SMTP est down ou la conf manque,
  * on log l'erreur mais on ne casse pas le flow utilisateur.
  */
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 
-const apiKey = process.env.RESEND_API_KEY;
-const FROM = process.env.EMAIL_FROM ?? "PharmaPlanning <onboarding@resend.dev>";
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+const FROM =
+  process.env.EMAIL_FROM ??
+  (GMAIL_USER ? `PharmaPlanning <${GMAIL_USER}>` : "PharmaPlanning");
 
-// Singleton Resend (évite de recréer le client à chaque envoi en dev)
-const resend = apiKey ? new Resend(apiKey) : null;
+// Singleton transporter (réutilisé entre les requêtes pour pooler la connexion).
+// nodemailer crée un pool TCP si on le configure : utile en serverless aussi
+// car les invocations consécutives "froides" partagent le même process Node.
+let transporter: Transporter | null = null;
+function getTransporter(): Transporter | null {
+  if (transporter) return transporter;
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) return null;
+  transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: GMAIL_USER,
+      pass: GMAIL_APP_PASSWORD,
+    },
+  });
+  return transporter;
+}
 
 function loginUrl(): string {
   const base = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
@@ -24,30 +49,35 @@ function loginUrl(): string {
 
 /**
  * Wrapper safe : log les erreurs mais ne throw jamais.
- * L'absence de RESEND_API_KEY (dev sans config) est silencieuse.
+ * Absence de GMAIL_USER / GMAIL_APP_PASSWORD = log warn et skip (utile en
+ * dev sans conf ; les emails partent une fois Netlify configuré).
  */
 async function safeSend(params: {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   /** Tag interne pour les logs */
   tag: string;
 }): Promise<void> {
-  if (!resend) {
+  const t = getTransporter();
+  if (!t) {
     console.warn(
-      `[email] RESEND_API_KEY non définie — email "${params.tag}" ignoré.`
+      `[email] GMAIL_USER/GMAIL_APP_PASSWORD non définis — email "${params.tag}" ignoré.`
     );
     return;
   }
   try {
-    const { error } = await resend.emails.send({
+    const info = await t.sendMail({
       from: FROM,
-      to: params.to,
+      to: Array.isArray(params.to) ? params.to.join(", ") : params.to,
       subject: params.subject,
       html: params.html,
     });
-    if (error) {
-      console.error(`[email:${params.tag}] échec envoi :`, error);
+    if (info.rejected && info.rejected.length > 0) {
+      console.warn(
+        `[email:${params.tag}] destinataires rejetés :`,
+        info.rejected
+      );
     }
   } catch (e) {
     console.error(`[email:${params.tag}] exception :`, e);
@@ -268,7 +298,8 @@ export async function sendAbsenceRequestEmail(params: {
   });
 
   await safeSend({
-    to: params.to.join(", "),
+    // safeSend gère array → join interne (nodemailer veut une string CSV)
+    to: params.to,
     subject: `📋 Demande d'absence — ${params.employeeName}`,
     html,
     tag: "absence-request",
@@ -404,5 +435,35 @@ export async function sendRejectionEmail(params: {
     subject: "Ta demande d'accès PharmaPlanning",
     html,
     tag: "rejection",
+  });
+}
+
+/** ✉️ 7. Reset password — lien magique pour réinitialiser son mot de passe */
+export async function sendPasswordResetEmail(params: {
+  to: string;
+  name: string;
+  resetUrl: string;
+  expiresInMinutes: number;
+}): Promise<void> {
+  const html = layout({
+    title: "Réinitialisation de ton mot de passe",
+    bodyHtml: [
+      h1("Bonjour " + params.name.split(" ")[0]),
+      p(
+        "Tu as demandé à réinitialiser ton mot de passe PharmaPlanning. Clique sur le bouton ci-dessous — le lien est valable " +
+          params.expiresInMinutes +
+          " minutes."
+      ),
+      cta(params.resetUrl, "Réinitialiser mon mot de passe"),
+      `<p style="font-size:13px; color:#a1a1aa; margin:24px 0 0;">Si le bouton ne fonctionne pas, copie-colle ce lien dans ton navigateur :<br/><a href="${params.resetUrl}" style="color:#7c3aed; word-break:break-all;">${params.resetUrl}</a></p>`,
+      `<p style="font-size:13px; color:#a1a1aa; margin:16px 0 0;">Si ce n'est pas toi qui as fait cette demande, tu peux ignorer cet email — ton mot de passe actuel reste valide.</p>`,
+    ].join(""),
+  });
+
+  await safeSend({
+    to: params.to,
+    subject: "Réinitialisation de ton mot de passe PharmaPlanning",
+    html,
+    tag: "password-reset",
   });
 }

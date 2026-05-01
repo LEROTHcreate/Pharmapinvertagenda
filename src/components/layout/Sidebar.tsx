@@ -12,9 +12,12 @@ import {
   UserCog,
   LayoutTemplate,
   MessageCircle,
+  Settings,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/layout/NotificationBell";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { UserRole } from "@prisma/client";
@@ -26,7 +29,8 @@ type NavKey =
   | "absences"
   | "messages"
   | "stats"
-  | "utilisateurs";
+  | "utilisateurs"
+  | "parametres";
 type NavItem = {
   key: NavKey;
   href: string;
@@ -43,6 +47,7 @@ const NAV: NavItem[] = [
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
+  { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },
 ];
 
 export function Sidebar({
@@ -89,13 +94,17 @@ export function Sidebar({
           className="h-10 w-10 object-contain shrink-0"
           priority
         />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-none truncate">
             PharmaPlanning
           </p>
           <p className="text-xs text-muted-foreground truncate mt-1">
             {pharmacyName}
           </p>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <ThemeToggle />
+          <NotificationBell />
         </div>
       </div>
 

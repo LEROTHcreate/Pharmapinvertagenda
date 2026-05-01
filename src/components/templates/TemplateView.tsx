@@ -3,11 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Copy, ChevronDown } from "lucide-react";
 import type { AbsenceCode, ScheduleType, TaskCode } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import { indexEntriesByEmployee } from "@/lib/planning-utils";
@@ -194,6 +202,33 @@ export function TemplateView({
     setMultiSelection(new Set());
   }
 
+  /**
+   * Duplique le contenu du jour courant (dayIndex) vers les jours cibles.
+   * Les entrées existantes sur les jours cibles sont écrasées.
+   */
+  function duplicateDayTo(targetDays: number[]) {
+    if (targetDays.length === 0) return;
+    const sourceDay = dayIndex;
+    setEntries((prev) => {
+      const sourceEntries = prev.filter((e) => e.dayOfWeek === sourceDay);
+      const targetSet = new Set(targetDays);
+      // 1. Retire les entrées existantes sur les jours cibles
+      const cleaned = prev.filter((e) => !targetSet.has(e.dayOfWeek));
+      // 2. Recopie les entrées source pour chaque jour cible
+      const copies = targetDays.flatMap((td) =>
+        sourceEntries.map((e) => ({ ...e, dayOfWeek: td }))
+      );
+      return [...cleaned, ...copies];
+    });
+    setDirty(true);
+    const labels = targetDays.map((d) => WEEK_DAYS_SHORT[d]).join(", ");
+    toast({
+      tone: "success",
+      title: `Jour ${WEEK_DAYS_SHORT[sourceDay]} dupliqué`,
+      description: `Vers : ${labels}`,
+    });
+  }
+
   async function handleSave() {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -204,43 +239,84 @@ export function TemplateView({
       });
       return;
     }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/templates", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: templateId, // undefined → création ; sinon update
-          weekType,
-          name: trimmedName,
-          entries,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
+
+    // ─── Optimistic save : on prétend que ça a marché instantanément ───
+    // Pour un gabarit de 1000 entries, le POST prend 500-1500ms. Sans
+    // optimistic, l'utilisateur voit le spinner pendant tout ce temps
+    // alors que ses modifs sont déjà valides (uniquement du state local).
+    // Si le serveur refuse, on remet `dirty=true` et on affiche l'erreur.
+    //
+    // Cas spécial : pour une CRÉATION, on a besoin du nouvel id renvoyé
+    // par le serveur pour rediriger → on garde le mode bloquant pour ce
+    // cas seulement (rare, premier save uniquement).
+    const isCreate = !templateId;
+
+    if (isCreate) {
+      // Création : mode bloquant car on a besoin de l'id retourné
+      setSaving(true);
+      try {
+        const res = await fetch("/api/templates", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ weekType, name: trimmedName, entries }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast({
+            tone: "error",
+            title: "Sauvegarde impossible",
+            description: data.error ?? "Une erreur est survenue.",
+          });
+          return;
+        }
+        setDirty(false);
+        toast({
+          tone: "success",
+          title: "Gabarit créé",
+          description: `« ${trimmedName} » enregistré.`,
+        });
+        if (data.templateId) {
+          router.replace(`/gabarits/${data.templateId}/edit`);
+        }
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // ─── Update existant : optimistic ───
+    setDirty(false);
+    toast({
+      tone: "success",
+      title: "Gabarit mis à jour",
+      description: `« ${trimmedName} » enregistré.`,
+    });
+
+    // Fire-and-forget. En cas d'échec, on remet dirty=true et on prévient.
+    fetch("/api/templates", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: templateId, weekType, name: trimmedName, entries }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setDirty(true);
+          toast({
+            tone: "error",
+            title: "Sauvegarde échouée",
+            description: data.error ?? "Réessaie l'enregistrement.",
+          });
+        }
+      })
+      .catch(() => {
+        setDirty(true);
         toast({
           tone: "error",
-          title: "Sauvegarde impossible",
-          description: data.error ?? "Une erreur est survenue.",
+          title: "Réseau indisponible",
+          description: "Tes modifs ne sont pas sauvegardées. Réessaie.",
         });
-        return;
-      }
-      setDirty(false);
-      toast({
-        tone: "success",
-        title: templateId ? "Gabarit mis à jour" : "Gabarit créé",
-        description: `« ${trimmedName} » enregistré.`,
       });
-      // En création : on a obtenu un nouvel id → on passe en mode édition
-      // pour que les sauvegardes suivantes mettent à jour ce gabarit.
-      if (!templateId && data.templateId) {
-        router.replace(`/gabarits/${data.templateId}/edit`);
-        return;
-      }
-      router.refresh();
-    } finally {
-      setSaving(false);
-    }
   }
 
   const selectedEmployee = useMemo(
@@ -315,23 +391,75 @@ export function TemplateView({
         </div>
       </div>
 
-      {/* Onglets jours (sans dates, juste Lun-Sam) */}
-      <Tabs value={String(dayIndex)} onValueChange={(v) => setDayIndex(Number(v))}>
-        <TabsList className="w-full justify-start overflow-x-auto h-auto p-1">
-          {WEEK_DAYS.map((label, i) => (
-            <TabsTrigger
-              key={i}
-              value={String(i)}
-              className="flex-col gap-0.5 h-auto py-2 px-3 min-w-[72px]"
+      {/* Onglets jours + bouton "Dupliquer ce jour" */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={String(dayIndex)} onValueChange={(v) => setDayIndex(Number(v))}>
+          <TabsList className="w-full justify-start overflow-x-auto h-auto p-1">
+            {WEEK_DAYS.map((label, i) => (
+              <TabsTrigger
+                key={i}
+                value={String(i)}
+                className="flex-col gap-0.5 h-auto py-2 px-3 min-w-[72px]"
+              >
+                <span className="text-xs font-medium uppercase tracking-wide opacity-70">
+                  <span className="hidden sm:inline">{label}</span>
+                  <span className="sm:hidden">{WEEK_DAYS_SHORT[i]}</span>
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        {/* Dropdown : dupliquer le jour courant vers… */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="shrink-0">
+              <Copy className="h-4 w-4" />
+              Dupliquer ce jour
+              <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[220px]">
+            <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-zinc-500">
+              Copier {WEEK_DAYS[dayIndex]} vers…
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {WEEK_DAYS.map((label, i) =>
+              i === dayIndex ? null : (
+                <DropdownMenuItem
+                  key={i}
+                  onClick={() => duplicateDayTo([i])}
+                  className="cursor-pointer"
+                >
+                  {label}
+                </DropdownMenuItem>
+              )
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={dayIndex >= 5}
+              onClick={() =>
+                duplicateDayTo(
+                  WEEK_DAYS.map((_, i) => i).filter((i) => i > dayIndex)
+                )
+              }
+              className="cursor-pointer font-medium"
             >
-              <span className="text-xs font-medium uppercase tracking-wide opacity-70">
-                <span className="hidden sm:inline">{label}</span>
-                <span className="sm:hidden">{WEEK_DAYS_SHORT[i]}</span>
-              </span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+              Tous les jours suivants
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                duplicateDayTo(
+                  WEEK_DAYS.map((_, i) => i).filter((i) => i !== dayIndex)
+                )
+              }
+              className="cursor-pointer font-medium text-violet-700"
+            >
+              Toute la semaine
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       {/* Grille (réutilise PlanningGrid avec dates factices) */}
       <PlanningGrid

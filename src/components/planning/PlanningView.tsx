@@ -16,17 +16,26 @@ import {
   weekTypeFor,
 } from "@/lib/planning-utils";
 import { TIME_SLOTS } from "@/types";
-import { PlanningGrid, type CellKey } from "@/components/planning/PlanningGrid";
+import { PlanningGrid, type CellKey, type ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
+import { isTaskAllowed } from "@/lib/role-task-rules";
+import { TASK_LABELS, STATUS_LABELS } from "@/types";
 import { TaskSelector } from "@/components/planning/TaskSelector";
 import { BulkTaskSelector } from "@/components/planning/BulkTaskSelector";
 import type { ApplyScope } from "@/components/planning/ApplyScopeSelector";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
+import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
+import type { EmployeeStatus } from "@prisma/client";
 import { CoverageWarnings } from "@/components/planning/CoverageWarnings";
 import { analyzeCoverage } from "@/lib/coverage-analysis";
 import { ViewModeSelector } from "@/components/planning/ViewModeSelector";
 import { PrintButton } from "@/components/planning/PrintButton";
 import { ExportXlsxButton } from "@/components/planning/ExportXlsxButton";
 import { useToast } from "@/components/ui/toast";
+import { holidaysIndexForDates } from "@/lib/holidays-fr";
+import {
+  AbsenceConflictDialog,
+  type AbsenceConflict,
+} from "@/components/planning/AbsenceConflictDialog";
 
 type Selection = {
   employeeId: string;
@@ -131,6 +140,68 @@ export function PlanningView({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [recentlySaved, setRecentlySaved] = useState<Set<CellKey>>(new Set());
+  // Filtre par statut : Set vide = aucun filtre (tous les collaborateurs visibles)
+  const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
+
+  // Liste filtrée passée à la grille — quand le filtre est vide, tout passe.
+  const visibleEmployees = useMemo(
+    () =>
+      statusFilter.size === 0
+        ? employees
+        : employees.filter((e) => statusFilter.has(e.status)),
+    [employees, statusFilter]
+  );
+
+  // ─── Dialog de conflit avec une absence approuvée ─────────────────
+  // Quand le serveur renvoie 409 ABSENCE_CONFLICT, on stocke ici la liste
+  // des conflits + 2 callbacks (forcer / annuler) pour que le user tranche.
+  const [conflictPrompt, setConflictPrompt] = useState<{
+    conflicts: AbsenceConflict[];
+    onConfirm: () => Promise<void>;
+    onCancel: () => void;
+  } | null>(null);
+
+  // Helper : POST /api/planning, intercepte 409 ABSENCE_CONFLICT.
+  // Retour :
+  //   { ok: true }                          → écrit en BDD
+  //   { ok: false, conflicts }              → conflit, l'admin doit confirmer
+  //   { ok: false, error }                  → autre erreur
+  type PostResult =
+    | { ok: true }
+    | { ok: false; conflicts: AbsenceConflict[] }
+    | { ok: false; error: string };
+
+  async function postPlanningEntries(
+    updates: Array<{
+      employeeId: string;
+      date: string;
+      timeSlot: string;
+      type: "TASK" | "ABSENCE";
+      taskCode?: string | null;
+      absenceCode?: string | null;
+    }>,
+    force = false
+  ): Promise<PostResult> {
+    try {
+      const res = await fetch("/api/planning", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ entries: updates, force }),
+      });
+      if (res.ok) return { ok: true };
+      const err = await res.json().catch(() => ({}));
+      if (
+        res.status === 409 &&
+        err?.error === "ABSENCE_CONFLICT" &&
+        Array.isArray(err.conflicts)
+      ) {
+        return { ok: false, conflicts: err.conflicts as AbsenceConflict[] };
+      }
+      return { ok: false, error: err?.error ?? "Erreur" };
+    } catch {
+      return { ok: false, error: "Réseau indisponible" };
+    }
+  }
 
   // Mode focus : cache la sidebar via un attribut data sur <body>
   useEffect(() => {
@@ -190,6 +261,14 @@ export function PlanningView({
       return set.size;
     });
   }, [dayDates, employees, index]);
+
+  // Index des jours fériés FR pour la semaine affichée (très peu coûteux,
+  // juste un lookup dans une map de 11 entrées par année).
+  const holidaysIndex = useMemo(
+    () => holidaysIndexForDates(dayDates),
+    [dayDates]
+  );
+  const selectedDayHoliday = holidaysIndex.get(selectedDay) ?? null;
 
   /**
    * Manquements aux règles de couverture sur la semaine en cours :
@@ -354,30 +433,44 @@ export function PlanningView({
       });
     }
 
-    // ─── POST en arrière-plan ; revert si erreur ───
-    try {
-      const res = await fetch("/api/planning", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ entries: updates }),
+    // ─── POST en arrière-plan ; intercepte les conflits absence + revert si erreur ───
+    const result = await postPlanningEntries(updates);
+    if (result.ok) return;
+    if ("conflicts" in result) {
+      // L'admin doit décider : on garde l'optimistic, on ouvre le dialog
+      setConflictPrompt({
+        conflicts: result.conflicts,
+        onConfirm: async () => {
+          const r2 = await postPlanningEntries(updates, true);
+          if (!("ok" in r2) || !r2.ok) {
+            setEntries(previousEntries);
+            const errMsg = "error" in r2 ? r2.error : "Erreur";
+            toast({
+              tone: "error",
+              title: "Enregistrement annulé",
+              description: errMsg,
+            });
+          }
+          setConflictPrompt(null);
+        },
+        onCancel: () => {
+          setEntries(previousEntries);
+          setConflictPrompt(null);
+          toast({
+            tone: "info",
+            title: "Modification annulée",
+            description: "Le créneau d'absence approuvée est préservé.",
+          });
+        },
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setEntries(previousEntries);
-        toast({
-          tone: "error",
-          title: "Enregistrement annulé",
-          description: err.error ?? "Une erreur est survenue. Modification annulée.",
-        });
-      }
-    } catch {
-      setEntries(previousEntries);
-      toast({
-        tone: "error",
-        title: "Réseau indisponible",
-        description: "Modification annulée localement.",
-      });
+      return;
     }
+    setEntries(previousEntries);
+    toast({
+      tone: "error",
+      title: "Enregistrement annulé",
+      description: result.error,
+    });
   }
 
   async function handleClear(payload: { scope: ApplyScope }) {
@@ -417,6 +510,144 @@ export function PlanningView({
     }
   }
 
+  /* ---------- Drag & drop : déplacement d'une tâche ---------- */
+
+  /**
+   * Déplace une cellule TASK depuis `source` vers `target` (drop terminé).
+   *  - Refuse si target est une absence (les absences validées sont protégées).
+   *  - Refuse si la tâche n'est pas autorisée pour le statut du collaborateur
+   *    cible (ex: poser un Mail sur un Pharmacien).
+   *  - Si target est déjà une TASK, on l'écrase silencieusement (l'admin a vu
+   *    la cellule en surbrillance violette pendant le hover, c'est explicite).
+   *  - Optimistic + rollback en cas d'échec API ou conflit absence.
+   */
+  const handleMoveTask = useCallback(
+    async (source: DnDParsedCell, target: DnDParsedCell) => {
+      // Source TASK : on retrouve son taskCode dans entries
+      const sourceEntry = entries.find(
+        (e) =>
+          e.employeeId === source.employeeId &&
+          e.date === source.date &&
+          e.timeSlot === source.timeSlot
+      );
+      if (!sourceEntry || sourceEntry.type !== "TASK" || !sourceEntry.taskCode) {
+        return;
+      }
+
+      // Target absence : on refuse (le DnD désactive déjà le drop, mais on
+      // double-check au cas où).
+      const targetEntry = entries.find(
+        (e) =>
+          e.employeeId === target.employeeId &&
+          e.date === target.date &&
+          e.timeSlot === target.timeSlot
+      );
+      if (targetEntry?.type === "ABSENCE") {
+        toast({
+          tone: "error",
+          title: "Déplacement refusé",
+          description: "Impossible d'écraser une absence validée.",
+        });
+        return;
+      }
+
+      // Vérification rôle / poste côté client
+      const targetEmp = employees.find((e) => e.id === target.employeeId);
+      if (!targetEmp) return;
+      if (!isTaskAllowed(targetEmp.status, sourceEntry.taskCode)) {
+        toast({
+          tone: "error",
+          title: "Déplacement refusé",
+          description: `Le poste ${TASK_LABELS[sourceEntry.taskCode]} n'est pas autorisé pour un ${STATUS_LABELS[targetEmp.status]}.`,
+        });
+        return;
+      }
+
+      // ─── Optimistic : on supprime la source ET on écrit la target ───
+      const previousEntries = entries;
+      const visibleDates = new Set(dayDates);
+      setEntries((prev) => {
+        // 1. supprime la source (uniquement si visible — applyEntriesDelete
+        //    filtre déjà sur visibleDates, mais source/target sont sur le même
+        //    jour visible par construction du DnD)
+        const afterDelete = applyEntriesDelete(prev, [source], visibleDates);
+        // 2. écrit la nouvelle entrée
+        return applyEntriesUpdate(
+          afterDelete,
+          [
+            {
+              employeeId: target.employeeId,
+              date: target.date,
+              timeSlot: target.timeSlot,
+              type: "TASK",
+              taskCode: sourceEntry.taskCode,
+              absenceCode: null,
+            },
+          ],
+          visibleDates
+        );
+      });
+      flashCells([
+        entryKey({
+          employeeId: target.employeeId,
+          date: target.date,
+          timeSlot: target.timeSlot,
+        }),
+      ]);
+
+      // ─── Backend : DELETE source + POST target en parallèle ───
+      const sourceParams = new URLSearchParams({
+        employeeId: source.employeeId,
+        date: source.date,
+        timeSlot: source.timeSlot,
+      });
+      const [delRes, postRes] = await Promise.all([
+        fetch(`/api/planning?${sourceParams.toString()}`, { method: "DELETE" }),
+        postPlanningEntries([
+          {
+            employeeId: target.employeeId,
+            date: target.date,
+            timeSlot: target.timeSlot,
+            type: "TASK",
+            taskCode: sourceEntry.taskCode,
+            absenceCode: null,
+          },
+        ]),
+      ]);
+
+      // Si l'écriture target échoue → on revert tout
+      if (!postRes.ok) {
+        setEntries(previousEntries);
+        const errMsg =
+          "error" in postRes
+            ? postRes.error
+            : "conflicts" in postRes
+              ? "Conflit avec une absence approuvée."
+              : "Erreur";
+        toast({
+          tone: "error",
+          title: "Déplacement annulé",
+          description: errMsg,
+        });
+        return;
+      }
+      // Si le DELETE échoue mais le POST a réussi → la source est encore en BDD,
+      // on revert pour rester cohérent
+      if (!delRes.ok) {
+        setEntries(previousEntries);
+        toast({
+          tone: "error",
+          title: "Déplacement annulé",
+          description: "La suppression de la cellule d'origine a échoué.",
+        });
+      }
+    },
+    // postPlanningEntries est défini inline dans le composant et capturé par
+    // closure ; on documente le warning plutôt que d'introduire du bruit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, employees, dayDates, toast]
+  );
+
   /* ---------- Bulk multi-cell apply / clear ---------- */
 
   async function handleBulkApply(payload: {
@@ -451,29 +682,42 @@ export function PlanningView({
     setBulkOpen(false);
     setMultiSelection(new Set());
 
-    try {
-      const res = await fetch("/api/planning", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ entries: expanded }),
+    const result = await postPlanningEntries(expanded);
+    if (result.ok) return;
+    if ("conflicts" in result) {
+      setConflictPrompt({
+        conflicts: result.conflicts,
+        onConfirm: async () => {
+          const r2 = await postPlanningEntries(expanded, true);
+          if (!("ok" in r2) || !r2.ok) {
+            setEntries(previousEntries);
+            const errMsg = "error" in r2 ? r2.error : "Erreur";
+            toast({
+              tone: "error",
+              title: "Enregistrement bulk annulé",
+              description: errMsg,
+            });
+          }
+          setConflictPrompt(null);
+        },
+        onCancel: () => {
+          setEntries(previousEntries);
+          setConflictPrompt(null);
+          toast({
+            tone: "info",
+            title: "Modifications annulées",
+            description: "Les créneaux d'absence approuvée sont préservés.",
+          });
+        },
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setEntries(previousEntries);
-        toast({
-          tone: "error",
-          title: "Enregistrement bulk annulé",
-          description: err.error ?? "Une erreur est survenue. Modifications annulées.",
-        });
-      }
-    } catch {
-      setEntries(previousEntries);
-      toast({
-        tone: "error",
-        title: "Réseau indisponible",
-        description: "Modifications annulées localement.",
-      });
+      return;
     }
+    setEntries(previousEntries);
+    toast({
+      tone: "error",
+      title: "Enregistrement bulk annulé",
+      description: result.error,
+    });
   }
 
   async function handleBulkClear(payload: { scope: ApplyScope }) {
@@ -577,10 +821,14 @@ export function PlanningView({
             />
           )}
           {isAdmin && <ExportXlsxButton weekStart={weekStart} />}
+          <EmployeeStatusFilter
+            selected={statusFilter}
+            onChange={setStatusFilter}
+          />
           <PrintButton />
           <button
             onClick={() => setFocusMode((v) => !v)}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-card text-foreground/70 hover:bg-accent/50 transition-colors"
             title={focusMode ? "Quitter le mode focus" : "Mode focus (cache la barre latérale)"}
             aria-label="Mode focus"
           >
@@ -590,23 +838,23 @@ export function PlanningView({
               <Maximize2 className="h-4 w-4" />
             )}
           </button>
-          <div className="inline-flex items-center rounded-full border border-zinc-200 bg-white p-0.5 ml-1">
+          <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5 ml-1">
             <button
               onClick={() => navigateWeek(-1)}
-              className="h-7 w-7 rounded-full inline-flex items-center justify-center text-zinc-600 hover:bg-zinc-100 transition-colors"
+              className="h-7 w-7 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-accent/60 transition-colors"
               aria-label="Semaine précédente"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
               onClick={goToCurrentWeek}
-              className="h-7 px-3 rounded-full text-[12px] font-medium text-zinc-700 hover:bg-zinc-100 transition-colors"
+              className="h-7 px-3 rounded-full text-[12px] font-medium text-foreground/80 hover:bg-accent/60 transition-colors"
             >
               Aujourd&apos;hui
             </button>
             <button
               onClick={() => navigateWeek(1)}
-              className="h-7 w-7 rounded-full inline-flex items-center justify-center text-zinc-600 hover:bg-zinc-100 transition-colors"
+              className="h-7 w-7 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-accent/60 transition-colors"
               aria-label="Semaine suivante"
             >
               <ChevronRight className="h-4 w-4" />
@@ -617,20 +865,24 @@ export function PlanningView({
 
       {/* Segmented control jour — façon iOS */}
       <div className="no-print">
-        <div className="inline-flex w-full sm:w-auto items-center gap-0.5 rounded-xl bg-zinc-100/70 p-1">
+        <div className="inline-flex w-full sm:w-auto items-center gap-0.5 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/60 p-1">
           {WEEK_DAYS.map((label, i) => {
             const date = days[i];
             const absCount = absencesPerDay[i];
             const active = i === dayIndex;
+            const holiday = holidaysIndex.get(dayDates[i]) ?? null;
             return (
               <button
                 key={i}
                 onClick={() => setDayIndex(i)}
+                title={holiday ? `${holiday.name} (jour férié)` : undefined}
                 className={cn(
                   "relative flex-1 sm:flex-none flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 transition-all min-w-[64px]",
                   active
-                    ? "bg-white shadow-[0_1px_2px_rgba(0,0,0,0.06)] text-zinc-900"
-                    : "text-zinc-500 hover:text-zinc-800"
+                    ? "bg-card shadow-[0_1px_2px_rgba(0,0,0,0.06)] text-foreground dark:shadow-none dark:ring-1 dark:ring-zinc-700"
+                    : "text-muted-foreground hover:text-foreground",
+                  // Jour férié : couleur rouge subtile pour signaler visuellement
+                  holiday && (active ? "text-rose-700 dark:text-rose-300" : "text-rose-500 dark:text-rose-400")
                 )}
               >
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium">
@@ -642,6 +894,13 @@ export function PlanningView({
                   <span className="text-zinc-300">/</span>
                   {(date.getMonth() + 1).toString().padStart(2, "0")}
                 </span>
+                {/* Pastille férié (gauche) — distincte de la pastille absences (droite) */}
+                {holiday && (
+                  <span
+                    aria-hidden
+                    className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-zinc-100/70"
+                  />
+                )}
                 {absCount > 0 && (
                   <span
                     className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-semibold text-white inline-flex items-center justify-center tabular-nums"
@@ -660,7 +919,7 @@ export function PlanningView({
           gèrent pas la couverture, on évite de leur afficher des alertes
           sur lesquelles ils ne peuvent pas agir). */}
       {isAdmin && (absentToday.length > 0 || coverageWarnings.length > 0) && (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
+        <div className="rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
           <div className="mb-2 flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
             <span className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-zinc-600">
@@ -693,9 +952,21 @@ export function PlanningView({
         </div>
       )}
 
+      {/* Bandeau "jour férié" — affiché si le jour sélectionné en est un.
+          Subtil mais visible pour éviter de planifier sans réfléchir dessus. */}
+      {selectedDayHoliday && (
+        <div className="rounded-2xl border border-rose-200/70 bg-rose-50/60 px-4 py-2.5 text-[13px] text-rose-800 flex items-center gap-2">
+          <span className="text-base leading-none">🇫🇷</span>
+          <span>
+            <span className="font-semibold">{selectedDayHoliday.name}</span>{" "}
+            <span className="text-rose-600/80">· jour férié</span>
+          </span>
+        </div>
+      )}
+
       {/* Grille */}
       <PlanningGrid
-        employees={employees}
+        employees={visibleEmployees}
         date={selectedDay}
         weekDates={dayDates}
         index={index}
@@ -707,6 +978,7 @@ export function PlanningView({
         overtimeCells={overtimeCells}
         recentlySaved={recentlySaved}
         currentEmployeeId={currentEmployeeId ?? null}
+        onMoveTask={isAdmin ? handleMoveTask : undefined}
       />
 
       {/* Modal d'édition unitaire */}
@@ -735,9 +1007,19 @@ export function PlanningView({
         onClearAll={handleBulkClear}
       />
 
+      {/* Dialog de conflit absence approuvée */}
+      <AbsenceConflictDialog
+        open={conflictPrompt !== null}
+        conflicts={conflictPrompt?.conflicts ?? []}
+        onConfirm={async () => {
+          if (conflictPrompt) await conflictPrompt.onConfirm();
+        }}
+        onCancel={() => conflictPrompt?.onCancel()}
+      />
+
       {/* Barre d'action flottante (sélection multi) — glass Apple-style */}
       {isAdmin && multiSelection.size > 0 && (
-        <div className="no-print safe-bottom fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-zinc-200/60 bg-white/85 backdrop-blur-xl shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
+        <div className="no-print safe-bottom fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/85 backdrop-blur-xl shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
           <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
           <span className="text-[12.5px] tracking-tight">
             <span className="font-semibold tabular-nums">{multiSelection.size}</span>{" "}
