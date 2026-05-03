@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
+  Copy,
   LayoutTemplate,
   Loader2,
   Pencil,
@@ -37,6 +38,7 @@ export function GabaritsList({ rows }: { rows: GabaritRow[] }) {
   const router = useRouter();
   const [busyDelete, setBusyDelete] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<GabaritRow | null>(null);
+  const [duplicateTarget, setDuplicateTarget] = useState<GabaritRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -106,6 +108,7 @@ export function GabaritsList({ rows }: { rows: GabaritRow[] }) {
                     key={g.id}
                     row={g}
                     onDelete={() => setConfirmTarget(g)}
+                    onDuplicate={() => setDuplicateTarget(g)}
                     busyDelete={busyDelete === g.id}
                   />
                 ))}
@@ -114,6 +117,18 @@ export function GabaritsList({ rows }: { rows: GabaritRow[] }) {
           </section>
         );
       })}
+
+      {/* Dialog duplication */}
+      <DuplicateDialog
+        target={duplicateTarget}
+        onClose={() => setDuplicateTarget(null)}
+        onSuccess={(newId) => {
+          setDuplicateTarget(null);
+          // Navigate to the new template's edit page so user can immediately
+          // tweak it without searching for it in the list.
+          router.push(`/gabarits/${newId}/edit`);
+        }}
+      />
 
       {/* Confirmation suppression */}
       <Dialog
@@ -156,10 +171,12 @@ export function GabaritsList({ rows }: { rows: GabaritRow[] }) {
 function GabaritCard({
   row,
   onDelete,
+  onDuplicate,
   busyDelete,
 }: {
   row: GabaritRow;
   onDelete: () => void;
+  onDuplicate: () => void;
   busyDelete: boolean;
 }) {
   return (
@@ -179,6 +196,17 @@ function GabaritCard({
         </div>
       </div>
       <div className="mt-3 flex items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onDuplicate}
+          disabled={busyDelete}
+          className="text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+          title="Dupliquer ce gabarit (pour tester une variante)"
+        >
+          <Copy className="h-4 w-4" />
+          Dupliquer
+        </Button>
         <Button
           asChild
           size="sm"
@@ -205,6 +233,153 @@ function GabaritCard({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Dialog de duplication de gabarit.
+ * - Pré-remplit le nom avec "Copie de <source>"
+ * - Permet de basculer S1↔S2 (utile pour partir d'un S1 et faire son S2)
+ * - Sur succès, navigue vers la page d'édition du nouveau gabarit
+ */
+function DuplicateDialog({
+  target,
+  onClose,
+  onSuccess,
+}: {
+  target: GabaritRow | null;
+  onClose: () => void;
+  onSuccess: (newId: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [weekType, setWeekType] = useState<WeekType>("S1");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset à chaque ouverture avec une cible fraîche
+  useEffect(() => {
+    if (target) {
+      setName(`Copie de ${target.name}`);
+      setWeekType(target.weekType);
+      setError(null);
+    }
+  }, [target]);
+
+  async function handleDuplicate() {
+    if (!target) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Le nom est obligatoire");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/templates/${target.id}/duplicate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          newName: trimmed,
+          targetWeekType: weekType,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Erreur lors de la duplication");
+        return;
+      }
+      onSuccess(data.id);
+    } catch {
+      setError("Réseau indisponible");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={!!target} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Dupliquer « {target?.name} »</DialogTitle>
+          <DialogDescription>
+            Crée une copie modifiable. L&apos;original reste intact.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Nom du nouveau gabarit */}
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-zinc-700">
+              Nom de la copie
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={busy}
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              placeholder="Nom du gabarit"
+            />
+          </div>
+
+          {/* Type S1 / S2 */}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+              Type de semaine
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(["S1", "S2"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setWeekType(t)}
+                  disabled={busy}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-[13px] font-medium transition-colors",
+                    weekType === t
+                      ? "border-violet-300 bg-violet-50 text-violet-700"
+                      : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                  )}
+                >
+                  Semaine {t}
+                  {target?.weekType === t && (
+                    <span className="ml-1 text-[10px] text-zinc-400">
+                      (source)
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {target && weekType !== target.weekType && (
+              <p className="mt-2 text-[11px] text-violet-700/80">
+                💡 La copie sera enregistrée comme {weekType} (basculée
+                depuis {target.weekType}).
+              </p>
+            )}
+          </div>
+
+          {error && (
+            <div className="rounded-md bg-red-50 px-3 py-2 text-[12.5px] text-red-700 ring-1 ring-inset ring-red-100">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Annuler
+          </Button>
+          <Button onClick={handleDuplicate} disabled={busy || !name.trim()}>
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            Dupliquer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

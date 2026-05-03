@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   DndContext,
-  PointerSensor,
   TouchSensor,
   useDraggable,
   useDroppable,
@@ -101,6 +100,17 @@ type Props = {
    * optimiste + appel API + rollback en cas d'échec).
    */
   onMoveTask?: (source: ParsedCell, target: ParsedCell) => void;
+  /**
+   * Variante "bloc" : quand l'utilisateur long-press une cellule TASK qui
+   * fait partie d'un bloc continu (même taskCode, créneaux adjacents),
+   * tout le bloc est déplacé ensemble. Le parent reçoit la liste complète
+   * des cellules du bloc + la source long-pressée + la cible drop.
+   */
+  onMoveBlock?: (
+    block: ParsedCell[],
+    source: ParsedCell,
+    target: ParsedCell
+  ) => void;
 };
 
 export const PlanningGrid = memo(function PlanningGrid({
@@ -117,6 +127,7 @@ export const PlanningGrid = memo(function PlanningGrid({
   recentlySaved,
   currentEmployeeId,
   onMoveTask,
+  onMoveBlock,
 }: Props) {
   const dndEnabled = canEdit && !!onMoveTask;
 
@@ -137,32 +148,108 @@ export const PlanningGrid = memo(function PlanningGrid({
     })
   );
 
-  // Feedback haptique léger (10ms) quand le long-press déclenche le DnD :
-  // l'utilisateur sent que la cellule est "saisie" sans avoir à regarder.
-  // Silencieusement ignoré sur les devices sans Vibration API (iOS Safari).
-  const handleDragStart = useCallback(() => {
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-      try {
-        navigator.vibrate?.(15);
-      } catch {
-        // Certaines plateformes throw si l'utilisateur a désactivé les vibrations
+  // ─── Block detection : trouve les cellules TASK adjacentes même code ─
+  // Walk back/forward depuis la cellule source jusqu'à rencontrer une
+  // cellule différente (autre taskCode, absence, ou vide).
+  const computeBlock = useCallback(
+    (start: ParsedCell): ParsedCell[] => {
+      const dayMap = index.get(start.employeeId)?.get(start.date);
+      if (!dayMap) return [start];
+      const startEntry = dayMap.get(start.timeSlot);
+      if (
+        !startEntry ||
+        startEntry.type !== ScheduleType.TASK ||
+        !startEntry.taskCode
+      ) {
+        return [start];
       }
-    }
-  }, []);
+      const startIdx = TIME_SLOTS.indexOf(start.timeSlot);
+      if (startIdx < 0) return [start];
+
+      const block: ParsedCell[] = [start];
+
+      // Remonter
+      for (let i = startIdx - 1; i >= 0; i--) {
+        const slot = TIME_SLOTS[i];
+        const e = dayMap.get(slot);
+        if (
+          e?.type === ScheduleType.TASK &&
+          e.taskCode === startEntry.taskCode
+        ) {
+          block.unshift({ ...start, timeSlot: slot });
+        } else break;
+      }
+
+      // Descendre
+      for (let j = startIdx + 1; j < TIME_SLOTS.length; j++) {
+        const slot = TIME_SLOTS[j];
+        const e = dayMap.get(slot);
+        if (
+          e?.type === ScheduleType.TASK &&
+          e.taskCode === startEntry.taskCode
+        ) {
+          block.push({ ...start, timeSlot: slot });
+        } else break;
+      }
+      return block;
+    },
+    [index]
+  );
+
+  // État du bloc actuellement "saisi" (pendant un drag tactile). Utilisé
+  // pour afficher un ring sur toutes les cellules du bloc → l'utilisateur
+  // voit immédiatement l'étendue de ce qu'il déplace.
+  const [activeBlockKeys, setActiveBlockKeys] = useState<Set<CellKey> | null>(
+    null
+  );
+
+  // Feedback haptique léger (15ms) + détection du bloc au démarrage du drag.
+  const handleDragStart = useCallback(
+    (event: { active: { id: string | number } }) => {
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        try {
+          navigator.vibrate?.(15);
+        } catch {
+          /* ignored */
+        }
+      }
+      const source = parseCellKey(event.active.id as string);
+      const block = computeBlock(source);
+      // On ne montre l'effet bloc que si > 1 cellule (sinon c'est un drag
+      // de cellule simple, pas la peine d'afficher un état spécial).
+      if (block.length > 1) {
+        setActiveBlockKeys(
+          new Set(block.map((c) => makeCellKey(c.employeeId, c.date, c.timeSlot)))
+        );
+      }
+    },
+    [computeBlock]
+  );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
-      if (!onMoveTask) return;
+      setActiveBlockKeys(null);
       const { active, over } = event;
       if (!over || !active) return;
       if (active.id === over.id) return;
-      onMoveTask(
-        parseCellKey(active.id as string),
-        parseCellKey(over.id as string)
-      );
+      const source = parseCellKey(active.id as string);
+      const target = parseCellKey(over.id as string);
+      const block = computeBlock(source);
+      // Si le bloc fait plus d'1 cellule ET qu'on a un handler bloc → bloc.
+      // Sinon → drag cellule simple.
+      if (block.length > 1 && onMoveBlock) {
+        onMoveBlock(block, source, target);
+      } else if (onMoveTask) {
+        onMoveTask(source, target);
+      }
     },
-    [onMoveTask]
+    [computeBlock, onMoveTask, onMoveBlock]
   );
+
+  // Si l'utilisateur annule (esc ou drop hors zone), nettoie le state.
+  const handleDragCancel = useCallback(() => {
+    setActiveBlockKeys(null);
+  }, []);
   const dragRef = useRef<{
     startEmpIdx: number;
     startSlotIdx: number;
@@ -349,18 +436,27 @@ export const PlanningGrid = memo(function PlanningGrid({
     <div className="select-none rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)] overflow-hidden">
       <div className="overflow-x-auto scrollbar-thin overscroll-x-contain">
         <table
-          className="w-full border-collapse text-[10.5px] sm:text-[12px]"
+          // Variables CSS responsive : largeur de colonne employé + colonne
+          // heure + colonne effectif. Sur mobile on réduit fortement pour
+          // tenir tout le planning dans la largeur d'écran (vue d'ensemble),
+          // au prix de la lisibilité des labels dans les cellules.
+          className={cn(
+            "w-full border-collapse text-[10.5px] sm:text-[12px]",
+            "[--col-w:28px] [--time-w:36px] [--eff-w:28px]",
+            "sm:[--col-w:42px] sm:[--time-w:44px] sm:[--eff-w:36px]",
+            "md:[--col-w:56px] md:[--time-w:52px] md:[--eff-w:44px]"
+          )}
           style={{
             tableLayout: "fixed",
-            minWidth: `calc(${employees.length} * var(--col-w, 56px) + 96px)`,
+            minWidth: `calc(${employees.length} * var(--col-w) + var(--time-w) + var(--eff-w))`,
           }}
         >
           <colgroup>
-            <col style={{ width: "52px" }} />
+            <col style={{ width: "var(--time-w)" }} />
             {employees.map((emp) => (
               <col key={emp.id} />
             ))}
-            <col style={{ width: "44px" }} />
+            <col style={{ width: "var(--eff-w)" }} />
           </colgroup>
           <thead>
             {/* Ligne unique : nom · statut · contrat · jour · semaine */}
@@ -542,13 +638,13 @@ export const PlanningGrid = memo(function PlanningGrid({
                         canEdit={canEdit}
                         dndEnabled={dndEnabled}
                         isTouchDevice={isTouchDevice}
+                        isInActiveBlock={activeBlockKeys?.has(key) ?? false}
                         isSelected={isSelected}
                         isOvertime={isOvertime}
                         isPrevOvertime={prevOvertime}
                         isNextOvertime={nextOvertime}
                         isRecent={isRecent}
                         isMyColumn={isMyColumn}
-                        isHourMark={isHourMark}
                         onMouseDown={handleCellMouseDown}
                         onMouseEnter={handleCellMouseEnter}
                         onMouseUp={handleCellMouseUp}
@@ -596,7 +692,12 @@ export const PlanningGrid = memo(function PlanningGrid({
   if (!dndEnabled) return grid;
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
       {grid}
     </DndContext>
   );
@@ -616,13 +717,13 @@ const Cell = memo(function Cell({
   canEdit,
   dndEnabled,
   isTouchDevice,
+  isInActiveBlock,
   isSelected,
   isOvertime,
   isPrevOvertime,
   isNextOvertime,
   isRecent,
   isMyColumn,
-  isHourMark,
   onMouseDown,
   onMouseEnter,
   onMouseUp,
@@ -637,13 +738,13 @@ const Cell = memo(function Cell({
   canEdit: boolean;
   dndEnabled: boolean;
   isTouchDevice: boolean;
+  isInActiveBlock: boolean;
   isSelected: boolean;
   isOvertime: boolean;
   isPrevOvertime: boolean;
   isNextOvertime: boolean;
   isRecent: boolean;
   isMyColumn: boolean;
-  isHourMark: boolean;
   onMouseDown: (e: React.MouseEvent, empIdx: number, slotIdx: number) => void;
   onMouseEnter: (empIdx: number, slotIdx: number) => void;
   onMouseUp: (empIdx: number, slotIdx: number) => void;
@@ -697,7 +798,10 @@ const Cell = memo(function Cell({
     "px-1 h-9 text-center font-medium text-[11px] transition-all relative",
     canEdit && "cursor-pointer",
     isSelected && "ring-2 ring-violet-500/80 ring-inset z-[5]",
-    isRecent && "animate-cell-flash"
+    isRecent && "animate-cell-flash",
+    // Effet "bloc en cours de drag" : ring violet pulsé + scale léger
+    // pour signaler que la cellule fait partie du bloc déplacé.
+    isInActiveBlock && "ring-2 ring-violet-500 ring-inset z-[10] animate-pulse"
     // Trait horaire ajouté UNIQUEMENT sur les cellules vides — sur les
     // cellules TASK / ABSENCE le bloc coloré reste continu et propre.
   );
@@ -728,8 +832,10 @@ const Cell = memo(function Cell({
       : "";
 
   // Cellule vide — ultra-minimal, juste un hover discret + wash warm doux.
-  // Trait horaire visible UNIQUEMENT ici : sur les cellules TASK/ABSENCE,
-  // on veut garder le bloc coloré continu et lisible.
+  // Pas de trait horaire ici : le repère se fait via la colonne "Heure"
+  // à gauche + l'alternance zebra blanc/gris sur les demi-heures vides.
+  // Avec border-collapse, mettre un border-top sur les cellules vides
+  // crée une ligne perçue comme traversant les blocs colorés voisins.
   if (!entry) {
     return (
       <td
@@ -738,7 +844,6 @@ const Cell = memo(function Cell({
         className={cn(
           baseClasses,
           "border-b border-b-zinc-100/80",
-          isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70",
           canEdit && "hover:bg-zinc-50/80",
           isMyColumn && "bg-amber-50/50",
           dropTargetRing
@@ -843,7 +948,11 @@ const Cell = memo(function Cell({
         }}
         title={`Absence ${entry.absenceCode}`}
       >
-        {!isContinuation && ABSENCE_ICONS[entry.absenceCode]}
+        {!isContinuation && (
+          <span className="text-[10.5px] font-bold tracking-[0.04em] uppercase">
+            {ABSENCE_ICONS[entry.absenceCode]}
+          </span>
+        )}
       </td>
     );
   }

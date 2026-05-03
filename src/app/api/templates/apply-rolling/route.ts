@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
 import { ScheduleType, type WeekType } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
+import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 
 export const runtime = "nodejs";
 // Bulk de 26 semaines × 1000+ entries peut prendre ~5-10s
@@ -205,6 +207,8 @@ export async function POST(req: Request) {
     console.timeEnd(label);
   }
   console.timeEnd(`[apply-rolling] insert ${allRows.length} rows`);
+
+  revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(pharmacyId));
 
   return NextResponse.json({
     ok: true,

@@ -72,11 +72,18 @@ export const ABSENCE_LABELS: Record<AbsenceCode, string> = {
   FORMATION_ABS: "Form. ext.",
 };
 
+/**
+ * Étiquettes courtes affichées DIRECTEMENT dans la cellule du planning (case
+ * de 9 mm de haut). On évite les pictogrammes ☀/✚ qui prêtent à confusion :
+ * le code couleur du fond suffit à distinguer le type d'absence (jaune =
+ * congé, rouge = maladie, indigo = formation, gris = absent), le texte
+ * court rappelle juste qu'on est sur une absence.
+ */
 export const ABSENCE_ICONS: Record<AbsenceCode, string> = {
-  ABSENT: "○",
-  CONGE: "☀",
-  MALADIE: "✚",
-  FORMATION_ABS: "▣",
+  ABSENT: "ABS",
+  CONGE: "CONGÉ",
+  MALADIE: "MAL",
+  FORMATION_ABS: "FORM",
 };
 
 export const ABSENCE_STYLES: Record<AbsenceCode, CellStyle> = {

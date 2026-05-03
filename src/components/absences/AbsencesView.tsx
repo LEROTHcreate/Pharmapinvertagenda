@@ -9,6 +9,7 @@ import { ABSENCE_LABELS } from "@/types";
 import type { AbsenceCode, AbsenceRequestStatus } from "@prisma/client";
 import { AbsenceRequestForm } from "@/components/absences/AbsenceRequestForm";
 import { NotePromptDialog } from "@/components/ui/note-prompt-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 type AbsenceDTO = {
@@ -45,6 +46,9 @@ export function AbsencesView({ currentUser }: Props) {
 
   // ID de la demande dont on est en train de saisir le motif de refus
   const [rejectId, setRejectId] = useState<string | null>(null);
+  // Demande APPROUVÉE qu'on s'apprête à annuler (besoin de confirmation
+  // car ça modifie le planning du collaborateur).
+  const [cancelApprovedTarget, setCancelApprovedTarget] = useState<AbsenceDTO | null>(null);
 
   async function refetch() {
     try {
@@ -87,7 +91,7 @@ export function AbsencesView({ currentUser }: Props) {
     }
   }
 
-  async function handleCancel(id: string) {
+  async function handleCancel(id: string, wasApproved = false) {
     setBusy(id);
     setError(null);
     try {
@@ -98,6 +102,11 @@ export function AbsencesView({ currentUser }: Props) {
         return;
       }
       await refetch();
+      // Si c'était une absence déjà approuvée, le planning a été restauré
+      // côté serveur → on rafraîchit la route pour que le planning visible
+      // ailleurs (grille, fiche collab) reflète immédiatement les TASK
+      // restaurées.
+      if (wasApproved) router.refresh();
     } finally {
       setBusy(null);
     }
@@ -123,10 +132,10 @@ export function AbsencesView({ currentUser }: Props) {
               : "Vos demandes d'absence et leur statut"}
           </p>
         </div>
-        {canSubmit && (
+        {(canSubmit || isAdmin) && (
           <Button onClick={() => setFormOpen(true)}>
             <Plus className="h-4 w-4" />
-            Nouvelle demande
+            {isAdmin ? "Saisir une absence" : "Nouvelle demande"}
           </Button>
         )}
       </div>
@@ -264,6 +273,25 @@ export function AbsencesView({ currentUser }: Props) {
                             Annuler
                           </Button>
                         )}
+                        {/* Admin : peut annuler une absence APPROUVÉE
+                            (cas du "j'ai validé par erreur"). Restaure le
+                            planning du collaborateur. Confirmation requise. */}
+                        {isAdmin && r.status === "APPROVED" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={rowBusy}
+                            onClick={() => setCancelApprovedTarget(r)}
+                            title="Annuler l'absence et restaurer le planning"
+                          >
+                            {rowBusy ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                            Annuler
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -277,7 +305,13 @@ export function AbsencesView({ currentUser }: Props) {
       <AbsenceRequestForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onCreated={refetch}
+        onCreated={() => {
+          refetch();
+          // Si l'admin a auto-validé une absence, le planning a été mis à
+          // jour côté serveur — on rafraîchit la route pour le refléter.
+          if (isAdmin) router.refresh();
+        }}
+        isAdmin={isAdmin}
       />
 
       <NotePromptDialog
@@ -295,6 +329,30 @@ export function AbsencesView({ currentUser }: Props) {
           }
         }}
         onClose={() => setRejectId(null)}
+      />
+
+      {/* Confirmation annulation d'une absence APPROUVÉE — explique
+          clairement ce qui va se passer côté planning. */}
+      <ConfirmDialog
+        open={cancelApprovedTarget !== null}
+        title={
+          cancelApprovedTarget
+            ? `Annuler l'absence de ${cancelApprovedTarget.employee.firstName} ${cancelApprovedTarget.employee.lastName} ?`
+            : "Annuler l'absence ?"
+        }
+        description={
+          cancelApprovedTarget
+            ? `Cette action supprimera la demande d'absence (${ABSENCE_LABELS[cancelApprovedTarget.absenceCode]}) et restaurera les créneaux planning du collaborateur sur la période. Les postes qui avaient été remplacés par l'absence reprendront leur valeur d'origine.`
+            : "Restaure le planning et supprime la demande."
+        }
+        confirmLabel="Annuler l'absence"
+        variant="destructive"
+        onConfirm={async () => {
+          const target = cancelApprovedTarget;
+          setCancelApprovedTarget(null);
+          if (target) await handleCancel(target.id, true);
+        }}
+        onClose={() => setCancelApprovedTarget(null)}
       />
     </div>
   );

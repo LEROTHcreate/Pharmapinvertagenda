@@ -107,4 +107,13 @@ export const DASHBOARD_CACHE_TAGS = {
   usersPending: (id: string) => `users-pending:${id}`,
   swapsPending: (id: string) => `swaps-pending:${id}`,
   absencesPending: (id: string) => `absences-pending:${id}`,
+  /** Cache du planning d'une semaine spécifique pour une pharmacie. */
+  planningWeek: (pharmacyId: string, weekStart: string) =>
+    `planning:${pharmacyId}:${weekStart}`,
+  /** Tag global "tout le planning d'une pharmacie" — invalidé quand on
+   *  ne sait pas exactement quelle semaine est touchée (apply-batch
+   *  multi-semaines, drag&drop, etc.). */
+  planningAll: (pharmacyId: string) => `planning:${pharmacyId}:*`,
+  /** Cache de la liste des gabarits d'une pharmacie. */
+  templatesList: (pharmacyId: string) => `templates:${pharmacyId}`,
 };

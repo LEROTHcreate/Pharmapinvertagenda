@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
-  ABSENCE_ICONS,
   ABSENCE_LABELS,
   ABSENCE_STYLES,
   STATUS_LABELS,
@@ -194,7 +193,6 @@ export function TaskSelector({
                       borderColor: s.border,
                     }}
                   >
-                    <span className="text-base mr-1">{ABSENCE_ICONS[code]}</span>
                     {ABSENCE_LABELS[code]}
                   </button>
                 );

@@ -2,7 +2,8 @@
 
 import { Loader2, Users, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ConversationDTO } from "@/types/messaging";
+import type { ConversationDTO, ConversationMemberDTO } from "@/types/messaging";
+import { AvatarImage } from "@/components/layout/AvatarImage";
 
 type Props = {
   conversations: ConversationDTO[];
@@ -25,6 +26,15 @@ function conversationTitle(conv: ConversationDTO, currentUserId: string): string
   // 1-1 : nom de l'autre
   const other = conv.members.find((m) => m.userId !== currentUserId);
   return other?.name ?? "Conversation";
+}
+
+/** Pour les 1-1, retourne le membre "autre" (pour l'avatar). Null si groupe. */
+function conversationPeer(
+  conv: ConversationDTO,
+  currentUserId: string
+): ConversationMemberDTO | null {
+  if (conv.isGroup) return null;
+  return conv.members.find((m) => m.userId !== currentUserId) ?? null;
 }
 
 function lastMessagePreview(conv: ConversationDTO, currentUserId: string): string {
@@ -82,6 +92,7 @@ export function ConversationList({
       {conversations.map((conv) => {
         const active = conv.id === activeId;
         const title = conversationTitle(conv, currentUserId);
+        const peer = conversationPeer(conv, currentUserId);
         const preview = lastMessagePreview(conv, currentUserId);
         const time = conv.lastMessage
           ? formatRelative(conv.lastMessage.createdAt)
@@ -95,7 +106,20 @@ export function ConversationList({
                 active && "bg-violet-50/50 hover:bg-violet-50"
               )}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                {/* Avatar de l'autre membre (1-1) ou pictogramme groupe */}
+                {peer ? (
+                  <AvatarImage
+                    avatarId={peer.avatarId}
+                    firstName={peer.firstName ?? peer.name.split(/\s+/).pop() ?? "?"}
+                    color={peer.displayColor}
+                    size={36}
+                  />
+                ) : (
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                    <Users className="h-4 w-4" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     {conv.isGroup && (

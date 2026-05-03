@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import type { AbsenceCode, TaskCode } from "@prisma/client";
 import {
   ABSENCE_LABELS,
@@ -25,9 +26,21 @@ import { TIME_SLOTS } from "@/types";
 import { cn } from "@/lib/utils";
 import { RolesLegend } from "@/components/planning/RolesLegend";
 
-type DaySummary = {
+/** Section d'une journée (matin OU après-midi).
+ *  hours = nombre d'heures TASK travaillées dans la plage
+ *  range = "09:00–13:00" (1re et dernière demi-heure travaillée)
+ *  tasks = postes occupés sur la plage, triés par fréquence
+ */
+type DaySection = {
   hours: number;
+  range: string | null;
   tasks: TaskCode[];
+};
+
+type DaySummary = {
+  am: DaySection;
+  pm: DaySection;
+  hoursTotal: number;
   absences: AbsenceCode[];
 };
 
@@ -59,23 +72,62 @@ export function WeekOverview({
     return employees.map((emp) => {
       const perDay: DaySummary[] = dayDates.map((iso) => {
         const day = index.get(emp.id)?.get(iso);
-        if (!day) return { hours: 0, tasks: [], absences: [] };
+        const empty: DaySection = { hours: 0, range: null, tasks: [] };
+        if (!day) return { am: empty, pm: empty, hoursTotal: 0, absences: [] };
 
-        const taskCounts = new Map<TaskCode, number>();
+        // Compteurs séparés matin (avant 12:00) / après-midi (≥ 12:00)
+        const amTasks = new Map<TaskCode, number>();
+        const pmTasks = new Map<TaskCode, number>();
+        let amHours = 0;
+        let pmHours = 0;
+        const amSlots: string[] = [];
+        const pmSlots: string[] = [];
         const absences = new Set<AbsenceCode>();
-        day.forEach((e) => {
-          if (e.type === "TASK" && e.taskCode) {
-            taskCounts.set(e.taskCode, (taskCounts.get(e.taskCode) ?? 0) + 1);
-          } else if (e.type === "ABSENCE" && e.absenceCode) {
+
+        day.forEach((e, slot) => {
+          if (e.type === "ABSENCE" && e.absenceCode) {
             absences.add(e.absenceCode);
+            return;
+          }
+          if (e.type === "TASK" && e.taskCode) {
+            const isMorning = slot < "12:00";
+            if (isMorning) {
+              amHours += 0.5;
+              amSlots.push(slot);
+              amTasks.set(e.taskCode, (amTasks.get(e.taskCode) ?? 0) + 1);
+            } else {
+              pmHours += 0.5;
+              pmSlots.push(slot);
+              pmTasks.set(e.taskCode, (pmTasks.get(e.taskCode) ?? 0) + 1);
+            }
           }
         });
-        const tasks = Array.from(taskCounts.entries())
-          .sort((a, b) => b[1] - a[1])
-          .map(([t]) => t);
+
+        const sectionFrom = (
+          slots: string[],
+          tasksMap: Map<TaskCode, number>,
+          hours: number
+        ): DaySection => {
+          if (slots.length === 0) return { hours: 0, range: null, tasks: [] };
+          const sorted = [...slots].sort();
+          const start = sorted[0];
+          // Fin = dernière demi-heure travaillée + 30min (ex 13:00 → 13:30)
+          const lastSlot = sorted[sorted.length - 1];
+          const [h, m] = lastSlot.split(":").map(Number);
+          const endMin = h * 60 + m + 30;
+          const endH = String(Math.floor(endMin / 60)).padStart(2, "0");
+          const endM = String(endMin % 60).padStart(2, "0");
+          const end = `${endH}:${endM}`;
+          const tasks = Array.from(tasksMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([t]) => t);
+          return { hours, range: `${start}–${end}`, tasks };
+        };
+
         return {
-          hours: dailyTaskHours(emp.id, iso, index),
-          tasks,
+          am: sectionFrom(amSlots, amTasks, amHours),
+          pm: sectionFrom(pmSlots, pmTasks, pmHours),
+          hoursTotal: dailyTaskHours(emp.id, iso, index),
           absences: Array.from(absences),
         };
       });
@@ -200,9 +252,16 @@ export function WeekOverview({
                   </div>
                 </div>
 
-                {/* 6 cellules jours */}
+                {/* 6 cellules jours — chaque jour est un lien vers la vue
+                    journalière correspondante (?week=...&day=N) */}
                 {perDay.map((d, i) => (
-                  <DayCell key={i} summary={d} isToday={i === todayIdx} />
+                  <DayCell
+                    key={i}
+                    summary={d}
+                    isToday={i === todayIdx}
+                    weekStart={weekStart}
+                    dayIndex={i}
+                  />
                 ))}
 
                 {/* Total semaine */}
@@ -293,23 +352,35 @@ export function WeekOverview({
 
 /* ─── Cellule jour ─────────────────────────────────────────────── */
 
+/**
+ * Cellule d'un jour de la semaine pour un collaborateur.
+ * - Affichage : matin (range + h + postes) puis après-midi (idem).
+ * - Cliquable : navigue vers `/planning?week=YYYY-MM-DD&day=N` (vue jour).
+ */
 function DayCell({
   summary,
   isToday,
+  weekStart,
+  dayIndex,
 }: {
   summary: DaySummary;
   isToday?: boolean;
+  weekStart: string;
+  dayIndex: number;
 }) {
-  const { hours, tasks, absences } = summary;
+  const { am, pm, hoursTotal, absences } = summary;
+  const href = `/planning?week=${weekStart}&day=${dayIndex}`;
 
   const baseClass = cn(
-    "flex h-full min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 transition-colors",
+    "flex h-full min-h-[60px] flex-col gap-1 rounded-xl px-2 py-1.5 transition-colors",
+    "hover:bg-violet-50/40 hover:ring-1 hover:ring-violet-200/60 cursor-pointer",
     isToday && "ring-1 ring-inset ring-violet-200/70"
   );
 
+  // Cas 1 : absence sur la journée → on prime, on affiche le motif
   if (absences.length > 0) {
     return (
-      <div className={cn(baseClass, "bg-zinc-50/40")}>
+      <Link href={href} className={cn(baseClass, "items-center justify-center bg-zinc-50/40")}>
         {absences.map((code) => {
           const s = ABSENCE_STYLES[code];
           return (
@@ -322,44 +393,73 @@ function DayCell({
             </span>
           );
         })}
-        {hours > 0 && (
+        {hoursTotal > 0 && (
           <span className="font-mono text-[10px] tabular-nums text-zinc-400">
-            {hours.toFixed(1)}h
+            {hoursTotal.toFixed(1)}h
           </span>
         )}
-      </div>
+      </Link>
     );
   }
 
-  if (tasks.length === 0 && hours === 0) {
+  // Cas 2 : journée totalement vide
+  if (am.hours === 0 && pm.hours === 0) {
     return (
-      <div className={cn(baseClass, "text-zinc-300")}>
+      <Link
+        href={href}
+        className={cn(baseClass, "items-center justify-center text-zinc-300")}
+      >
         <span className="text-[12px]">—</span>
-      </div>
+      </Link>
     );
   }
 
+  // Cas 3 : journée travaillée — split matin + après-midi
   return (
-    <div className={cn(baseClass, "bg-zinc-50/40 hover:bg-zinc-50/80")}>
-      <span className="font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
-        {hours.toFixed(1)}h
-      </span>
-      <div className="flex flex-wrap items-center justify-center gap-1">
-        {tasks.slice(0, 3).map((code) => {
+    <Link href={href} className={cn(baseClass, "bg-zinc-50/30")}>
+      <Section label="Matin" section={am} />
+      <div className="border-t border-zinc-200/60" aria-hidden />
+      <Section label="A-midi" section={pm} />
+    </Link>
+  );
+}
+
+/** Une moitié de journée (matin OU après-midi) au sein du DayCell. */
+function Section({ label, section }: { label: string; section: DaySection }) {
+  if (section.hours === 0) {
+    return (
+      <div className="flex items-center justify-between gap-2 text-[10px] text-zinc-300">
+        <span className="uppercase tracking-wide">{label}</span>
+        <span>—</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center justify-between gap-1">
+        <span className="font-mono text-[10.5px] tabular-nums text-zinc-500">
+          {section.range}
+        </span>
+        <span className="font-mono text-[11px] font-semibold tabular-nums text-zinc-900">
+          {section.hours.toFixed(1)}h
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        {section.tasks.slice(0, 2).map((code) => {
           const c = TASK_COLORS[code];
           return (
             <span
               key={code}
               title={TASK_LABELS[code]}
-              className="rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset"
+              className="rounded px-1.5 py-0.5 text-[9.5px] font-medium ring-1 ring-inset leading-none"
               style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
             >
               {TASK_LABELS[code]}
             </span>
           );
         })}
-        {tasks.length > 3 && (
-          <span className="text-[10px] text-zinc-400">+{tasks.length - 3}</span>
+        {section.tasks.length > 2 && (
+          <span className="text-[9.5px] text-zinc-400">+{section.tasks.length - 2}</span>
         )}
       </div>
     </div>

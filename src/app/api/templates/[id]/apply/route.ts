@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
 import { applyTemplateInput } from "@/validators/template";
 import { ScheduleType } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
+import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -117,6 +119,8 @@ export async function POST(
       skipDuplicates: !parsed.data.overwrite,
     });
   }
+
+  revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));
 
   return NextResponse.json({
     ok: true,

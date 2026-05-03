@@ -110,28 +110,38 @@ export async function PATCH(
     return NextResponse.json({ status: "REJECTED" });
   }
 
-  // APPROVE → maj du statut + transformation des créneaux planning concernés
+  // APPROVE → maj du statut + transformation des créneaux planning concernés.
+  // Pour chaque cellule TASK convertie en ABSENCE, on sauvegarde son
+  // taskCode d'origine dans `previousTaskCode` → permet de restaurer le
+  // planning si l'admin annule l'absence après coup.
   let convertedCount = 0;
   await prisma.$transaction(async (tx) => {
-    // Tous les créneaux existants de le collaborateur dans la plage [dateStart, dateEnd]
+    // Récupère taskCode + type pour pouvoir mémoriser le previous
     const existing = await tx.scheduleEntry.findMany({
       where: {
         employeeId: request.employeeId,
         date: { gte: request.dateStart, lte: request.dateEnd },
       },
-      select: { id: true },
+      select: { id: true, type: true, taskCode: true },
     });
-    if (existing.length > 0) {
-      const result = await tx.scheduleEntry.updateMany({
-        where: { id: { in: existing.map((e) => e.id) } },
+    // 1 update par entrée — on ne peut pas faire un updateMany ici car
+    // chaque cellule a son propre previousTaskCode. Pour une plage typique
+    // (1 sem × 14 créneaux/jour = 84 cellules max), ça reste raisonnable.
+    for (const e of existing) {
+      await tx.scheduleEntry.update({
+        where: { id: e.id },
         data: {
           type: "ABSENCE",
           taskCode: null,
           absenceCode: request.absenceCode,
+          // Sauvegarde du poste d'origine uniquement s'il y avait un TASK
+          // (pas pour une absence remplacée par une autre absence).
+          previousTaskCode: e.type === "TASK" ? e.taskCode : null,
         },
       });
-      convertedCount = result.count;
     }
+    convertedCount = existing.length;
+
     await tx.absenceRequest.update({
       where: { id: params.id },
       data: {
@@ -162,8 +172,13 @@ export async function PATCH(
 }
 
 /**
- * DELETE /api/absences/[id] — annulation par le demandeur ou un admin,
- * uniquement si la demande est encore PENDING.
+ * DELETE /api/absences/[id] — annulation d'une demande d'absence.
+ *
+ *  - PENDING : annulable par le demandeur OU par un admin → simple delete.
+ *  - APPROVED : annulable UNIQUEMENT par un admin (l'admin reconnaît qu'il
+ *    a validé par erreur). Restaure les créneaux planning qui avaient été
+ *    convertis (utilise `previousTaskCode` mémorisé à l'approbation).
+ *  - REJECTED : non annulable (sans intérêt, c'est juste de l'historique).
  */
 export async function DELETE(
   _req: Request,
@@ -183,18 +198,73 @@ export async function DELETE(
 
   const isAdmin = session.user.role === "ADMIN";
   const isOwner = request.employeeId === session.user.employeeId;
-  if (!isAdmin && !isOwner) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-  if (request.status !== "PENDING") {
-    return NextResponse.json(
-      { error: "Demande déjà traitée — impossible d'annuler" },
-      { status: 409 }
-    );
+
+  if (request.status === "PENDING") {
+    if (!isAdmin && !isOwner) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    await prisma.absenceRequest.delete({ where: { id: params.id } });
+    revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
+    return NextResponse.json({ ok: true, restored: 0 });
   }
 
-  await prisma.absenceRequest.delete({ where: { id: params.id } });
-  revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
+  if (request.status === "APPROVED") {
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Seul un admin peut annuler une absence approuvée." },
+        { status: 403 }
+      );
+    }
+    // Restaure les créneaux planning + supprime la demande, dans une transaction.
+    let restoredCount = 0;
+    let clearedCount = 0;
+    await prisma.$transaction(async (tx) => {
+      // Cible : entrées ABSENCE de ce collaborateur dans la plage, dont
+      // l'absenceCode correspond toujours à celui de la demande (= pas
+      // modifiées depuis par une autre absence).
+      const candidates = await tx.scheduleEntry.findMany({
+        where: {
+          employeeId: request.employeeId,
+          date: { gte: request.dateStart, lte: request.dateEnd },
+          type: "ABSENCE",
+          absenceCode: request.absenceCode,
+        },
+        select: { id: true, previousTaskCode: true },
+      });
+      for (const e of candidates) {
+        if (e.previousTaskCode) {
+          // Cellule qui était une TASK avant l'approbation → restauration
+          await tx.scheduleEntry.update({
+            where: { id: e.id },
+            data: {
+              type: "TASK",
+              taskCode: e.previousTaskCode,
+              absenceCode: null,
+              previousTaskCode: null,
+            },
+          });
+          restoredCount++;
+        } else {
+          // Cellule qui était vide ou autre absence avant → supprime l'entrée
+          // (sinon on aurait une cellule "ABSENCE orpheline" sans demande)
+          await tx.scheduleEntry.delete({ where: { id: e.id } });
+          clearedCount++;
+        }
+      }
+      await tx.absenceRequest.delete({ where: { id: params.id } });
+    });
+    revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      restored: restoredCount,
+      cleared: clearedCount,
+    });
+  }
+
+  // REJECTED ou autre — pas annulable
+  return NextResponse.json(
+    { error: "Demande déjà refusée — impossible d'annuler" },
+    { status: 409 }
+  );
 }

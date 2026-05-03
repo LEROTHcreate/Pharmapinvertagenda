@@ -1,13 +1,45 @@
 import { NextResponse } from "next/server";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { upsertTemplateInput } from "@/validators/template";
+import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 
 export const runtime = "nodejs";
 // Sur Vercel free le défaut est 10 s, ce qui peut être tendu si la BDD a
 // un cold-start. On autorise jusqu'à 60 s (Pro tier sur Netlify/Vercel).
 export const maxDuration = 60;
+
+/** Lecture cached des gabarits d'une pharmacie. Invalidée sur POST/DELETE. */
+const getCachedTemplates = (pharmacyId: string) =>
+  unstable_cache(
+    async () =>
+      prisma.weekTemplate.findMany({
+        where: { pharmacyId },
+        orderBy: { weekType: "asc" },
+        include: {
+          entries: {
+            select: {
+              id: true,
+              employeeId: true,
+              dayOfWeek: true,
+              timeSlot: true,
+              type: true,
+              taskCode: true,
+              absenceCode: true,
+            },
+          },
+        },
+      }),
+    ["templates-list", pharmacyId],
+    {
+      tags: [DASHBOARD_CACHE_TAGS.templatesList(pharmacyId)],
+      // Les gabarits changent rarement (1× / quelques jours).
+      // 5 min entre revalidations + invalidation explicite sur mutation.
+      revalidate: 300,
+    }
+  )();
 
 /** GET /api/templates — liste des gabarits (admin) */
 export async function GET() {
@@ -17,24 +49,7 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const templates = await prisma.weekTemplate.findMany({
-    where: { pharmacyId: session.user.pharmacyId },
-    orderBy: { weekType: "asc" },
-    include: {
-      entries: {
-        select: {
-          id: true,
-          employeeId: true,
-          dayOfWeek: true,
-          timeSlot: true,
-          type: true,
-          taskCode: true,
-          absenceCode: true,
-        },
-      },
-    },
-  });
-
+  const templates = await getCachedTemplates(session.user.pharmacyId);
   return NextResponse.json({ templates });
 }
 
@@ -144,6 +159,10 @@ export async function POST(req: Request) {
       skipDuplicates: false,
     });
   }
+
+  // Invalide le cache de la liste des gabarits → les prochains GET
+  // /api/templates verront le gabarit à jour sans attendre 5 min.
+  revalidateTag(DASHBOARD_CACHE_TAGS.templatesList(session.user.pharmacyId));
 
   return NextResponse.json({
     ok: true,

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
 import { applyBatchInput } from "@/validators/template";
 import { ScheduleType, type WeekTemplate, type WeekTemplateEntry } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
+import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 
 export const runtime = "nodejs";
 // Sur Netlify Pro / Vercel, autorise jusqu'à 60s d'exécution (par défaut 10s
@@ -326,6 +328,10 @@ export async function POST(req: Request) {
     })
   );
   void empById;
+
+  // Invalide le cache de toutes les semaines de la pharmacie — apply-batch
+  // touche typiquement 4-26 semaines, on prend le tag global pour simplifier.
+  revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));
 
   return NextResponse.json({
     ok: true,

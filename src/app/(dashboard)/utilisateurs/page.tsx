@@ -29,11 +29,18 @@ export default async function UtilisateursPage() {
         role: true,
         status: true,
         isActive: true,
+        avatarId: true,
         createdAt: true,
         reviewedAt: true,
         rejectionNote: true,
         employee: {
-          select: { id: true, firstName: true, lastName: true, status: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            displayColor: true,
+          },
         },
       },
     }),
@@ -57,6 +64,7 @@ export default async function UtilisateursPage() {
     role: u.role,
     status: u.status,
     isActive: u.isActive,
+    avatarId: u.avatarId,
     createdAt: u.createdAt.toISOString(),
     reviewedAt: u.reviewedAt ? u.reviewedAt.toISOString() : null,
     rejectionNote: u.rejectionNote,
@@ -67,6 +75,7 @@ export default async function UtilisateursPage() {
           firstName: u.employee.firstName,
           lastName: u.employee.lastName,
           status: u.employee.status,
+          displayColor: u.employee.displayColor,
         }
       : null,
   }));

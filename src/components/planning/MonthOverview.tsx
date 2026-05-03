@@ -232,6 +232,7 @@ export function MonthOverview({
                       weekday={days[colIdx].weekday}
                       iso={days[colIdx].iso}
                       empName={`${emp.firstName}${emp.lastName !== "—" ? " " + emp.lastName : ""}`}
+                      empColor={emp.displayColor}
                       isHoverCross={hover?.col === colIdx || hover?.row === rowIdx}
                       isHoverExact={hover?.col === colIdx && hover?.row === rowIdx}
                       isToday={days[colIdx].iso === today}
@@ -316,11 +317,29 @@ export function MonthOverview({
 
 /* ─── Cellule heatmap ─────────────────────────────────────────────── */
 
+/**
+ * Convertit "#rrggbb" en "rgba(r, g, b, alpha)".
+ * Sert à appliquer la couleur du rôle du collaborateur sur les cellules
+ * "travaillé" tout en modulant l'opacité selon le nombre d'heures faites.
+ */
+function hexToRgba(hex: string, alpha: number): string {
+  const cleaned = hex.replace(/^#/, "");
+  if (cleaned.length !== 6) {
+    // Fallback violet (couleur historique avant le passage au color-by-role)
+    return `rgba(124, 58, 237, ${alpha})`;
+  }
+  const r = parseInt(cleaned.slice(0, 2), 16);
+  const g = parseInt(cleaned.slice(2, 4), 16);
+  const b = parseInt(cleaned.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function DayHeatCell({
   state,
   weekday,
   iso,
   empName,
+  empColor,
   isHoverCross,
   isHoverExact,
   isToday,
@@ -330,6 +349,8 @@ function DayHeatCell({
   weekday: number;
   iso: string;
   empName: string;
+  /** Couleur (hex #rrggbb) liée au rôle du collaborateur */
+  empColor: string;
   isHoverCross: boolean;
   isHoverExact: boolean;
   isToday: boolean;
@@ -347,16 +368,27 @@ function DayHeatCell({
   } else if (state.kind === "absence") {
     const s = ABSENCE_STYLES[state.code];
     bg = s.bg;
+    // Hachures diagonales identiques à la vue journalière (PlanningGrid) →
+    // signal visuel constant "absence" peu importe la vue. Mêmes paramètres
+    // de pattern (45°, 1.5px de hachure tous les 6px) pour cohérence.
     inner = (
       <div
         className="h-full w-full rounded-md ring-1 ring-inset"
-        style={{ borderColor: s.border, backgroundColor: s.bg }}
+        style={{
+          borderColor: s.border,
+          backgroundColor: s.bg,
+          backgroundImage:
+            "repeating-linear-gradient(45deg, rgba(0,0,0,0.18) 0 1.5px, transparent 1.5px 6px)",
+        }}
       />
     );
     title = `${empName} — ${formatHumanDate(iso)} : ${ABSENCE_LABELS[state.code]}`;
   } else {
+    // Couleur de la case = couleur du rôle du collaborateur, opacité modulée
+    // par l'intensité (heures faites). Plus le collab a de TASK ce jour-là,
+    // plus la case est saturée.
     const intensity = clamp(state.hours / 7.5, 0.3, 1);
-    bg = `rgba(124, 58, 237, ${intensity * 0.6})`;
+    bg = hexToRgba(empColor, intensity * 0.7);
     inner = (
       <div
         className="h-full w-full rounded-md"
@@ -408,11 +440,14 @@ function Legend() {
             <span
               key={a}
               className="h-3 w-3.5"
-              style={{ backgroundColor: `rgba(124, 58, 237, ${a * 0.6})` }}
+              // Gradient gris neutre — la VRAIE couleur est celle du rôle
+              // (cf. RolesLegend juste au-dessus). Ici on montre uniquement
+              // que l'intensité reflète le nombre d'heures travaillées.
+              style={{ backgroundColor: `rgba(82, 82, 91, ${a * 0.7})` }}
             />
           ))}
         </span>
-        Heures travaillées
+        Couleur = rôle · intensité = heures
       </span>
 
       {(["CONGE", "MALADIE", "FORMATION_ABS", "ABSENT"] as AbsenceCode[]).map(
@@ -422,7 +457,12 @@ function Legend() {
             <span key={code} className="inline-flex items-center gap-1.5">
               <span
                 className="h-3 w-3.5 rounded-md ring-1 ring-inset"
-                style={{ backgroundColor: s.bg, borderColor: s.border }}
+                style={{
+                  backgroundColor: s.bg,
+                  borderColor: s.border,
+                  backgroundImage:
+                    "repeating-linear-gradient(45deg, rgba(0,0,0,0.18) 0 1.5px, transparent 1.5px 6px)",
+                }}
               />
               {ABSENCE_LABELS[code]}
             </span>

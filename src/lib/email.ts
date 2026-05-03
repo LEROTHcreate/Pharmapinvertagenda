@@ -185,6 +185,40 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Extrait le prénom d'un nom complet, en gérant les conventions FR :
+ *  - "Pierre Dupont"           → "Pierre"            (cas simple)
+ *  - "DUPONT Pierre"           → "Pierre"            (NOM en MAJ d'abord)
+ *  - "Pierre DUPONT"           → "Pierre"            (NOM en MAJ ensuite)
+ *  - "Marie-Claire DUBOIS"     → "Marie-Claire"      (prénom composé)
+ *  - "Lionel"                  → "Lionel"            (un seul mot)
+ *  - "Lionel (Titulaire)"      → "Lionel"            (annotation entre parenthèses)
+ *
+ * Heuristique : on retire les annotations entre parenthèses, puis si un mot
+ * est ENTIÈREMENT en majuscules (≥ 2 chars), c'est probablement le nom de
+ * famille → on prend l'autre. Sinon on prend le premier mot.
+ */
+function firstNameOf(fullName: string): string {
+  // Retire les annotations entre parenthèses : "Lionel (Titulaire)" → "Lionel"
+  const cleaned = fullName.replace(/\([^)]*\)/g, "").trim();
+  if (!cleaned) return fullName;
+
+  const words = cleaned.split(/\s+/);
+  if (words.length === 1) return words[0];
+
+  // Un mot est "en majuscules" s'il a ≥ 2 lettres et que toutes ses lettres
+  // sont en maj. Les caractères non-lettres (tirets, apostrophes) sont ignorés.
+  const isAllCaps = (w: string) => {
+    const letters = w.replace(/[^A-Za-zÀ-ÿ]/g, "");
+    return letters.length >= 2 && letters === letters.toUpperCase();
+  };
+
+  // Le prénom = premier mot qui n'est PAS en majuscules.
+  // Si tous le sont (cas tordu "DUPONT MARTIN"), on garde le 1er par défaut.
+  const prenom = words.find((w) => !isAllCaps(w));
+  return prenom ?? words[0];
+}
+
 /* ─── Emails publics ─────────────────────────────────────────────── */
 
 /** ✉️ 1. Confirmation après signup — l'utilisateur sait que sa demande est arrivée */
@@ -196,7 +230,7 @@ export async function sendSignupConfirmation(params: {
   const html = layout({
     title: "Demande d'accès reçue",
     bodyHtml: [
-      h1("Bonjour " + params.name.split(" ")[0] + " 👋"),
+      h1("Bonjour " + firstNameOf(params.name) + " 👋"),
       p(
         `Ta demande d'accès à PharmaPlanning pour la ${params.pharmacyName} a bien été reçue.`
       ),
@@ -227,7 +261,7 @@ export async function sendApprovalEmail(params: {
   const html = layout({
     title: "Ton compte est activé",
     bodyHtml: [
-      h1("Bienvenue " + params.name.split(" ")[0] + " 🎉"),
+      h1("Bienvenue " + firstNameOf(params.name) + " 🎉"),
       p(
         `Ton compte ${roleLabel} pour la ${params.pharmacyName} vient d'être validé. Tu peux maintenant te connecter.`
       ),
@@ -413,7 +447,7 @@ export async function sendRejectionEmail(params: {
   const html = layout({
     title: "Ta demande d'accès n'a pas été validée",
     bodyHtml: [
-      h1("Bonjour " + params.name.split(" ")[0]),
+      h1("Bonjour " + firstNameOf(params.name)),
       p(
         `Ta demande d'accès à PharmaPlanning pour la ${params.pharmacyName} n'a pas été validée.`
       ),
@@ -487,7 +521,7 @@ export async function sendPasswordResetEmail(params: {
   const html = layout({
     title: "Réinitialisation de ton mot de passe",
     bodyHtml: [
-      h1("Bonjour " + params.name.split(" ")[0]),
+      h1("Bonjour " + firstNameOf(params.name)),
       p(
         "Tu as demandé à réinitialiser ton mot de passe PharmaPlanning. Clique sur le bouton ci-dessous — le lien est valable " +
           params.expiresInMinutes +

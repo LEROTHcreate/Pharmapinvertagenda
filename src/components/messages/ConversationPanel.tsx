@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import type { ConversationDTO, MessageDTO } from "@/types/messaging";
 import { SwapCard } from "@/components/messages/SwapCard";
 import { SwapProposalDialog } from "@/components/messages/SwapProposalDialog";
+import { AvatarImage } from "@/components/layout/AvatarImage";
 
 type Props = {
   conversation: ConversationDTO;
@@ -201,8 +202,23 @@ export function ConversationPanel({
                   return (
                     <div
                       key={m.id}
-                      className={cn("flex gap-2", isMe && "justify-end")}
+                      className={cn("flex gap-2 items-end", isMe && "justify-end")}
                     >
+                      {/* Avatar de l'auteur — uniquement à gauche pour les
+                          messages reçus, façon iMessage / WhatsApp */}
+                      {!isMe && (
+                        <AvatarImage
+                          avatarId={m.author.avatarId}
+                          firstName={
+                            m.author.firstName ??
+                            m.author.name.split(/\s+/).pop() ??
+                            "?"
+                          }
+                          color={m.author.displayColor}
+                          size={28}
+                          className="mb-0.5"
+                        />
+                      )}
                       <div
                         className={cn(
                           "max-w-[80%] rounded-2xl px-3 py-2 text-[14px]",

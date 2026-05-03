@@ -137,6 +137,12 @@ model User {
   reviewedById   String?                         // Admin ayant validé (référence libre)
   lastLoginAt    DateTime?                       // Mis à jour à chaque connexion réussie (audit)
 
+  // Avatar fun : ID stable pointant vers /public/avatars/<id>.png
+  // (paracetamol, ibuprofen, probiotic…). Null = fallback sur la pastille
+  // colorée avec la 1re lettre du prénom. Voir src/lib/avatars.ts pour le
+  // catalogue.
+  avatarId       String?
+
   // Reset password : on stocke le HASH SHA-256 du token (jamais le token brut).
   // Si la BDD fuite, les liens déjà émis ne sont pas exploitables.
   passwordResetTokenHash String?
@@ -200,6 +206,12 @@ model ScheduleEntry {
   taskCode    TaskCode?                        // Rempli si type = TASK
   absenceCode AbsenceCode?                     // Rempli si type = ABSENCE
   notes    String?                             // Note optionnelle sur le créneau
+
+  // Sauvegarde du poste d'origine quand cette cellule a été convertie de
+  // TASK → ABSENCE par l'approbation d'une demande d'absence. Permet de
+  // restaurer le planning si l'admin annule l'absence après coup.
+  // Null = la cellule n'a jamais été convertie (ou a été modifiée depuis).
+  previousTaskCode TaskCode?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

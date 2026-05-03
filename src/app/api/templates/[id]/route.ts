@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 
 export const runtime = "nodejs";
 
@@ -24,5 +26,6 @@ export async function DELETE(
   }
 
   await prisma.weekTemplate.delete({ where: { id: target.id } });
+  revalidateTag(DASHBOARD_CACHE_TAGS.templatesList(session.user.pharmacyId));
   return NextResponse.json({ ok: true });
 }

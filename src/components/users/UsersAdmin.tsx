@@ -17,6 +17,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { EmployeeStatus } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/types";
+import { AvatarImage } from "@/components/layout/AvatarImage";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,8 @@ export type EmployeeRef = {
   firstName: string;
   lastName: string;
   status: EmployeeStatus;
+  /** Couleur planning du collaborateur (présente sur les fiches utilisées dans la liste). */
+  displayColor?: string | null;
 };
 
 export type UserRow = {
@@ -40,6 +43,8 @@ export type UserRow = {
   role: "ADMIN" | "EMPLOYEE";
   status: "PENDING" | "APPROVED" | "REJECTED";
   isActive: boolean;
+  /** Avatar choisi par l'utilisateur (cf. src/lib/avatars.ts). */
+  avatarId: string | null;
   createdAt: string;
   reviewedAt: string | null;
   rejectionNote: string | null;
@@ -370,7 +375,7 @@ function PendingCard({
       <div className="flex flex-col gap-5">
         {/* Identité du demandeur */}
         <div className="flex items-start gap-3">
-          <Avatar name={user.name} />
+          <Avatar user={user} />
           <div className="min-w-0 flex-1">
             <p className="font-medium tracking-tight text-zinc-900">
               {user.name}
@@ -535,7 +540,7 @@ function MemberCard({
     <li className="flex flex-col gap-3 rounded-xl border border-zinc-200/80 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar name={user.name} />
+          <Avatar user={user} />
           <div className="min-w-0">
             <p className="truncate font-medium text-zinc-900">
               {user.name}
@@ -656,18 +661,21 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-function Avatar({ name }: { name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+function Avatar({ user }: { user: UserRow }) {
+  // Prénom : on privilégie la fiche Employee si liée (déjà séparé), sinon
+  // dernier mot du `name` (convention "Nom Prénom" du seed admin).
+  const fallbackName = user.name.trim();
+  const fallbackParts = fallbackName.split(/\s+/);
+  const fallbackFirstName = fallbackParts[fallbackParts.length - 1] ?? fallbackName;
+  const firstName = user.employee?.firstName ?? fallbackFirstName;
+  const color = user.employee?.displayColor ?? null;
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-[13px] font-semibold text-white">
-      {initials || "?"}
-    </div>
+    <AvatarImage
+      avatarId={user.avatarId}
+      firstName={firstName}
+      color={color}
+      size={40}
+    />
   );
 }
 

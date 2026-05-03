@@ -37,7 +37,16 @@ export async function GET(req: Request) {
     include: {
       members: {
         include: {
-          user: { select: { id: true, name: true, email: true, role: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              avatarId: true,
+              employee: { select: { firstName: true, displayColor: true } },
+            },
+          },
         },
       },
       messages: {
@@ -72,6 +81,9 @@ export async function GET(req: Request) {
         name: m.user.name,
         email: m.user.email,
         role: m.user.role,
+        avatarId: m.user.avatarId,
+        firstName: m.user.employee?.firstName ?? null,
+        displayColor: m.user.employee?.displayColor ?? null,
       })),
       lastMessage: last
         ? {

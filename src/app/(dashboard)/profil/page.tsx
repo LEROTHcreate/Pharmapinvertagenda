@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ChangePasswordForm } from "@/components/profil/ChangePasswordForm";
+import { AvatarPicker } from "@/components/profil/AvatarPicker";
 import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
 import { computeStats } from "@/lib/stats";
 import { ABSENCE_LABELS, STATUS_LABELS } from "@/types";
@@ -15,6 +16,12 @@ export const metadata = { title: "Mon profil · PharmaPlanning" };
 export default async function ProfilPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  // ─── Avatar choisi par l'utilisateur (User.avatarId) ────────────
+  const sessionUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { avatarId: true },
+  });
 
   // ─── Profil métier (si lié à une fiche planning) ────────────────
   const employee = session.user.employeeId
@@ -321,6 +328,30 @@ export default async function ProfilPage() {
           )}
         </section>
       )}
+
+      {/* ─── Avatar (perso médicament façon mascotte) ───────────────── */}
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <p className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70 mb-1">
+          Avatar
+        </p>
+        <h2 className="text-base font-semibold tracking-tight text-foreground mb-1">
+          Mon personnage
+        </h2>
+        <p className="text-[13px] text-muted-foreground mb-4">
+          Choisis ton perso — il apparaîtra dans le bandeau de bienvenue, dans
+          la liste des utilisateurs et dans les conversations. Tu peux changer
+          quand tu veux.
+        </p>
+        <AvatarPicker
+          currentAvatarId={sessionUser?.avatarId ?? null}
+          firstName={
+            employee?.firstName ??
+            (session.user.name ?? "").trim().split(/\s+/).pop() ??
+            ""
+          }
+          color={employee?.displayColor}
+        />
+      </section>
 
       {/* ─── Sécurité — changement de mot de passe ─────────────────── */}
       <section className="rounded-2xl border border-border bg-card p-5">

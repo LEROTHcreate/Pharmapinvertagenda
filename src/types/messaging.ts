@@ -5,6 +5,12 @@ export type ConversationMemberDTO = {
   name: string;
   email: string;
   role: "ADMIN" | "EMPLOYEE";
+  /** Avatar choisi (cf. src/lib/avatars.ts) — null = fallback initiale. */
+  avatarId: string | null;
+  /** Prénom isolé (depuis Employee.firstName) si lié, sinon null. */
+  firstName: string | null;
+  /** Couleur planning du collaborateur lié, pour le fallback. */
+  displayColor: string | null;
 };
 
 export type LastMessageDTO = {
@@ -52,7 +58,15 @@ export type MessageDTO = {
   body: string;
   type: "TEXT" | "SWAP_REQUEST" | "SYSTEM";
   createdAt: string;
-  author: { id: string; name: string };
+  author: {
+    id: string;
+    name: string;
+    /** Avatar choisi par l'auteur du message (peut être null). */
+    avatarId: string | null;
+    /** Prénom isolé pour le fallback initiale + bandeau "ma propre couleur". */
+    firstName: string | null;
+    displayColor: string | null;
+  };
   swapRequest: SwapRequestDTO | null;
 };
 

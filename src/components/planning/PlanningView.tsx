@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, X, Layers, Eye, Maximize2, Minimize2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2 } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { ABSENCE_LABELS, WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
@@ -112,6 +112,7 @@ function applyEntriesDelete(
 
 export function PlanningView({
   initialWeekStart,
+  initialDayIndex,
   employees,
   initialEntries,
   role,
@@ -119,6 +120,8 @@ export function PlanningView({
   currentEmployeeId,
 }: {
   initialWeekStart: string;
+  /** Jour pré-sélectionné (0 = lundi … 5 = samedi). Si null, "aujourd'hui". */
+  initialDayIndex?: number | null;
   employees: EmployeeDTO[];
   initialEntries: ScheduleEntryDTO[];
   role: UserRole;
@@ -131,6 +134,14 @@ export function PlanningView({
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [entries, setEntries] = useState<ScheduleEntryDTO[]>(initialEntries);
   const [dayIndex, setDayIndex] = useState(() => {
+    // Priorité au paramètre d'URL `?day=N` si fourni (depuis la vue semaine)
+    if (
+      typeof initialDayIndex === "number" &&
+      initialDayIndex >= 0 &&
+      initialDayIndex <= 5
+    ) {
+      return initialDayIndex;
+    }
     const today = new Date();
     const weekday = (today.getDay() + 6) % 7;
     return Math.min(5, Math.max(0, weekday));
@@ -222,6 +233,19 @@ export function PlanningView({
   useEffect(() => {
     setWeekStart(initialWeekStart);
   }, [initialWeekStart]);
+
+  // Si l'URL change avec un `?day=N` (ex. clic depuis la vue semaine),
+  // synchronise le jour affiché. On ignore la valeur null/undefined pour
+  // que le user qui navigue manuellement entre jours ne soit pas reset.
+  useEffect(() => {
+    if (
+      typeof initialDayIndex === "number" &&
+      initialDayIndex >= 0 &&
+      initialDayIndex <= 5
+    ) {
+      setDayIndex(initialDayIndex);
+    }
+  }, [initialDayIndex]);
 
   // Esc → vide la sélection multiple
   useEffect(() => {
@@ -325,6 +349,26 @@ export function PlanningView({
     setMultiSelection(new Set());
     router.replace(`?week=${today}`, { scroll: false });
   }, [router]);
+
+  // Naviguer vers une date précise (depuis le date picker de la toolbar).
+  // Calcule le lundi de la semaine ciblée + le jour (Lun=0..Sam=5, dim→sam).
+  const goToDate = useCallback(
+    (iso: string) => {
+      const target = new Date(`${iso}T00:00:00`);
+      if (Number.isNaN(target.getTime())) return;
+      // Décalage jusqu'au lundi
+      const dow = target.getDay(); // 0 = dimanche
+      const diffToMonday = dow === 0 ? -6 : 1 - dow;
+      const monday = new Date(target);
+      monday.setDate(target.getDate() + diffToMonday);
+      const mondayIso = toIsoDate(monday);
+      const dayInWeek = Math.min(5, Math.max(0, (dow + 6) % 7));
+      setDayIndex(dayInWeek);
+      setMultiSelection(new Set());
+      router.replace(`?week=${mondayIso}&day=${dayInWeek}`, { scroll: false });
+    },
+    [router]
+  );
 
   // Quand on change de jour, on vide la sélection (cellules d'un autre jour ne sont plus visibles)
   useEffect(() => {
@@ -648,6 +692,168 @@ export function PlanningView({
     [entries, employees, dayDates, toast]
   );
 
+  /**
+   * Déplace un bloc de plusieurs cellules TASK contigües (matin/aprem/journée)
+   * du long-press tactile sur la grille planning.
+   *
+   * Calcule l'offset entre la source long-pressée et la cible drop, applique
+   * cet offset à toutes les cellules du bloc, puis exécute :
+   *   - DELETE de toutes les cellules d'origine (parallèle)
+   *   - POST des nouvelles cellules en bulk (1 round-trip)
+   * Mise à jour optimiste + rollback en cas d'échec.
+   */
+  const handleMoveBlock = useCallback(
+    async (
+      block: DnDParsedCell[],
+      source: DnDParsedCell,
+      target: DnDParsedCell
+    ) => {
+      // Récupère le taskCode du bloc (toutes ses cellules ont le même)
+      const sourceEntry = entries.find(
+        (e) =>
+          e.employeeId === source.employeeId &&
+          e.date === source.date &&
+          e.timeSlot === source.timeSlot
+      );
+      if (!sourceEntry || sourceEntry.type !== "TASK" || !sourceEntry.taskCode) {
+        return;
+      }
+
+      // Validation rôle/poste sur la nouvelle colonne
+      const targetEmp = employees.find((e) => e.id === target.employeeId);
+      if (!targetEmp) return;
+      if (!isTaskAllowed(targetEmp.status, sourceEntry.taskCode)) {
+        toast({
+          tone: "error",
+          title: "Déplacement refusé",
+          description: `Le poste ${TASK_LABELS[sourceEntry.taskCode]} n'est pas autorisé pour un ${STATUS_LABELS[targetEmp.status]}.`,
+        });
+        return;
+      }
+
+      // Offsets : delta de slot + employé cible
+      const sourceSlotIdx = TIME_SLOTS.indexOf(source.timeSlot);
+      const targetSlotIdx = TIME_SLOTS.indexOf(target.timeSlot);
+      const slotDelta = targetSlotIdx - sourceSlotIdx;
+
+      // Calcule les nouvelles positions de chaque cellule du bloc
+      type Move = {
+        from: { employeeId: string; date: string; timeSlot: string };
+        to: { employeeId: string; date: string; timeSlot: string };
+      };
+      const moves: Move[] = [];
+      for (const cell of block) {
+        const oldIdx = TIME_SLOTS.indexOf(cell.timeSlot);
+        const newIdx = oldIdx + slotDelta;
+        if (newIdx < 0 || newIdx >= TIME_SLOTS.length) {
+          toast({
+            tone: "error",
+            title: "Déplacement refusé",
+            description: "Le bloc dépasserait les horaires d'ouverture.",
+          });
+          return;
+        }
+        moves.push({
+          from: cell,
+          to: {
+            employeeId: target.employeeId,
+            date: cell.date,
+            timeSlot: TIME_SLOTS[newIdx],
+          },
+        });
+      }
+
+      // Refus si une cible est une absence APPROUVÉE
+      const blockedByAbsence = moves.find((m) => {
+        const t = entries.find(
+          (e) =>
+            e.employeeId === m.to.employeeId &&
+            e.date === m.to.date &&
+            e.timeSlot === m.to.timeSlot
+        );
+        return t?.type === "ABSENCE";
+      });
+      if (blockedByAbsence) {
+        toast({
+          tone: "error",
+          title: "Déplacement refusé",
+          description: "Une cellule cible contient une absence validée.",
+        });
+        return;
+      }
+
+      // Optimistic : delete sources + add targets en local
+      const previousEntries = entries;
+      const visibleDates = new Set(dayDates);
+      const newEntriesPayload = moves.map((m) => ({
+        employeeId: m.to.employeeId,
+        date: m.to.date,
+        timeSlot: m.to.timeSlot,
+        type: "TASK" as const,
+        taskCode: sourceEntry.taskCode,
+        absenceCode: null,
+      }));
+
+      setEntries((prev) => {
+        const afterDelete = applyEntriesDelete(
+          prev,
+          moves.map((m) => m.from),
+          visibleDates
+        );
+        return applyEntriesUpdate(afterDelete, newEntriesPayload, visibleDates);
+      });
+      flashCells(moves.map((m) => entryKey(m.to)));
+
+      // Backend : DELETE en parallèle pour toutes les sources + 1 POST bulk
+      // pour les nouvelles cellules. Pour 10 cellules : ~5 RT en parallèle
+      // + 1 POST = ~150ms total via prismaDirect.
+      const deletePromises = moves.map((m) => {
+        const params = new URLSearchParams({
+          employeeId: m.from.employeeId,
+          date: m.from.date,
+          timeSlot: m.from.timeSlot,
+        });
+        return fetch(`/api/planning?${params.toString()}`, { method: "DELETE" });
+      });
+      const [postRes, ...delResults] = await Promise.all([
+        postPlanningEntries(newEntriesPayload),
+        ...deletePromises,
+      ]);
+
+      if (!postRes.ok) {
+        setEntries(previousEntries);
+        toast({
+          tone: "error",
+          title: "Déplacement bloc annulé",
+          description:
+            "error" in postRes
+              ? postRes.error
+              : "Erreur lors de l'écriture des nouvelles cellules.",
+        });
+        return;
+      }
+      const failedDelete = delResults.find((r) => !r.ok);
+      if (failedDelete) {
+        setEntries(previousEntries);
+        toast({
+          tone: "error",
+          title: "Déplacement bloc annulé",
+          description: "Une cellule d'origine n'a pas pu être supprimée.",
+        });
+        return;
+      }
+
+      toast({
+        tone: "success",
+        title: "Bloc déplacé",
+        description: `${moves.length} créneau${moves.length > 1 ? "x" : ""} déplacé${moves.length > 1 ? "s" : ""}.`,
+        duration: 2500,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, employees, dayDates, toast]
+  );
+
   /* ---------- Bulk multi-cell apply / clear ---------- */
 
   async function handleBulkApply(payload: {
@@ -778,6 +984,40 @@ export function PlanningView({
 
   const isAdmin = role === "ADMIN";
 
+  // Mode "lecture" admin : protège des modifs accidentelles sur tactile.
+  // L'admin a le droit d'éditer (canEdit conceptuellement vrai) MAIS s'il
+  // active le verrou, on le traite comme un user lecture seule pour ce
+  // session UI. Persisté dans localStorage pour qu'il retrouve son mode
+  // au prochain login.
+  const [adminLocked, setAdminLocked] = useState(false);
+  useEffect(() => {
+    if (!isAdmin) return;
+    try {
+      const stored = window.localStorage.getItem("ph_admin_locked");
+      if (stored === "1") setAdminLocked(true);
+    } catch {
+      /* localStorage indispo (mode privé Safari) — on ignore silencieusement */
+    }
+  }, [isAdmin]);
+  const toggleAdminLock = useCallback(() => {
+    setAdminLocked((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem("ph_admin_locked", next ? "1" : "0");
+      } catch {
+        /* idem */
+      }
+      // Vide la sélection en cours pour éviter qu'un état d'édition reste
+      // suspendu après le lock.
+      setSelection(null);
+      setMultiSelection(new Set());
+      return next;
+    });
+  }, []);
+
+  // canEdit effectif : admin uniquement, ET pas en mode verrouillé.
+  const effectiveCanEdit = isAdmin && !adminLocked;
+
   return (
     <div className="p-4 md:p-6 space-y-4 relative">
       {/* En-tête : titre + navigation, design Apple épuré */}
@@ -803,6 +1043,15 @@ export function PlanningView({
               >
                 <Eye className="h-3 w-3" />
                 Lecture
+              </span>
+            )}
+            {isAdmin && adminLocked && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-medium text-amber-800"
+                title="Édition verrouillée — déverrouille avec le bouton 🔒 dans la barre"
+              >
+                <Lock className="h-3 w-3" />
+                Verrouillé
               </span>
             )}
           </div>
@@ -838,6 +1087,36 @@ export function PlanningView({
               <Maximize2 className="h-4 w-4" />
             )}
           </button>
+          {/* Verrou admin — bascule lecture seule pour éviter les modifs
+              accidentelles sur tactile. Préférence persistée en localStorage. */}
+          {isAdmin && (
+            <button
+              onClick={toggleAdminLock}
+              className={cn(
+                "inline-flex items-center justify-center h-8 w-8 rounded-md border transition-colors",
+                adminLocked
+                  ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  : "border-border bg-card text-foreground/70 hover:bg-accent/50"
+              )}
+              title={
+                adminLocked
+                  ? "Mode lecture seule — clique pour réactiver l'édition"
+                  : "Verrouiller en lecture seule (anti-modifs accidentelles)"
+              }
+              aria-label="Verrouiller la lecture seule"
+              aria-pressed={adminLocked}
+            >
+              {adminLocked ? (
+                <Lock className="h-4 w-4" />
+              ) : (
+                <Unlock className="h-4 w-4" />
+              )}
+            </button>
+          )}
+          {/* Date picker — clique sur l'icône calendrier pour choisir
+              n'importe quelle date. Le natif `<input type="date">` ouvre
+              le calendrier OS (Mac, iOS, Android, Windows) au clic. */}
+          <DatePickerButton selectedDate={selectedDay} onPick={goToDate} />
           <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5 ml-1">
             <button
               onClick={() => navigateWeek(-1)}
@@ -972,7 +1251,7 @@ export function PlanningView({
         date={selectedDay}
         weekDates={dayDates}
         index={index}
-        canEdit={isAdmin}
+        canEdit={effectiveCanEdit}
         minStaff={minStaff}
         selection={multiSelection}
         onSelectionChange={setMultiSelection}
@@ -980,7 +1259,8 @@ export function PlanningView({
         overtimeCells={overtimeCells}
         recentlySaved={recentlySaved}
         currentEmployeeId={currentEmployeeId ?? null}
-        onMoveTask={isAdmin ? handleMoveTask : undefined}
+        onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
+        onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
       />
 
       {/* Modal d'édition unitaire */}
@@ -1020,7 +1300,7 @@ export function PlanningView({
       />
 
       {/* Barre d'action flottante (sélection multi) — glass Apple-style */}
-      {isAdmin && multiSelection.size > 0 && (
+      {effectiveCanEdit && multiSelection.size > 0 && (
         <div className="no-print safe-bottom fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/85 backdrop-blur-xl shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
           <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
           <span className="text-[12.5px] tracking-tight">
@@ -1057,4 +1337,71 @@ function startOfTodayWeek(): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Bouton "Choisir une date" qui ouvre le calendrier natif au clic.
+ *
+ * Implémentation : on superpose un `<input type="date">` invisible sur le
+ * bouton iconique. Au clic, on appelle `showPicker()` (Chromium/Safari
+ * récents) — fallback sur le focus sinon. Le natif a l'avantage d'être :
+ *  - cohérent avec l'OS (calendrier que l'utilisateur connaît déjà)
+ *  - localisé en français automatiquement
+ *  - accessible clavier + lecteur d'écran sans effort
+ *  - mobile-friendly (sélecteur tactile natif iOS / Android)
+ */
+function DatePickerButton({
+  selectedDate,
+  onPick,
+}: {
+  selectedDate: string;
+  onPick: (iso: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const handleClick = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    // showPicker() est l'API moderne (Chrome 99+, Safari 16+). Sinon focus()
+    // ouvre le picker dans la majorité des navigateurs (sauf Firefox qui
+    // exige un clic direct sur l'input — d'où la position absolute ci-dessous
+    // qui rend l'input cliquable même si on clique le bouton iconique).
+    if ("showPicker" in el && typeof el.showPicker === "function") {
+      try {
+        el.showPicker();
+        return;
+      } catch {
+        /* ignore */
+      }
+    }
+    el.focus();
+    el.click();
+  };
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={handleClick}
+        className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-card text-foreground/70 hover:bg-accent/50 transition-colors"
+        title="Choisir une date précise"
+        aria-label="Choisir une date précise"
+      >
+        <CalendarDays className="h-4 w-4" />
+      </button>
+      {/* Input natif — invisible mais cliquable, positionné sur le bouton.
+          Pas de `display:none` car certains navigateurs n'ouvrent pas le
+          picker sur un input non rendu. `opacity:0` + `pointer-events:none`
+          tant que l'utilisateur n'a pas cliqué sur le bouton. */}
+      <input
+        ref={inputRef}
+        type="date"
+        value={selectedDate}
+        onChange={(e) => {
+          if (e.target.value) onPick(e.target.value);
+        }}
+        className="absolute inset-0 opacity-0 pointer-events-none"
+        tabIndex={-1}
+        aria-hidden
+      />
+    </div>
+  );
 }

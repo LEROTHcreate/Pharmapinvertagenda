@@ -84,21 +84,17 @@ export function MobileNav({
 
   return (
     <header className="md:hidden border-b bg-card">
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-none">PharmaPlanning</p>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{pharmacyName}</p>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <ThemeToggle />
-          <NotificationBell />
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-          <SheetContent side="right" className="w-72">
+      <div className="flex items-center gap-2 px-4 py-3">
+        {/* Menu hamburger à gauche (pattern mobile classique iOS/Android).
+            Le panneau Sheet s'ouvre depuis la GAUCHE pour matcher la position
+            du bouton — moins de surprise visuelle. */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Menu">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72">
             <SheetHeader>
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
@@ -168,6 +164,19 @@ export function MobileNav({
             </div>
           </SheetContent>
         </Sheet>
+
+        {/* Titre — prend toute la largeur dispo */}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-none">PharmaPlanning</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            {pharmacyName}
+          </p>
+        </div>
+
+        {/* Actions secondaires (notifs, dark mode) restent à droite */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <ThemeToggle />
+          <NotificationBell />
         </div>
       </div>
     </header>

@@ -72,7 +72,14 @@ export async function GET(
     },
     orderBy: { createdAt: "asc" },
     include: {
-      author: { select: { id: true, name: true } },
+      author: {
+        select: {
+          id: true,
+          name: true,
+          avatarId: true,
+          employee: { select: { firstName: true, displayColor: true } },
+        },
+      },
       swapRequest: true,
     },
     take: 200,
@@ -92,7 +99,13 @@ export async function GET(
       body: m.body,
       type: m.type,
       createdAt: m.createdAt.toISOString(),
-      author: { id: m.author.id, name: m.author.name },
+      author: {
+        id: m.author.id,
+        name: m.author.name,
+        avatarId: m.author.avatarId,
+        firstName: m.author.employee?.firstName ?? null,
+        displayColor: m.author.employee?.displayColor ?? null,
+      },
       swapRequest: m.swapRequest
         ? {
             id: m.swapRequest.id,
