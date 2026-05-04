@@ -14,7 +14,7 @@ export default function UtilisateursLoading() {
             <div className="h-2 w-2 rounded-full bg-amber-300/70" />
             <div className="h-4 w-40 rounded bg-zinc-200/70" />
           </div>
-          <div className="h-32 rounded-2xl bg-zinc-100/80 ring-1 ring-inset ring-zinc-200/60" />
+          <div className="h-32 rounded-2xl bg-muted/80 ring-1 ring-inset ring-zinc-200/60" />
         </div>
 
         {/* Section "membres" */}
@@ -27,7 +27,7 @@ export default function UtilisateursLoading() {
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="h-24 rounded-xl bg-zinc-100/80 ring-1 ring-inset ring-zinc-200/60"
+                className="h-24 rounded-xl bg-muted/80 ring-1 ring-inset ring-zinc-200/60"
               />
             ))}
           </div>

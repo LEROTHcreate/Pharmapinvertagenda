@@ -75,7 +75,7 @@ export function ChangePasswordForm() {
         required
       />
 
-      <label className="flex items-center gap-2 text-[13px] text-zinc-600 cursor-pointer select-none">
+      <label className="flex items-center gap-2 text-[13px] text-foreground/70 cursor-pointer select-none">
         <input
           type="checkbox"
           className="h-4 w-4"
@@ -96,7 +96,7 @@ export function ChangePasswordForm() {
       {error && (
         <div
           role="alert"
-          className="rounded-xl bg-red-50 px-4 py-2.5 text-[13px] font-medium text-red-700 ring-1 ring-inset ring-red-100"
+          className="rounded-xl bg-red-50 dark:bg-red-950/30 px-4 py-2.5 text-[13px] font-medium text-red-700 dark:text-red-300 ring-1 ring-inset ring-red-100 dark:ring-red-900/40"
         >
           {error}
         </div>
@@ -104,7 +104,7 @@ export function ChangePasswordForm() {
       {success && (
         <div
           role="status"
-          className="rounded-xl bg-emerald-50 px-4 py-2.5 text-[13px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100 flex items-center gap-2"
+          className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2.5 text-[13px] font-medium text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900/40 flex items-center gap-2"
         >
           <Check className="h-4 w-4" />
           Mot de passe mis à jour. Tu peux maintenant l&apos;utiliser à ta prochaine
@@ -152,7 +152,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="block text-[12px] font-medium text-zinc-600 mb-1.5">
+      <span className="block text-[12px] font-medium text-foreground/70 mb-1.5">
         {label}
       </span>
       <input
@@ -162,7 +162,7 @@ function Field({
         autoComplete={autoComplete}
         disabled={disabled}
         required={required}
-        className="block w-full h-11 rounded-xl border border-zinc-200 bg-white px-3.5 text-[14px] text-zinc-900 outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-60"
+        className="block w-full h-11 rounded-xl border border-border bg-white px-3.5 text-[14px] text-foreground outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-60"
       />
     </label>
   );

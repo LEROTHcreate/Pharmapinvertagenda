@@ -1024,13 +1024,13 @@ export function PlanningView({
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-zinc-900">
+            <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-foreground">
               Planning
             </h1>
-            <span className="text-[22px] md:text-[26px] font-semibold tracking-tight text-zinc-300">
+            <span className="text-[22px] md:text-[26px] font-semibold tracking-tight text-muted-foreground/40">
               ·
             </span>
-            <span className="text-[22px] md:text-[26px] font-semibold tracking-tight text-zinc-500">
+            <span className="text-[22px] md:text-[26px] font-semibold tracking-tight text-muted-foreground">
               S{weekNumber}
             </span>
             <span className="ml-1 text-[10.5px] uppercase tracking-[0.08em] font-medium text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
@@ -1038,7 +1038,7 @@ export function PlanningView({
             </span>
             {!isAdmin && (
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10.5px] font-medium text-zinc-500"
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground"
                 title="Lecture seule"
               >
                 <Eye className="h-3 w-3" />
@@ -1055,7 +1055,7 @@ export function PlanningView({
               </span>
             )}
           </div>
-          <p className="text-[12.5px] text-zinc-500 mt-0.5 tabular-nums">
+          <p className="text-[12.5px] text-muted-foreground mt-0.5 tabular-nums">
             {days[0].toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}
             {" "}—{" "}
             {days[5].toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}
@@ -1074,7 +1074,10 @@ export function PlanningView({
             selected={statusFilter}
             onChange={setStatusFilter}
           />
-          <PrintButton />
+          <PrintButton
+            currentEmployeeId={currentEmployeeId}
+            weekStart={weekStart}
+          />
           <button
             onClick={() => setFocusMode((v) => !v)}
             className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-card text-foreground/70 hover:bg-accent/50 transition-colors"
@@ -1144,7 +1147,7 @@ export function PlanningView({
 
       {/* Segmented control jour — façon iOS */}
       <div className="no-print">
-        <div className="inline-flex w-full sm:w-auto items-center gap-0.5 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/60 p-1">
+        <div className="inline-flex w-full sm:w-auto items-center gap-0.5 rounded-xl bg-muted/40 dark:bg-zinc-800/60 p-1">
           {WEEK_DAYS.map((label, i) => {
             const date = days[i];
             const absCount = absencesPerDay[i];
@@ -1170,7 +1173,7 @@ export function PlanningView({
                 </span>
                 <span className="text-[13px] font-semibold tabular-nums">
                   {date.getDate().toString().padStart(2, "0")}
-                  <span className="text-zinc-300">/</span>
+                  <span className="text-muted-foreground/40">/</span>
                   {(date.getMonth() + 1).toString().padStart(2, "0")}
                 </span>
                 {/* Pastille férié (gauche) — distincte de la pastille absences (droite) */}
@@ -1196,19 +1199,21 @@ export function PlanningView({
 
       {/* Bulle "Statut équipe" — admin uniquement (les collaborateurs ne
           gèrent pas la couverture, on évite de leur afficher des alertes
-          sur lesquelles ils ne peuvent pas agir). */}
+          sur lesquelles ils ne peuvent pas agir). `no-print` car en
+          impression on veut juste la grille, pas les alertes manquements
+          d'effectif (qui prendraient une page entière inutilement). */}
       {isAdmin && (absentToday.length > 0 || coverageWarnings.length > 0) && (
-        <div className="rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
+        <div className="no-print rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
           <div className="mb-2 flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
-            <span className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-zinc-600">
+            <span className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-foreground/70">
               Statut équipe — semaine en cours
             </span>
           </div>
           <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-6 sm:gap-y-2.5">
             {absentToday.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                <span className="text-[10.5px] uppercase tracking-[0.08em] font-medium text-zinc-400">
+                <span className="text-[10.5px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                   Absents
                 </span>
                 {absentToday.map((a) => (
@@ -1234,13 +1239,13 @@ export function PlanningView({
       {/* Bandeau "jour férié" — badge "FR" stylé (pas d'emoji drapeau qui
           rend mal sur Windows), alignement centré, design Apple-épuré. */}
       {selectedDayHoliday && (
-        <div className="flex items-center gap-3 rounded-2xl border border-rose-200/70 bg-rose-50/60 px-4 py-3 text-[13px] text-rose-900">
+        <div className="flex items-center gap-3 rounded-2xl border border-rose-200/70 bg-rose-50/60 dark:border-rose-900/40 dark:bg-rose-950/30 px-4 py-3 text-[13px] text-rose-900 dark:text-rose-200">
           <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-rose-500 text-white text-[10.5px] font-bold tracking-[0.04em] shrink-0">
             FR
           </span>
           <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
             <span className="font-semibold">{selectedDayHoliday.name}</span>
-            <span className="text-[12px] text-rose-600/85">· jour férié</span>
+            <span className="text-[12px] text-rose-600/85 dark:text-rose-300/80">· jour férié</span>
           </div>
         </div>
       )}
@@ -1305,7 +1310,7 @@ export function PlanningView({
           <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
           <span className="text-[12.5px] tracking-tight">
             <span className="font-semibold tabular-nums">{multiSelection.size}</span>{" "}
-            <span className="text-zinc-500">
+            <span className="text-muted-foreground">
               sélectionné{multiSelection.size > 1 ? "s" : ""}
             </span>
           </span>
@@ -1317,7 +1322,7 @@ export function PlanningView({
           </button>
           <button
             onClick={() => setMultiSelection(new Set())}
-            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 transition-colors"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted transition-colors"
             aria-label="Annuler la sélection"
           >
             <X className="h-3.5 w-3.5" />

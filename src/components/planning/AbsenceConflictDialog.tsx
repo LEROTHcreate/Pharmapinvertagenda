@@ -116,7 +116,7 @@ export function AbsenceConflictDialog({
           ))}
         </ul>
 
-        <p className="text-[12.5px] text-zinc-500">
+        <p className="text-[12.5px] text-muted-foreground">
           En continuant, le poste sera quand même écrit, écrasant l'absence
           sur ces créneaux.
         </p>

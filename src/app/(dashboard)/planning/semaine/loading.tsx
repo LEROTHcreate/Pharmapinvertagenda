@@ -12,23 +12,23 @@ export default function WeekOverviewLoading() {
         </div>
 
         {/* Tableau */}
-        <div className="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white">
-          <div className="grid grid-cols-[220px_repeat(6,1fr)_90px] border-b border-zinc-200/70 bg-zinc-50/70">
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+          <div className="grid grid-cols-[220px_repeat(6,1fr)_90px] border-b border-border/70 bg-muted/40/70">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-12 border-r border-zinc-200/50 last:border-r-0" />
+              <div key={i} className="h-12 border-r border-border/50 last:border-r-0" />
             ))}
           </div>
           {Array.from({ length: 12 }).map((_, i) => (
             <div
               key={i}
-              className="grid grid-cols-[220px_repeat(6,1fr)_90px] border-b border-zinc-100 last:border-b-0"
+              className="grid grid-cols-[220px_repeat(6,1fr)_90px] border-b border-border/60 last:border-b-0"
             >
               {Array.from({ length: 8 }).map((__, j) => (
                 <div
                   key={j}
-                  className="h-16 border-r border-zinc-100 p-2 last:border-r-0"
+                  className="h-16 border-r border-border/60 p-2 last:border-r-0"
                 >
-                  <div className="h-3 w-2/3 rounded bg-zinc-100" />
+                  <div className="h-3 w-2/3 rounded bg-muted" />
                 </div>
               ))}
             </div>

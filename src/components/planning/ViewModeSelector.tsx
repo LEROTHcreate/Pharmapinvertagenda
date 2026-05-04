@@ -49,7 +49,7 @@ export function ViewModeSelector({
     <div
       role="tablist"
       aria-label="Mode d'affichage du planning"
-      className="inline-flex items-center gap-0.5 rounded-full bg-zinc-100/80 p-1 ring-1 ring-inset ring-zinc-200/70 no-print"
+      className="inline-flex items-center gap-0.5 rounded-full bg-muted/40 p-1 ring-1 ring-inset ring-border no-print"
     >
       {MODES.map(({ mode, label, icon: Icon, pathFor }) => {
         const active = mode === current;
@@ -63,8 +63,8 @@ export function ViewModeSelector({
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200",
               active
-                ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60"
-                : "text-zinc-600 hover:text-zinc-900"
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border"
+                : "text-foreground/70 hover:text-foreground"
             )}
           >
             <Icon className="h-3.5 w-3.5" />

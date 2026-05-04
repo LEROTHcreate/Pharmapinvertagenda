@@ -169,7 +169,7 @@ export function WeekOverview({
       {/* En-tête sticky : jours de la semaine */}
       <div className="sticky top-0 z-10 -mx-4 bg-gradient-to-b from-white via-white/95 to-transparent px-4 pb-2 pt-1 backdrop-blur md:-mx-6 md:px-6">
         <div
-          className="grid items-center gap-1 text-[11px] font-medium text-zinc-500"
+          className="grid items-center gap-1 text-[11px] font-medium text-muted-foreground"
           style={{ gridTemplateColumns: COL_TEMPLATE }}
         >
           <div className="px-2 uppercase tracking-wide">Collaborateur</div>
@@ -194,7 +194,7 @@ export function WeekOverview({
                 </div>
                 <div
                   className={cn(
-                    "mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-zinc-800",
+                    "mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-foreground/90",
                     isToday && "text-violet-600"
                   )}
                 >
@@ -218,7 +218,7 @@ export function WeekOverview({
           return (
             <div
               key={emp.id}
-              className="hover-lift animate-fade-up rounded-2xl border border-zinc-200/60 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+              className="hover-lift animate-fade-up rounded-2xl border border-border/60 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
               style={{
                 animationDelay: `${Math.min(rowIdx * 30, 240)}ms`,
                 opacity: 0,
@@ -242,11 +242,11 @@ export function WeekOverview({
                     </span>
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-[14px] font-medium tracking-tight text-zinc-900">
+                    <p className="truncate text-[14px] font-medium tracking-tight text-foreground">
                       {emp.firstName}
                       {emp.lastName !== "—" && ` ${emp.lastName}`}
                     </p>
-                    <p className="text-[11px] text-zinc-500">
+                    <p className="text-[11px] text-muted-foreground">
                       {STATUS_LABELS[emp.status]} · {emp.weeklyHours}h
                     </p>
                   </div>
@@ -269,18 +269,18 @@ export function WeekOverview({
                   className={cn(
                     "flex flex-col items-center justify-center rounded-xl px-2 py-2",
                     overtimeKind === "over" && "bg-orange-50/70",
-                    overtimeKind === "under" && "bg-zinc-50/70",
+                    overtimeKind === "under" && "bg-muted/40",
                     overtimeKind === "ok" && "bg-emerald-50/60"
                   )}
                 >
-                  <div className="font-mono text-[15px] font-semibold tabular-nums text-zinc-900">
+                  <div className="font-mono text-[15px] font-semibold tabular-nums text-foreground">
                     {total.toFixed(1)}h
                   </div>
                   <div
                     className={cn(
                       "text-[10px] font-medium tabular-nums",
                       overtimeKind === "over" && "text-orange-600",
-                      overtimeKind === "under" && "text-zinc-400",
+                      overtimeKind === "under" && "text-muted-foreground/70",
                       overtimeKind === "ok" && "text-emerald-700"
                     )}
                   >
@@ -296,12 +296,12 @@ export function WeekOverview({
       </div>
 
       {/* Récap équipe par jour */}
-      <div className="rounded-2xl border border-zinc-200/60 bg-zinc-50/50 px-2.5 py-2">
+      <div className="rounded-2xl border border-border/60 bg-muted/40 px-2.5 py-2">
         <div
           className="grid items-center gap-1.5"
           style={{ gridTemplateColumns: COL_TEMPLATE }}
         >
-          <div className="px-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+          <div className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Récap équipe
           </div>
           {dayTotals.map((t, i) => {
@@ -314,7 +314,7 @@ export function WeekOverview({
                   i === todayIdx && "bg-violet-50/40"
                 )}
               >
-                <span className="font-mono text-[13px] font-semibold tabular-nums text-zinc-800">
+                <span className="font-mono text-[13px] font-semibold tabular-nums text-foreground/90">
                   {t.hours.toFixed(0)}h
                 </span>
                 <div className="mt-0.5 flex items-center gap-1 text-[10px]">
@@ -339,10 +339,10 @@ export function WeekOverview({
             );
           })}
           <div className="flex flex-col items-end px-2">
-            <span className="font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
+            <span className="font-mono text-[14px] font-semibold tabular-nums text-foreground">
               {teamTotal.toFixed(0)}h
             </span>
-            <span className="text-[10px] text-zinc-500">équipe</span>
+            <span className="text-[10px] text-muted-foreground">équipe</span>
           </div>
         </div>
       </div>
@@ -380,7 +380,7 @@ function DayCell({
   // Cas 1 : absence sur la journée → on prime, on affiche le motif
   if (absences.length > 0) {
     return (
-      <Link href={href} className={cn(baseClass, "items-center justify-center bg-zinc-50/40")}>
+      <Link href={href} className={cn(baseClass, "items-center justify-center bg-muted/40")}>
         {absences.map((code) => {
           const s = ABSENCE_STYLES[code];
           return (
@@ -394,7 +394,7 @@ function DayCell({
           );
         })}
         {hoursTotal > 0 && (
-          <span className="font-mono text-[10px] tabular-nums text-zinc-400">
+          <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">
             {hoursTotal.toFixed(1)}h
           </span>
         )}
@@ -407,7 +407,7 @@ function DayCell({
     return (
       <Link
         href={href}
-        className={cn(baseClass, "items-center justify-center text-zinc-300")}
+        className={cn(baseClass, "items-center justify-center text-muted-foreground/40")}
       >
         <span className="text-[12px]">—</span>
       </Link>
@@ -416,9 +416,9 @@ function DayCell({
 
   // Cas 3 : journée travaillée — split matin + après-midi
   return (
-    <Link href={href} className={cn(baseClass, "bg-zinc-50/30")}>
+    <Link href={href} className={cn(baseClass, "bg-muted/40")}>
       <Section label="Matin" section={am} />
-      <div className="border-t border-zinc-200/60" aria-hidden />
+      <div className="border-t border-border/60" aria-hidden />
       <Section label="A-midi" section={pm} />
     </Link>
   );
@@ -428,7 +428,7 @@ function DayCell({
 function Section({ label, section }: { label: string; section: DaySection }) {
   if (section.hours === 0) {
     return (
-      <div className="flex items-center justify-between gap-2 text-[10px] text-zinc-300">
+      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/40">
         <span className="uppercase tracking-wide">{label}</span>
         <span>—</span>
       </div>
@@ -437,10 +437,10 @@ function Section({ label, section }: { label: string; section: DaySection }) {
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center justify-between gap-1">
-        <span className="font-mono text-[10.5px] tabular-nums text-zinc-500">
+        <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
           {section.range}
         </span>
-        <span className="font-mono text-[11px] font-semibold tabular-nums text-zinc-900">
+        <span className="font-mono text-[11px] font-semibold tabular-nums text-foreground">
           {section.hours.toFixed(1)}h
         </span>
       </div>
@@ -459,7 +459,7 @@ function Section({ label, section }: { label: string; section: DaySection }) {
           );
         })}
         {section.tasks.length > 2 && (
-          <span className="text-[9.5px] text-zinc-400">+{section.tasks.length - 2}</span>
+          <span className="text-[9.5px] text-muted-foreground/70">+{section.tasks.length - 2}</span>
         )}
       </div>
     </div>

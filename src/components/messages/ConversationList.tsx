@@ -73,7 +73,7 @@ export function ConversationList({
 }: Props) {
   if (loading && conversations.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12 text-zinc-400">
+      <div className="flex items-center justify-center py-12 text-muted-foreground/70">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
@@ -81,14 +81,14 @@ export function ConversationList({
 
   if (conversations.length === 0) {
     return (
-      <div className="px-6 py-12 text-center text-sm text-zinc-500">
+      <div className="px-6 py-12 text-center text-sm text-muted-foreground">
         Aucune conversation. Clique sur « Nouvelle » pour démarrer.
       </div>
     );
   }
 
   return (
-    <ul className="divide-y divide-zinc-100">
+    <ul className="divide-y divide-border/60">
       {conversations.map((conv) => {
         const active = conv.id === activeId;
         const title = conversationTitle(conv, currentUserId);
@@ -102,7 +102,7 @@ export function ConversationList({
             <button
               onClick={() => onSelect(conv.id)}
               className={cn(
-                "w-full text-left px-4 py-3 transition-colors hover:bg-zinc-50",
+                "w-full text-left px-4 py-3 transition-colors hover:bg-muted/40",
                 active && "bg-violet-50/50 hover:bg-violet-50"
               )}
             >
@@ -116,14 +116,14 @@ export function ConversationList({
                     size={36}
                   />
                 ) : (
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted dark:bg-zinc-800 text-muted-foreground">
                     <Users className="h-4 w-4" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     {conv.isGroup && (
-                      <Users className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                      <Users className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
                     )}
                     {conv.shadowAccess && (
                       <Eye
@@ -131,7 +131,7 @@ export function ConversationList({
                         aria-label="Accès modération"
                       />
                     )}
-                    <span className="font-semibold text-[14px] text-zinc-900 truncate">
+                    <span className="font-semibold text-[14px] text-foreground truncate">
                       {title}
                     </span>
                   </div>
@@ -139,15 +139,15 @@ export function ConversationList({
                     className={cn(
                       "text-[12.5px] truncate mt-0.5",
                       conv.unread
-                        ? "text-zinc-900 font-medium"
-                        : "text-zinc-500"
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground"
                     )}
                   >
                     {preview}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-[10.5px] text-zinc-400 tabular-nums">
+                  <span className="text-[10.5px] text-muted-foreground/70 tabular-nums">
                     {time}
                   </span>
                   {conv.unread && (

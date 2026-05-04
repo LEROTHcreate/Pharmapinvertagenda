@@ -57,7 +57,7 @@ export function ParametresForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border border-zinc-200/70 bg-white p-5 md:p-6 space-y-5"
+      className="rounded-2xl border border-border bg-card p-5 md:p-6 space-y-5"
     >
       <Section title="Identité de l'officine">
         <Field label="Nom" htmlFor="name">

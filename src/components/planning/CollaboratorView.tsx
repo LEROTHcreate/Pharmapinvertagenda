@@ -66,12 +66,12 @@ export function CollaboratorView({
       <div className="min-w-0">
         <Link
           href="/planning"
-          className="inline-flex items-center gap-1 text-[12.5px] text-zinc-500 hover:text-zinc-700 transition-colors mb-1.5"
+          className="inline-flex items-center gap-1 text-[12.5px] text-muted-foreground hover:text-foreground/85 transition-colors mb-1.5"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Retour au planning de l'équipe
         </Link>
-        <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-zinc-900 flex items-center gap-2">
+        <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-foreground flex items-center gap-2">
           <span
             aria-hidden
             className="h-3 w-3 rounded-full ring-2 ring-white"
@@ -80,14 +80,14 @@ export function CollaboratorView({
           {collaborator.firstName}
           {collaborator.lastName !== "—" && ` ${collaborator.lastName}`}
         </h1>
-        <p className="text-[13px] text-zinc-500 mt-0.5">
+        <p className="text-[13px] text-muted-foreground mt-0.5">
           {STATUS_LABELS[collaborator.status]} · contrat{" "}
-          <span className="font-medium tabular-nums text-zinc-700">
+          <span className="font-medium tabular-nums text-foreground/85">
             {collaborator.weeklyHours}h
           </span>
           /sem
           {!collaborator.isActive && (
-            <span className="ml-2 inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-500">
+            <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
               Inactif
             </span>
           )}
@@ -95,7 +95,7 @@ export function CollaboratorView({
       </div>
 
       {/* Toggle Semaine / Mois */}
-      <div className="inline-flex items-center rounded-full border border-zinc-200 bg-white p-0.5">
+      <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5">
         <button
           onClick={() =>
             router.replace(
@@ -107,7 +107,7 @@ export function CollaboratorView({
             "h-8 px-3 rounded-full text-[12.5px] font-medium transition-colors",
             view === "week"
               ? "bg-violet-100 text-violet-700"
-              : "text-zinc-600 hover:bg-zinc-100"
+              : "text-foreground/70 hover:bg-muted"
           )}
         >
           Semaine
@@ -124,7 +124,7 @@ export function CollaboratorView({
             "h-8 px-3 rounded-full text-[12.5px] font-medium transition-colors",
             view === "month"
               ? "bg-violet-100 text-violet-700"
-              : "text-zinc-600 hover:bg-zinc-100"
+              : "text-foreground/70 hover:bg-muted"
           )}
         >
           Mois
@@ -251,38 +251,38 @@ function WeekView({
     <div className="space-y-4">
       {/* Bandeau navigation + récap */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="inline-flex items-center rounded-full border border-zinc-200 bg-white p-0.5">
+        <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5">
           <button
             onClick={() => navigate(-1)}
-            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-zinc-600 hover:bg-zinc-100 transition-colors"
+            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-muted transition-colors"
             aria-label="Semaine précédente"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={goToday}
-            className="h-8 px-3 rounded-full text-[12.5px] font-medium text-zinc-700 hover:bg-zinc-100 transition-colors"
+            className="h-8 px-3 rounded-full text-[12.5px] font-medium text-foreground/85 hover:bg-muted transition-colors"
           >
             Aujourd'hui
           </button>
           <button
             onClick={() => navigate(1)}
-            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-zinc-600 hover:bg-zinc-100 transition-colors"
+            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-muted transition-colors"
             aria-label="Semaine suivante"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-        <div className="text-[13px] text-zinc-500">
-          <span className="font-medium text-zinc-900">
+        <div className="text-[13px] text-muted-foreground">
+          <span className="font-medium text-foreground">
             Semaine {weekNumber}
           </span>{" "}
           · {days[0].toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}
           {" – "}
           {days[5].toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}
         </div>
-        <div className="ml-auto rounded-2xl border border-zinc-200/70 bg-white px-4 py-2 text-[13px]">
-          <span className="text-zinc-500">Total semaine&nbsp;:</span>{" "}
+        <div className="ml-auto rounded-2xl border border-border/70 bg-card px-4 py-2 text-[13px]">
+          <span className="text-muted-foreground">Total semaine&nbsp;:</span>{" "}
           <span className="font-semibold tabular-nums">
             {totalHoursWeek.toFixed(1)}h
           </span>
@@ -301,7 +301,7 @@ function WeekView({
       </div>
 
       {/* Grille semaine pour ce collaborateur — ligne = créneau, colonne = jour */}
-      <div className="rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="rounded-2xl border border-border/70 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
             <colgroup>
@@ -311,9 +311,9 @@ function WeekView({
               ))}
             </colgroup>
             <thead>
-              <tr className="bg-white">
+              <tr className="bg-card">
                 <th className="px-3 py-3 text-left">
-                  <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-zinc-400">
+                  <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                     Heure
                   </span>
                 </th>
@@ -330,20 +330,20 @@ function WeekView({
                       )}
                     >
                       <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-[10.5px] uppercase tracking-wide text-zinc-400 font-medium">
+                        <span className="text-[10.5px] uppercase tracking-wide text-muted-foreground/70 font-medium">
                           <span className="hidden sm:inline">{WEEK_DAYS[i]}</span>
                           <span className="sm:hidden">{WEEK_DAYS_SHORT[i]}</span>
                         </span>
                         <span
                           className={cn(
                             "text-[14px] font-semibold tabular-nums",
-                            isToday ? "text-violet-700" : "text-zinc-900"
+                            isToday ? "text-violet-700" : "text-foreground"
                           )}
                         >
                           {d.getDate().toString().padStart(2, "0")}/
                           {(d.getMonth() + 1).toString().padStart(2, "0")}
                         </span>
-                        <span className="text-[11px] text-zinc-500 tabular-nums mt-0.5">
+                        <span className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
                           {dayH.toFixed(1)}h
                         </span>
                       </div>
@@ -370,8 +370,8 @@ function WeekView({
                       <span
                         className={cn(
                           isHourMark
-                            ? "text-zinc-700 font-semibold text-[12px]"
-                            : "text-zinc-300 text-[10.5px]"
+                            ? "text-foreground/85 font-semibold text-[12px]"
+                            : "text-muted-foreground/40 text-[10.5px]"
                         )}
                       >
                         {slot}
@@ -586,34 +586,34 @@ function MonthView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="inline-flex items-center rounded-full border border-zinc-200 bg-white p-0.5">
+        <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5">
           <button
             onClick={() => navigate(-1)}
-            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-zinc-600 hover:bg-zinc-100 transition-colors"
+            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-muted transition-colors"
             aria-label="Mois précédent"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={goToday}
-            className="h-8 px-3 rounded-full text-[12.5px] font-medium text-zinc-700 hover:bg-zinc-100 transition-colors"
+            className="h-8 px-3 rounded-full text-[12.5px] font-medium text-foreground/85 hover:bg-muted transition-colors"
           >
             Ce mois-ci
           </button>
           <button
             onClick={() => navigate(1)}
-            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-zinc-600 hover:bg-zinc-100 transition-colors"
+            className="h-8 w-8 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-muted transition-colors"
             aria-label="Mois suivant"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-        <div className="text-[14px] font-medium capitalize text-zinc-900">
-          <Calendar className="inline h-4 w-4 mr-1.5 text-zinc-400" />
+        <div className="text-[14px] font-medium capitalize text-foreground">
+          <Calendar className="inline h-4 w-4 mr-1.5 text-muted-foreground/70" />
           {monthLabel}
         </div>
-        <div className="ml-auto rounded-2xl border border-zinc-200/70 bg-white px-4 py-2 text-[13px]">
-          <span className="text-zinc-500">Total mois&nbsp;:</span>{" "}
+        <div className="ml-auto rounded-2xl border border-border/70 bg-card px-4 py-2 text-[13px]">
+          <span className="text-muted-foreground">Total mois&nbsp;:</span>{" "}
           <span className="font-semibold tabular-nums">
             {totalHoursMonth.toFixed(1)}h
           </span>
@@ -621,15 +621,15 @@ function MonthView({
       </div>
 
       {/* Grille calendrier */}
-      <div className="rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="rounded-2xl border border-border/70 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         {/* En-tête jours */}
-        <div className="grid grid-cols-7 border-b border-zinc-100 bg-zinc-50/40">
+        <div className="grid grid-cols-7 border-b border-border/60 bg-muted/40">
           {[...WEEK_DAYS_SHORT, "Dim"].map((d, i) => (
             <div
               key={i}
               className={cn(
                 "px-2 py-2 text-[10.5px] uppercase tracking-wide font-medium text-center",
-                i === 6 ? "text-zinc-300" : "text-zinc-500"
+                i === 6 ? "text-muted-foreground/40" : "text-muted-foreground"
               )}
             >
               {d}
@@ -653,9 +653,9 @@ function MonthView({
                 key={i}
                 title={holiday && c.inMonth ? `${holiday.name} (jour férié)` : undefined}
                 className={cn(
-                  "relative min-h-[78px] md:min-h-[92px] p-1.5 border-r border-b border-zinc-100",
-                  !c.inMonth && "bg-zinc-50/40 text-zinc-300",
-                  isWeekend && c.inMonth && "bg-zinc-50/30",
+                  "relative min-h-[78px] md:min-h-[92px] p-1.5 border-r border-b border-border/60",
+                  !c.inMonth && "bg-muted/40 text-muted-foreground/40",
+                  isWeekend && c.inMonth && "bg-muted/40",
                   // Jour férié dans le mois : fond rosé subtil
                   holiday && c.inMonth && "bg-rose-50/40",
                   isToday && "ring-2 ring-inset ring-violet-300"
@@ -670,14 +670,14 @@ function MonthView({
                         : holiday && c.inMonth
                           ? "text-rose-700"
                           : c.inMonth
-                            ? "text-zinc-700"
-                            : "text-zinc-300"
+                            ? "text-foreground/85"
+                            : "text-muted-foreground/40"
                     )}
                   >
                     {c.date.getUTCDate()}
                   </span>
                   {c.inMonth && hours > 0 && !isAbsent && (
-                    <span className="text-[10.5px] font-mono tabular-nums text-zinc-500">
+                    <span className="text-[10.5px] font-mono tabular-nums text-muted-foreground">
                       {hours.toFixed(1)}h
                     </span>
                   )}
@@ -732,8 +732,8 @@ function MonthView({
 function Legend() {
   const codes = (Object.keys(TASK_LABELS) as TaskCode[]).slice(0, 8);
   return (
-    <div className="rounded-xl border border-zinc-200/70 bg-white px-3 py-2 flex flex-wrap items-center gap-1.5 text-[10.5px]">
-      <span className="text-zinc-400 uppercase tracking-wide font-medium mr-1">
+    <div className="rounded-xl border border-border/70 bg-card px-3 py-2 flex flex-wrap items-center gap-1.5 text-[10.5px]">
+      <span className="text-muted-foreground/70 uppercase tracking-wide font-medium mr-1">
         Légende&nbsp;:
       </span>
       {codes.map((c) => {

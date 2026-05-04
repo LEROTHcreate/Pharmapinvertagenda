@@ -3,13 +3,17 @@ import type { ReactNode } from "react";
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafaff] text-foreground">
-      {/* Couche de base — dégradé doux */}
+      {/* Couche 1 — dégradé doux de base */}
       <div
         aria-hidden
         className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-violet-50"
       />
 
-      {/* Blobs colorés flottants (mesh gradient animé)
+      {/* Couche 2 — aurora multi-couleurs qui pulse (rotations, scaling).
+          Fond multi-radial filtré pour un effet "northern lights" doux. */}
+      <div aria-hidden className="aurora-stage" />
+
+      {/* Couche 3 — blobs flottants (mesh gradient animé).
           `blob-stage` isole le compositing pour éviter de propager
           le coût du blur au reste de la page. */}
       <div
@@ -21,7 +25,11 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <div className="animate-blob absolute -bottom-40 left-1/4 h-[480px] w-[480px] rounded-full bg-gradient-to-br from-sky-300/30 to-indigo-300/30 blur-2xl" />
       </div>
 
-      {/* Grain léger pour texturer le fond */}
+      {/* Couche 4 — étoiles scintillantes (overlay très léger pour
+          l'ambiance "futuriste" sans devenir cyberpunk) */}
+      <div aria-hidden className="starry" />
+
+      {/* Couche 5 — grain léger pour texturer le fond */}
       <div aria-hidden className="grain absolute inset-0 pointer-events-none" />
 
       {/* Contenu */}

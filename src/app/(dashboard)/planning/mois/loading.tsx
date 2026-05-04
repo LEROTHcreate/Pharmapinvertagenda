@@ -12,28 +12,28 @@ export default function MonthOverviewLoading() {
         </div>
 
         {/* Heatmap */}
-        <div className="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
           <div
-            className="grid border-b border-zinc-200/70 bg-zinc-50/70"
+            className="grid border-b border-border/70 bg-muted/40/70"
             style={{ gridTemplateColumns: "220px repeat(31, 28px) 90px" }}
           >
             {Array.from({ length: 33 }).map((_, i) => (
-              <div key={i} className="h-12 border-r border-zinc-200/40 last:border-r-0" />
+              <div key={i} className="h-12 border-r border-border/40 last:border-r-0" />
             ))}
           </div>
           {Array.from({ length: 14 }).map((_, i) => (
             <div
               key={i}
-              className="grid border-b border-zinc-100 last:border-b-0"
+              className="grid border-b border-border/60 last:border-b-0"
               style={{ gridTemplateColumns: "220px repeat(31, 28px) 90px" }}
             >
-              <div className="h-10 border-r border-zinc-200/40 px-4 py-2">
-                <div className="h-3 w-2/3 rounded bg-zinc-100" />
+              <div className="h-10 border-r border-border/40 px-4 py-2">
+                <div className="h-3 w-2/3 rounded bg-muted" />
               </div>
               {Array.from({ length: 31 }).map((__, j) => (
                 <div
                   key={j}
-                  className="h-10 border-r border-zinc-100 last:border-r-0 bg-zinc-50/50"
+                  className="h-10 border-r border-border/60 last:border-r-0 bg-muted/40/50"
                 />
               ))}
               <div className="h-10" />

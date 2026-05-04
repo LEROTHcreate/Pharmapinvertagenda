@@ -228,27 +228,371 @@
   to { --shine-angle: 360deg; }
 }
 
+/* ─── Auth WOW : aurora bordure + halo + shimmer + tilt ───────────── */
+
+/* Bordure conic gradient lumineux qui tourne — version "WOW" du shine.
+   4 couleurs (violet, fuchsia, cyan, indigo) donnant un effet aurora. */
+@property --ab-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.aurora-border {
+  position: relative;
+  isolation: isolate;
+}
+.aurora-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--ab-angle, 0deg),
+    #6366f1 0deg,
+    #a855f7 90deg,
+    #ec4899 180deg,
+    #38bdf8 270deg,
+    #6366f1 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: aurora-rotate 8s linear infinite;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.7;
+  filter: blur(0.5px);
+  will-change: --ab-angle;
+}
+@keyframes aurora-rotate {
+  to { --ab-angle: 360deg; }
+}
+
+/* Halo lumineux qui respire derrière le logo */
+.animate-pulse-glow {
+  animation: pulse-glow 3.5s ease-in-out infinite;
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.35; transform: scale(0.92); }
+  50%      { opacity: 0.75; transform: scale(1.12); }
+}
+
+/* Flottement subtil (logo / éléments décoratifs) */
+.animate-float {
+  animation: float-y 5s ease-in-out infinite;
+}
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+/* Texte avec dégradé animé qui sweep horizontalement */
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    #4f46e5 0%,
+    #a855f7 25%,
+    #ec4899 50%,
+    #a855f7 75%,
+    #4f46e5 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+          color: transparent;
+  animation: shimmer-sweep 6s ease-in-out infinite;
+}
+@keyframes shimmer-sweep {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
+}
+
+/* Étoiles scintillantes en overlay (auth background) */
+.starry {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(167,139,250,0.7), transparent),
+    radial-gradient(1px 1px at 62% 27%, rgba(244,114,182,0.5), transparent),
+    radial-gradient(1.5px 1.5px at 25% 65%, rgba(165,180,252,0.6), transparent),
+    radial-gradient(1px 1px at 78% 80%, rgba(56,189,248,0.6), transparent),
+    radial-gradient(1px 1px at 88% 35%, rgba(244,114,182,0.45), transparent),
+    radial-gradient(1.5px 1.5px at 35% 92%, rgba(167,139,250,0.55), transparent),
+    radial-gradient(1px 1px at 45% 12%, rgba(165,180,252,0.5), transparent),
+    radial-gradient(1px 1px at 8% 78%, rgba(244,114,182,0.5), transparent),
+    radial-gradient(1.5px 1.5px at 92% 55%, rgba(165,180,252,0.5), transparent);
+  animation: twinkle 4s ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* Aurora pulse : couches de gradient radial qui se déforment */
+.aurora-stage {
+  position: absolute;
+  inset: -25%;
+  pointer-events: none;
+  background:
+    radial-gradient(at 20% 30%, rgba(139,92,246,0.35) 0px, transparent 40%),
+    radial-gradient(at 80% 20%, rgba(236,72,153,0.25) 0px, transparent 40%),
+    radial-gradient(at 40% 80%, rgba(56,189,248,0.30) 0px, transparent 40%),
+    radial-gradient(at 90% 70%, rgba(167,139,250,0.30) 0px, transparent 40%);
+  filter: blur(40px);
+  animation: aurora-pulse 14s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+  contain: layout paint style;
+}
+@keyframes aurora-pulse {
+  0%   { transform: rotate(0deg) scale(1);    opacity: 0.7; }
+  50%  { transform: rotate(8deg) scale(1.05); opacity: 1; }
+  100% { transform: rotate(-6deg) scale(0.97);opacity: 0.85; }
+}
+
+/* ─── Login success burst ─────────────────────────────────────────── */
+
+/* Voile lumineux qui apparaît en fondu sur tout l'écran */
+.success-veil {
+  animation: veil-in 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes veil-in {
+  from { opacity: 0; backdrop-filter: blur(0); }
+  to   { opacity: 1; backdrop-filter: blur(8px); }
+}
+
+/* 3 anneaux concentriques qui partent du centre — effet "déverrouillage" */
+.success-ring {
+  position: absolute;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  opacity: 0;
+  animation: ring-expand 1100ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.success-ring--1 { animation-delay: 0ms; }
+.success-ring--2 { animation-delay: 180ms; }
+.success-ring--3 { animation-delay: 360ms; }
+@keyframes ring-expand {
+  0%   { transform: scale(0.2); opacity: 0; }
+  20%  { opacity: 0.85; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* Check qui se "draw" — anime stroke-dashoffset */
+.success-check-path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: draw-check 500ms 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes draw-check {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Pulse de la card au succès */
+.animate-success-pop {
+  animation: success-pop 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes success-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+
+/* ─── Login success WOW v2 : flash + confettis + pop dramatique ──── */
+
+/* Flash radial blanc qui part du centre et balaie tout l'écran (~600ms) */
+.success-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  margin: -100px 0 0 -100px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(167, 139, 250, 0.6) 40%,
+    rgba(56, 189, 248, 0) 70%
+  );
+  pointer-events: none;
+  opacity: 0;
+  animation: flash-out 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+@keyframes flash-out {
+  0%   { transform: scale(0); opacity: 0; }
+  20%  { opacity: 0.9; }
+  100% { transform: scale(8); opacity: 0; }
+}
+
+/* Pop dramatique du check (rebond + rotation) */
+.animate-check-pop {
+  opacity: 0;
+  animation: check-pop 700ms 150ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes check-pop {
+  0%   { transform: scale(0) rotate(-45deg); opacity: 0; }
+  50%  { transform: scale(1.25) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* Confettis qui tombent depuis le haut, drift latéral + rotation continue */
+.confetti {
+  position: absolute;
+  top: -20px;
+  width: 8px;
+  height: 14px;
+  pointer-events: none;
+  opacity: 0;
+  animation: confetti-fall var(--cd, 1200ms) cubic-bezier(0.42, 0, 0.58, 1) forwards;
+  animation-delay: var(--cdelay, 0ms);
+  will-change: transform, opacity;
+}
+@keyframes confetti-fall {
+  0%   { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10%  { opacity: 1; }
+  100% {
+    transform:
+      translate(var(--cx, 0px), 110vh)
+      rotate(var(--cr, 720deg));
+    opacity: 1;
+  }
+}
+
+/* Sparkles qui s'élèvent depuis le centre vers le haut */
+.sparkle-rise {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  pointer-events: none;
+  opacity: 0;
+  animation: sparkle-rise 900ms var(--sdelay, 0ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+@keyframes sparkle-rise {
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  20%  { opacity: 1; }
+  100% {
+    transform:
+      translate(calc(-50% + var(--rx, 0px)), calc(-50% + var(--ry, -100px)))
+      scale(1.4);
+    opacity: 0;
+  }
+}
+
+/* ─── Welcome banner : avatar interactif ───────────────────────── */
+
+/* Bounce subtil de l'avatar (click classique) */
+.animate-avatar-bounce {
+  animation: avatar-bounce 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes avatar-bounce {
+  0%   { transform: scale(1) rotate(0deg); }
+  35%  { transform: scale(1.18) rotate(-6deg); }
+  60%  { transform: scale(0.95) rotate(4deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Bounce dramatique pour l'easter egg (5 clicks rapides) */
+.animate-avatar-party {
+  animation: avatar-party 900ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes avatar-party {
+  0%   { transform: scale(1) rotate(0deg); }
+  20%  { transform: scale(1.35) rotate(-12deg); }
+  40%  { transform: scale(0.85) rotate(15deg); }
+  60%  { transform: scale(1.2) rotate(-8deg); }
+  80%  { transform: scale(0.95) rotate(5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Sparkles qui partent dans 6 directions différentes autour du centre.
+   Couleurs et translations randomisées via différentes classes — chaque
+   --tx/--ty définit un angle différent. */
+.sparkle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  pointer-events: none;
+  opacity: 0;
+  animation: sparkle-fly 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes sparkle-fly {
+  0% {
+    transform: translate(0, 0) scale(0.4) rotate(0deg);
+    opacity: 0;
+  }
+  20% { opacity: 1; }
+  100% {
+    transform:
+      translate(var(--tx, 30px), var(--ty, -30px))
+      scale(1)
+      rotate(180deg);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-avatar-bounce,
+  .animate-avatar-party,
+  .sparkle {
+    animation: none !important;
+  }
+  .sparkle { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-blob,
   .animate-blob-slow,
   .animate-fade-up,
   .animate-fade-in,
   .animate-shake,
-  .shine-border::before {
+  .shine-border::before,
+  .aurora-border::before,
+  .animate-pulse-glow,
+  .animate-float,
+  .shimmer-text,
+  .starry,
+  .aurora-stage,
+  .success-veil,
+  .success-ring,
+  .success-check-path,
+  .animate-success-pop,
+  .success-flash,
+  .animate-check-pop,
+  .confetti,
+  .sparkle-rise {
     animation: none !important;
   }
+  .confetti, .sparkle-rise, .success-flash { opacity: 0 !important; }
+  .animate-check-pop { opacity: 1 !important; transform: none !important; }
   .animate-fade-up,
   .animate-fade-in {
     opacity: 1;
     transform: none;
   }
+  .shimmer-text {
+    -webkit-text-fill-color: #6366f1;
+    color: #6366f1;
+  }
+  .success-veil { opacity: 1; }
+  .success-check-path { stroke-dashoffset: 0; }
 }
 
 /* ─── Impression / PDF ─────────────────────────────────────────── */
 @media print {
   @page {
     size: A4 landscape;
-    margin: 8mm;
+    /* Marges minimales — chaque mm gagné permet de moins compresser le contenu */
+    margin: 4mm;
   }
 
   /* Masque tout sauf la grille planning */
@@ -262,26 +606,35 @@
   body {
     background: white !important;
     color: black !important;
+    /* Neutralise les ombres/blurs qui ralentissent le rendu print */
+    backdrop-filter: none !important;
   }
 
   main {
     overflow: visible !important;
   }
 
-  /* Compresse la grille pour tenir sur A4 paysage */
+  /* Compresse la grille pour tenir sur A4 paysage avec ~17 collaborateurs */
   table {
-    font-size: 7pt !important;
+    font-size: 5.5pt !important;
     width: 100% !important;
     table-layout: fixed !important;
+    line-height: 1.05 !important;
   }
 
   table th,
   table td {
-    padding: 0.5pt 1pt !important;
+    padding: 0.3pt 0.6pt !important;
     word-break: break-word;
   }
 
-  /* Forcer l'impression des couleurs de fond */
+  /* En-têtes plus discrets : on garde l'info mais on rétrécit */
+  table thead th {
+    font-size: 5pt !important;
+    line-height: 1 !important;
+  }
+
+  /* Cellules colorées : conserver les couleurs (TASK_COLORS) à l'impression */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -302,12 +655,56 @@
     break-inside: avoid !important;
   }
 
-  /* Force le contenu principal à tenir sur une page :
-     scale automatique si le contenu déborde. */
+  /* Compression via `zoom` (et NON `transform: scale`).
+     Différence clé : `zoom` réduit le LAYOUT BOX, donc le navigateur
+     calcule correctement les page breaks. `transform: scale` ne change
+     que le rendu visuel → la grille déborde en page 2 même si visuellement
+     elle a l'air petite. Avec zoom, elle rentre vraiment sur 1 page. */
   main {
-    transform: scale(0.92);
-    transform-origin: top left;
-    width: 108.7%;
+    zoom: 0.82;
+  }
+
+  /* Hauteur de ligne minimale dans la grille — gain vertical ~30% */
+  table tr {
+    height: auto !important;
+  }
+  table td,
+  table th {
+    line-height: 1 !important;
+    height: 7pt !important;
+  }
+
+  /* Compact le header (titre + dates) qui prendrait sinon ~80px de hauteur */
+  main h1 {
+    font-size: 11pt !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+  }
+  main h1 + p,
+  main p.text-\[12\.5px\] {
+    font-size: 8pt !important;
+    line-height: 1.05 !important;
+    margin: 0 !important;
+  }
+  /* Réduit le padding global de la page planning (était p-4 md:p-6) */
+  main > div {
+    padding: 2mm !important;
+  }
+  /* Réduit les espaces verticaux entre les blocs */
+  .space-y-3 > * + *,
+  .space-y-4 > * + *,
+  .sm\:space-y-4 > * + * {
+    margin-top: 1mm !important;
+  }
+
+  /* Cache les éléments décoratifs lourds qui n'ont aucune valeur sur papier.
+     (.no-print est déjà géré par la règle aside/header/nav/.no-print plus haut.) */
+  .mesh-bg,
+  .blob-stage,
+  .grain,
+  .shine-border,
+  [aria-hidden="true"] svg.lucide-sparkles {
+    display: none !important;
   }
 }
 

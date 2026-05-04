@@ -97,6 +97,11 @@ enum SwapStatus {
   CANCELLED        // Annulé par le demandeur
 }
 
+enum PayrollNoteStatus {
+  PENDING       // À comptabiliser — l'admin doit encore traiter
+  ACCOUNTED     // Comptabilisé par l'admin
+}
+
 // ─── MODELS ──────────────────────────────────────────────────────
 
 /// Pharmacie — entité multi-tenant racine
@@ -117,6 +122,7 @@ model Pharmacy {
   weekTemplates  WeekTemplate[]
   conversations  Conversation[]
   swapRequests   ShiftSwapRequest[]
+  payrollNotes   PayrollNote[]
 
   @@map("pharmacies")
 }
@@ -163,6 +169,7 @@ model User {
   swapsRequested         ShiftSwapRequest[]   @relation("swapsRequested")
   swapsTargeted          ShiftSwapRequest[]   @relation("swapsTargeted")
   swapsReviewed          ShiftSwapRequest[]   @relation("swapsReviewed")
+  payrollNotes           PayrollNote[]
 
   @@index([pharmacyId])
   @@index([pharmacyId, status])
@@ -398,4 +405,41 @@ model ShiftSwapRequest {
   @@index([requesterId])
   @@index([targetId])
   @@map("shift_swap_requests")
+}
+
+/// Note de régularisation paie — équivalent de la colonne "Divers / Régul"
+/// de l'Excel d'origine. N'importe quel collaborateur peut consigner un retard,
+/// une absence à déduire, des heures sup à rattraper, etc. L'admin valide
+/// (statut ACCOUNTED) et peut renseigner une `accountingNote` (ex: "OK déduit
+/// sur 12/24"). Visible par toute l'équipe.
+model PayrollNote {
+  id        String   @id @default(cuid())
+  /// Date de l'événement concerné (pas la date de saisie — la date à laquelle
+  /// le retard / absence / heure sup s'est produit).
+  date      DateTime @db.Date
+  /// Texte principal saisi par l'auteur. Ex: "melanie 1h de retard".
+  infos     String
+  /// Motif optionnel. Ex: "problème garde son fils".
+  motif     String?
+  /// Note ajoutée par l'admin lors de la comptabilisation. Ex: "OK déduit
+  /// sur 12/24". Null tant que la note n'est pas comptabilisée.
+  accountingNote String?
+
+  status        PayrollNoteStatus @default(PENDING)
+  accountedAt   DateTime?
+  accountedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId])
+  @@index([pharmacyId, status])
+  @@index([authorId])
+  @@map("payroll_notes")
 }

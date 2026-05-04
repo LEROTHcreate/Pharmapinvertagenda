@@ -141,14 +141,14 @@ export function AbsencesView({ currentUser }: Props) {
       </div>
 
       {!canSubmit && !isAdmin && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+        <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-200">
           Votre compte n'est pas lié à un profil collaborateur du planning. Demandez à
           un admin de faire la liaison pour pouvoir soumettre des demandes.
         </div>
       )}
 
       {error && (
-        <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-700 dark:text-red-300">
           {error}
         </div>
       )}
@@ -169,7 +169,7 @@ export function AbsencesView({ currentUser }: Props) {
       ) : (
         <div className="rounded-lg border bg-card overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs uppercase tracking-wide">
+            <thead className="bg-muted/40 text-xs uppercase tracking-wide">
               <tr>
                 {isAdmin && (
                   <th className="px-4 py-2 text-left font-medium">Collaborateur</th>
@@ -190,7 +190,7 @@ export function AbsencesView({ currentUser }: Props) {
                     key={r.id}
                     className={cn(
                       "border-t transition-colors",
-                      r.status === "PENDING" && "bg-amber-50/30"
+                      r.status === "PENDING" && "bg-amber-50/30 dark:bg-amber-950/20"
                     )}
                   >
                     {isAdmin && (

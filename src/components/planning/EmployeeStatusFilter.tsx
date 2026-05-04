@@ -53,10 +53,10 @@ export function EmployeeStatusFilter({
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            "inline-flex items-center gap-1.5 h-8 rounded-md border bg-white px-2.5 text-[12px] font-medium transition-colors",
+            "inline-flex items-center gap-1.5 h-8 rounded-md border bg-card px-2.5 text-[12px] font-medium transition-colors",
             isFiltering
               ? "border-violet-300 bg-violet-50 text-violet-700"
-              : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              : "border-border text-foreground/85 hover:bg-muted/40"
           )}
           aria-label="Filtrer par statut"
         >
@@ -65,7 +65,7 @@ export function EmployeeStatusFilter({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px]">
-        <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-zinc-500">
+        <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
           Afficher uniquement
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -86,7 +86,7 @@ export function EmployeeStatusFilter({
                   "inline-flex h-4 w-4 items-center justify-center rounded border",
                   isSelected
                     ? "border-violet-500 bg-violet-500 text-white"
-                    : "border-zinc-300 bg-white"
+                    : "border-border bg-card"
                 )}
               >
                 {isSelected && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -99,7 +99,7 @@ export function EmployeeStatusFilter({
         <DropdownMenuItem
           onClick={clearAll}
           disabled={!isFiltering}
-          className="text-[12px] text-zinc-600"
+          className="text-[12px] text-foreground/70"
         >
           Réinitialiser (tout afficher)
         </DropdownMenuItem>

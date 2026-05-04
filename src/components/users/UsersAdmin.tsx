@@ -287,13 +287,13 @@ export function UsersAdmin({
             value={rejectNote}
             onChange={(e) => setRejectNote(e.target.value)}
             rows={3}
-            className="mt-2 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+            className="mt-2 w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
           />
           <DialogFooter>
             <button
               type="button"
               onClick={() => setRejectTarget(null)}
-              className="inline-flex h-10 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-card px-4 text-[13px] font-medium text-foreground/85 transition-colors hover:bg-muted/40"
             >
               Annuler
             </button>
@@ -338,7 +338,7 @@ function SectionHeader({
           className={cn("h-2 w-2 rounded-full", dotClass)}
         />
         <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600">
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/70">
           {count}
         </span>
       </div>
@@ -371,20 +371,20 @@ function PendingCard({
   onReject: () => void;
 }) {
   return (
-    <li className="hover-lift rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm">
+    <li className="hover-lift rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
       <div className="flex flex-col gap-5">
         {/* Identité du demandeur */}
         <div className="flex items-start gap-3">
           <Avatar user={user} />
           <div className="min-w-0 flex-1">
-            <p className="font-medium tracking-tight text-zinc-900">
+            <p className="font-medium tracking-tight text-foreground">
               {user.name}
             </p>
-            <p className="flex items-center gap-1.5 text-sm text-zinc-500">
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Mail className="h-3.5 w-3.5" />
               {user.email}
             </p>
-            <p className="mt-1 text-xs text-zinc-400">
+            <p className="mt-1 text-xs text-muted-foreground/70">
               Demande envoyée {formatDate(user.createdAt)}
             </p>
           </div>
@@ -420,7 +420,7 @@ function PendingCard({
             type="button"
             disabled={busy}
             onClick={onReject}
-            className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"
+            className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-foreground/85 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"
           >
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -450,11 +450,11 @@ function EmployeeSelect({
   return (
     <label
       className={cn(
-        "flex flex-col gap-1.5 rounded-xl bg-zinc-50/80 px-3.5 py-2.5 ring-1 ring-inset ring-zinc-200/70",
+        "flex flex-col gap-1.5 rounded-xl bg-muted/40 px-3.5 py-2.5 ring-1 ring-inset ring-border",
         disabled && "opacity-60"
       )}
     >
-      <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+      <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         <Link2 className="h-3 w-3" />
         Collaborateur du planning à associer
       </span>
@@ -462,7 +462,7 @@ function EmployeeSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="w-full bg-transparent text-[14px] text-zinc-900 outline-none"
+        className="w-full bg-transparent text-[14px] text-foreground outline-none"
       >
         <option value="">— Aucun (à lier plus tard) —</option>
         {employees.map((e) => {
@@ -499,7 +499,7 @@ function ApproveButton({
     violet:
       "bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm shadow-violet-600/20 hover:shadow-md hover:shadow-violet-600/30",
     emerald:
-      "bg-white text-zinc-800 ring-1 ring-inset ring-zinc-200 hover:ring-emerald-300 hover:bg-emerald-50",
+      "bg-card text-foreground/90 ring-1 ring-inset ring-border hover:ring-emerald-300 hover:bg-emerald-50",
   }[tone];
 
   return (
@@ -519,7 +519,7 @@ function ApproveButton({
       <span
         className={cn(
           "text-[11px] tracking-tight",
-          tone === "violet" ? "text-white/75" : "text-zinc-500"
+          tone === "violet" ? "text-white/75" : "text-muted-foreground"
         )}
       >
         {sub}
@@ -537,20 +537,20 @@ function MemberCard({
 }) {
   const isAdmin = user.role === "ADMIN";
   return (
-    <li className="flex flex-col gap-3 rounded-xl border border-zinc-200/80 bg-white p-4">
+    <li className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar user={user} />
           <div className="min-w-0">
-            <p className="truncate font-medium text-zinc-900">
+            <p className="truncate font-medium text-foreground">
               {user.name}
               {user.isCurrentUser && (
-                <span className="ml-1.5 text-[11px] font-normal text-zinc-400">
+                <span className="ml-1.5 text-[11px] font-normal text-muted-foreground/70">
                   (vous)
                 </span>
               )}
             </p>
-            <p className="truncate text-sm text-zinc-500">{user.email}</p>
+            <p className="truncate text-sm text-muted-foreground">{user.email}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -559,7 +559,7 @@ function MemberCard({
               "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
               isAdmin
                 ? "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-100"
-                : "bg-zinc-100 text-zinc-700"
+                : "bg-muted text-foreground/85"
             )}
           >
             {isAdmin ? (
@@ -579,7 +579,7 @@ function MemberCard({
               type="button"
               onClick={onDelete}
               aria-label="Supprimer ce compte"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-red-50 hover:text-red-600"
               title="Supprimer le compte (libère la liaison collaborateur)"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -589,19 +589,19 @@ function MemberCard({
       </div>
 
       {user.employee ? (
-        <div className="flex items-center gap-1.5 text-[12px] text-zinc-500">
+        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
           <Link2 className="h-3 w-3" />
           Lié à&nbsp;
-          <span className="font-medium text-zinc-700">
+          <span className="font-medium text-foreground/85">
             {user.employee.firstName}
             {user.employee.lastName !== "—" && ` ${user.employee.lastName}`}
           </span>
-          <span className="text-zinc-400">
+          <span className="text-muted-foreground/70">
             · {STATUS_LABELS[user.employee.status]}
           </span>
         </div>
       ) : (
-        <div className="text-[12px] italic text-zinc-400">
+        <div className="text-[12px] italic text-muted-foreground/70">
           Non rattaché au planning
         </div>
       )}
@@ -617,12 +617,12 @@ function RejectedCard({
   onDelete?: () => void;
 }) {
   return (
-    <li className="flex items-start justify-between gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/60 p-4">
+    <li className="flex items-start justify-between gap-3 rounded-xl border border-border/80 bg-muted/40 p-4">
       <div className="min-w-0">
-        <p className="truncate font-medium text-zinc-700">{user.name}</p>
-        <p className="truncate text-sm text-zinc-500">{user.email}</p>
+        <p className="truncate font-medium text-foreground/85">{user.name}</p>
+        <p className="truncate text-sm text-muted-foreground">{user.email}</p>
         {user.rejectionNote && (
-          <p className="mt-1 text-xs italic text-zinc-500">
+          <p className="mt-1 text-xs italic text-muted-foreground">
             « {user.rejectionNote} »
           </p>
         )}
@@ -637,7 +637,7 @@ function RejectedCard({
             type="button"
             onClick={onDelete}
             aria-label="Supprimer ce compte"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-red-50 hover:text-red-600"
             title="Supprimer définitivement (libère l'email pour réinscription)"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -650,12 +650,12 @@ function RejectedCard({
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-white/60 px-6 py-10">
+    <div className="flex items-center justify-center rounded-2xl border border-dashed border-border bg-card/60 px-6 py-10">
       <div className="flex flex-col items-center text-center">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-50 text-zinc-400">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/70">
           <Check className="h-5 w-5" />
         </div>
-        <p className="mt-3 text-sm text-zinc-500">{message}</p>
+        <p className="mt-3 text-sm text-muted-foreground">{message}</p>
       </div>
     </div>
   );

@@ -29,7 +29,7 @@ export function CoverageWarnings({
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-[12px]">
-      <span className="text-[10.5px] uppercase tracking-[0.08em] font-medium text-zinc-400">
+      <span className="text-[10.5px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
         Couverture
       </span>
 

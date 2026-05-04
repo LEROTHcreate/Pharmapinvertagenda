@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
@@ -11,6 +13,29 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Détermine si la requête arrive "à froid" : nouvel onglet, bookmark, URL
+ * tapée directement, restauration de session… Dans ce cas le `?week=` ou le
+ * `?day=` éventuel vient d'un cache navigateur et ne reflète pas l'intention
+ * du jour : on force la semaine courante.
+ *
+ * À l'inverse, quand la nav vient de l'app elle-même (clic prev/next, click
+ * sur une cellule, partage de lien interne), le Referer est same-origin et
+ * on respecte les params de l'URL.
+ */
+function isFreshEntry(): boolean {
+  const h = headers();
+  const referer = h.get("referer");
+  if (!referer) return true;
+  try {
+    const ref = new URL(referer);
+    const host = h.get("host") ?? "";
+    return ref.host !== host;
+  } catch {
+    return true;
+  }
+}
+
 export default async function PlanningPage({
   searchParams,
 }: {
@@ -18,6 +43,12 @@ export default async function PlanningPage({
 }) {
   const session = await auth();
   if (!session?.user) return null;
+
+  // Arrivée à froid avec un ?week= ou ?day= bloqué → redirect vers la version
+  // propre, qui re-render au jour courant.
+  if (isFreshEntry() && (searchParams.week || searchParams.day)) {
+    redirect("/planning");
+  }
 
   const initialWeekStart = searchParams.week
     ? new Date(`${searchParams.week}T00:00:00`)

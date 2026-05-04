@@ -87,7 +87,7 @@ export function GabaritsList({ rows }: { rows: GabaritRow[] }) {
                 <h2 className="text-base font-semibold tracking-tight">
                   Semaine {type}
                 </h2>
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/70">
                   {list.length} gabarit{list.length > 1 ? "s" : ""}
                 </span>
               </div>
@@ -180,16 +180,16 @@ function GabaritCard({
   busyDelete: boolean;
 }) {
   return (
-    <div className="hover-lift rounded-2xl border border-zinc-200/70 bg-white p-4 shadow-sm">
+    <div className="hover-lift rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-100 to-indigo-100 text-violet-700">
           <LayoutTemplate className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-medium tracking-tight text-zinc-900">
+          <p className="truncate text-[14px] font-medium tracking-tight text-foreground">
             {row.name}
           </p>
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-[11px] text-muted-foreground">
             {row.entryCount} créneau{row.entryCount > 1 ? "x" : ""} ·{" "}
             modifié le {formatDate(row.updatedAt)}
           </p>
@@ -201,7 +201,7 @@ function GabaritCard({
           variant="ghost"
           onClick={onDuplicate}
           disabled={busyDelete}
-          className="text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+          className="text-foreground/70 hover:bg-muted hover:text-foreground"
           title="Dupliquer ce gabarit (pour tester une variante)"
         >
           <Copy className="h-4 w-4" />
@@ -309,7 +309,7 @@ function DuplicateDialog({
         <div className="space-y-4 py-2">
           {/* Nom du nouveau gabarit */}
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-zinc-700">
+            <label className="mb-1.5 block text-[12px] font-medium text-foreground/85">
               Nom de la copie
             </label>
             <input
@@ -317,14 +317,14 @@ function DuplicateDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={busy}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-[13px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
               placeholder="Nom du gabarit"
             />
           </div>
 
           {/* Type S1 / S2 */}
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Type de semaine
             </p>
             <div className="grid grid-cols-2 gap-1.5">
@@ -338,12 +338,12 @@ function DuplicateDialog({
                     "rounded-lg border px-3 py-2 text-[13px] font-medium transition-colors",
                     weekType === t
                       ? "border-violet-300 bg-violet-50 text-violet-700"
-                      : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                      : "border-border bg-card text-foreground/85 hover:bg-muted/40"
                   )}
                 >
                   Semaine {t}
                   {target?.weekType === t && (
-                    <span className="ml-1 text-[10px] text-zinc-400">
+                    <span className="ml-1 text-[10px] text-muted-foreground/70">
                       (source)
                     </span>
                   )}
@@ -385,12 +385,12 @@ function DuplicateDialog({
 
 function EmptyState({ type }: { type: WeekType }) {
   return (
-    <div className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-white/60 px-6 py-8">
+    <div className="flex items-center justify-center rounded-2xl border border-dashed border-border bg-card/60 px-6 py-8">
       <div className="flex flex-col items-center text-center">
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           Aucun gabarit {type} pour le moment.
         </p>
-        <p className="mt-1 text-[11px] text-zinc-400">
+        <p className="mt-1 text-[11px] text-muted-foreground/70">
           Cliquez « Nouveau {type} » pour en créer un.
         </p>
       </div>

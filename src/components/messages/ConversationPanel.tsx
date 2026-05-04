@@ -127,19 +127,19 @@ export function ConversationPanel({
   });
 
   return (
-    <div className="flex flex-1 flex-col min-w-0 bg-white">
+    <div className="flex flex-1 flex-col min-w-0 bg-card">
       {/* En-tête */}
-      <div className="flex items-center gap-2 border-b border-zinc-200/70 px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
         <button
           onClick={onBack}
-          className="md:hidden rounded-md p-1 hover:bg-zinc-100"
+          className="md:hidden rounded-md p-1 hover:bg-muted"
           aria-label="Retour"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2 min-w-0">
           {conversation.isGroup && (
-            <Users className="h-4 w-4 text-zinc-400 shrink-0" />
+            <Users className="h-4 w-4 text-muted-foreground/70 shrink-0" />
           )}
           <span className="font-semibold truncate">{title}</span>
           {shadowAccess && (
@@ -153,7 +153,7 @@ export function ConversationPanel({
           )}
         </div>
         {conversation.isGroup && (
-          <span className="ml-auto text-[11px] text-zinc-400">
+          <span className="ml-auto text-[11px] text-muted-foreground/70">
             {conversation.members.length} membres
           </span>
         )}
@@ -163,17 +163,17 @@ export function ConversationPanel({
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
         {loading && messages.length === 0 ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/70" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center text-sm text-zinc-400 py-12">
+          <div className="text-center text-sm text-muted-foreground/70 py-12">
             Aucun message. Soyez le premier à écrire.
           </div>
         ) : (
           <div className="space-y-5">
             {grouped.map((group) => (
               <div key={group.date} className="space-y-2">
-                <div className="text-center text-[11px] uppercase tracking-wide text-zinc-400 font-medium">
+                <div className="text-center text-[11px] uppercase tracking-wide text-muted-foreground/70 font-medium">
                   {formatDateLabel(group.date)}
                 </div>
                 {group.messages.map((m) => {
@@ -193,7 +193,7 @@ export function ConversationPanel({
                     return (
                       <div
                         key={m.id}
-                        className="text-center text-[11px] text-zinc-400 italic"
+                        className="text-center text-[11px] text-muted-foreground/70 italic"
                       >
                         {m.body}
                       </div>
@@ -224,7 +224,7 @@ export function ConversationPanel({
                           "max-w-[80%] rounded-2xl px-3 py-2 text-[14px]",
                           isMe
                             ? "bg-violet-600 text-white rounded-br-sm"
-                            : "bg-zinc-100 text-zinc-900 rounded-bl-sm"
+                            : "bg-muted text-foreground rounded-bl-sm"
                         )}
                       >
                         {!isMe && conversation.isGroup && (
@@ -238,7 +238,7 @@ export function ConversationPanel({
                         <p
                           className={cn(
                             "text-[10px] mt-1 opacity-70",
-                            isMe ? "text-violet-100" : "text-zinc-400"
+                            isMe ? "text-violet-100" : "text-muted-foreground/70"
                           )}
                         >
                           {formatTime(m.createdAt)}
@@ -255,13 +255,13 @@ export function ConversationPanel({
 
       {/* Composer ou bandeau lecture seule */}
       {shadowAccess ? (
-        <div className="border-t border-zinc-200/70 bg-amber-50 px-4 py-3 text-center text-[12.5px] text-amber-800">
+        <div className="border-t border-border/70 bg-amber-50 px-4 py-3 text-center text-[12.5px] text-amber-800">
           <Eye className="inline h-3.5 w-3.5 mr-1" />
           Accès lecture seule (modération) — vous n'êtes pas membre de cette
           conversation.
         </div>
       ) : (
-        <div className="border-t border-zinc-200/70 bg-white px-3 py-2">
+        <div className="border-t border-border/70 bg-card px-3 py-2">
           {error && (
             <div className="mb-2 rounded-md bg-red-50 px-3 py-1.5 text-[12px] text-red-700">
               {error}
@@ -271,7 +271,7 @@ export function ConversationPanel({
             <button
               onClick={() => setSwapOpen(true)}
               disabled={!otherMember && !conversation.isGroup}
-              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-700 transition disabled:opacity-50"
+              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted hover:bg-zinc-200 px-3 py-1.5 text-[12px] font-medium text-foreground/85 transition disabled:opacity-50"
               title="Demander un échange de créneau"
             >
               <ArrowLeftRight className="h-3.5 w-3.5" />
@@ -288,7 +288,7 @@ export function ConversationPanel({
               }}
               placeholder="Écrire un message…"
               rows={1}
-              className="flex-1 resize-none rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-[14px] outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 max-h-32"
+              className="flex-1 resize-none rounded-2xl border border-border bg-card px-3 py-2 text-[14px] outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 max-h-32"
               disabled={sending}
             />
             <Button size="sm" onClick={handleSend} disabled={!draft.trim() || sending}>

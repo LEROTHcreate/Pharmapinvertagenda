@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Eye, EyeOff, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FloatingField } from "./FloatingField";
+import { LoginSuccessOverlay } from "./LoginSuccessOverlay";
 
 export function LoginForm() {
   const router = useRouter();
@@ -15,6 +16,9 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // True après une connexion réussie — déclenche l'overlay d'animation
+  // (rings + check + voile flou) ~800 ms avant la redirection vers /planning.
+  const [success, setSuccess] = useState(false);
 
   /**
    * Demande explicitement au navigateur d'enregistrer l'identifiant après une
@@ -63,9 +67,14 @@ export function LoginForm() {
       }
       // Connexion réussie → on signale au navigateur d'enregistrer l'identifiant.
       await storeCredential(email, password);
+      // Moment "WOW" : on affiche l'overlay ~1100 ms avant la redirection
+      // pour laisser le flash + confettis + check pop s'animer en entier.
+      setSuccess(true);
       const next = params.get("callbackUrl") ?? "/planning";
-      router.push(next);
-      router.refresh();
+      setTimeout(() => {
+        router.push(next);
+        router.refresh();
+      }, 1100);
     });
   }
 
@@ -124,22 +133,32 @@ export function LoginForm() {
 
       <button
         type="submit"
-        disabled={isPending}
+        disabled={isPending || success}
         className={cn(
-          "group relative mt-5 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-[15px] font-medium text-white shadow-lg shadow-violet-600/25 transition-all duration-300",
-          "hover:shadow-xl hover:shadow-violet-600/35 hover:-translate-y-0.5",
-          "active:translate-y-0 active:scale-[0.99]",
+          "group relative mt-5 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-full text-[15px] font-medium text-white shadow-lg transition-all duration-500",
+          // Couleur du bouton — bascule violet → emerald quand connecté
+          success
+            ? "bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/40 scale-[1.02]"
+            : "bg-gradient-to-br from-violet-600 to-indigo-600 shadow-violet-600/25 hover:shadow-xl hover:shadow-violet-600/35 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2",
-          "disabled:cursor-not-allowed disabled:opacity-80 disabled:hover:translate-y-0"
+          "disabled:cursor-not-allowed disabled:hover:translate-y-0",
+          isPending && !success && "opacity-80"
         )}
       >
-        {/* Brillance au hover */}
-        <span
-          aria-hidden
-          className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full"
-        />
+        {/* Brillance au hover (état idle uniquement) */}
+        {!success && (
+          <span
+            aria-hidden
+            className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full"
+          />
+        )}
 
-        {isPending ? (
+        {success ? (
+          <>
+            <Check className="h-5 w-5 animate-in zoom-in duration-300" strokeWidth={2.5} />
+            <span>Connecté</span>
+          </>
+        ) : isPending ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Connexion en cours…</span>
@@ -160,6 +179,12 @@ export function LoginForm() {
           Mot de passe oublié&nbsp;?
         </a>
       </div>
+
+      {/* Overlay plein écran qui apparaît brièvement (~800 ms) entre la
+          réussite de la connexion et la redirection. Donne un retour visuel
+          satisfaisant — voile flou + 3 anneaux émeraude + check qui se
+          dessine + texte "Connecté ✨". */}
+      {success && <LoginSuccessOverlay />}
     </form>
   );
 }

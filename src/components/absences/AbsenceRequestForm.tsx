@@ -240,7 +240,7 @@ export function AbsenceRequestForm({
           {isAdmin && (
             <label
               htmlFor="abs-auto"
-              className="flex items-start gap-2.5 rounded-md border border-violet-200 bg-violet-50/50 px-3 py-2.5 cursor-pointer select-none"
+              className="flex items-start gap-2.5 rounded-md border border-violet-200 bg-violet-50/50 dark:border-violet-900/40 dark:bg-violet-950/30 px-3 py-2.5 cursor-pointer select-none"
             >
               <input
                 id="abs-auto"
@@ -264,7 +264,7 @@ export function AbsenceRequestForm({
           )}
 
           {error && (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-[12.5px] text-red-700">
+            <div className="rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-[12.5px] text-red-700 dark:text-red-300">
               {error}
             </div>
           )}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { AbsenceCode } from "@prisma/client";
 import {
   ABSENCE_LABELS,
@@ -36,6 +37,34 @@ export function MonthOverview({
   employees: EmployeeDTO[];
   entries: ScheduleEntryDTO[];
 }) {
+  const router = useRouter();
+
+  /**
+   * Double-click sur une cellule jour → ouvre la vue journalière de ce jour
+   * dans /planning (?week=<lundi>&day=<index>). Le serveur gère la redirection
+   * propre de PlanningView qui se positionne automatiquement sur la bonne
+   * semaine + le bon jour. Le simple click reste réservé au hover crosshair —
+   * ouvrir au moindre tap serait trop intrusif sur tablette.
+   */
+  const openDay = useCallback(
+    (iso: string) => {
+      const target = new Date(`${iso}T00:00:00`);
+      if (Number.isNaN(target.getTime())) return;
+      const dow = target.getDay(); // 0=dim..6=sam
+      const diffToMonday = dow === 0 ? -6 : 1 - dow;
+      const monday = new Date(target);
+      monday.setDate(target.getDate() + diffToMonday);
+      const yyyy = monday.getFullYear();
+      const mm = String(monday.getMonth() + 1).padStart(2, "0");
+      const dd = String(monday.getDate()).padStart(2, "0");
+      const mondayIso = `${yyyy}-${mm}-${dd}`;
+      // Index lundi=0..samedi=5, dimanche → samedi
+      const dayInWeek = Math.min(5, Math.max(0, (dow + 6) % 7));
+      router.push(`/planning?week=${mondayIso}&day=${dayInWeek}`);
+    },
+    [router]
+  );
+
   const month = useMemo(() => new Date(`${monthStart}T00:00:00`), [monthStart]);
   const monthLabel = useMemo(
     () =>
@@ -116,7 +145,7 @@ export function MonthOverview({
     <div className="space-y-4">
       <RolesLegend employees={employees} />
 
-      <div className="overflow-x-auto rounded-2xl border border-zinc-200/60 bg-white p-1 shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border/60 bg-card p-1 shadow-sm">
         <div className="min-w-fit rounded-xl">
           {/* En-tête : jours du mois */}
           <div
@@ -124,7 +153,7 @@ export function MonthOverview({
             style={{ gridTemplateColumns: gridTemplate }}
             onMouseLeave={() => setHover(null)}
           >
-            <div className="px-4 py-3 text-[12px] font-semibold capitalize tracking-tight text-zinc-700">
+            <div className="px-4 py-3 text-[12px] font-semibold capitalize tracking-tight text-foreground/85">
               {monthLabel}
             </div>
             {days.map((d, colIdx) => {
@@ -136,7 +165,7 @@ export function MonthOverview({
                   key={d.iso}
                   className={cn(
                     "py-2 text-center transition-colors",
-                    isWeekend && "bg-zinc-50/60",
+                    isWeekend && "bg-muted/40",
                     isHoverCol && "bg-violet-50/70"
                   )}
                   onMouseEnter={() => setHover({ row: -1, col: colIdx })}
@@ -148,7 +177,7 @@ export function MonthOverview({
                         ? "text-violet-600"
                         : isHoverCol
                           ? "text-violet-500"
-                          : "text-zinc-400"
+                          : "text-muted-foreground/70"
                     )}
                   >
                     {WEEKDAY_LETTERS[d.weekday]}
@@ -159,8 +188,8 @@ export function MonthOverview({
                       isToday
                         ? "font-bold text-violet-600"
                         : isHoverCol
-                          ? "font-semibold text-zinc-900"
-                          : "text-zinc-700"
+                          ? "font-semibold text-foreground"
+                          : "text-foreground/85"
                     )}
                   >
                     {d.day}
@@ -168,7 +197,7 @@ export function MonthOverview({
                 </div>
               );
             })}
-            <div className="px-3 py-3 text-center text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            <div className="px-3 py-3 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Mois
             </div>
           </div>
@@ -180,7 +209,7 @@ export function MonthOverview({
               return (
                 <div
                   key={emp.id}
-                  className="animate-fade-up grid items-center border-t border-zinc-100/80"
+                  className="animate-fade-up grid items-center border-t border-border/60"
                   style={{
                     gridTemplateColumns: gridTemplate,
                     animationDelay: `${Math.min(rowIdx * 24, 240)}ms`,
@@ -214,11 +243,11 @@ export function MonthOverview({
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium tracking-tight text-zinc-900">
+                      <p className="truncate text-[13px] font-medium tracking-tight text-foreground">
                         {emp.firstName}
                         {emp.lastName !== "—" && ` ${emp.lastName}`}
                       </p>
-                      <p className="truncate text-[10px] text-zinc-500">
+                      <p className="truncate text-[10px] text-muted-foreground">
                         {STATUS_LABELS[emp.status]}
                       </p>
                     </div>
@@ -237,6 +266,7 @@ export function MonthOverview({
                       isHoverExact={hover?.col === colIdx && hover?.row === rowIdx}
                       isToday={days[colIdx].iso === today}
                       onEnter={() => setHover({ row: rowIdx, col: colIdx })}
+                      onOpenDay={openDay}
                     />
                   ))}
 
@@ -247,10 +277,10 @@ export function MonthOverview({
                       isHoverRow && "bg-violet-50/40"
                     )}
                   >
-                    <span className="font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
+                    <span className="font-mono text-[14px] font-semibold tabular-nums text-foreground">
                       {workedHours.toFixed(0)}h
                     </span>
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-[10px] text-muted-foreground">
                       {workedDays}j
                       {absencesCount.size > 0 && (
                         <span className="ml-1 text-amber-600">
@@ -271,10 +301,10 @@ export function MonthOverview({
 
           {/* Récap équipe */}
           <div
-            className="grid items-center border-t-2 border-zinc-200/70 bg-zinc-50/50"
+            className="grid items-center border-t-2 border-border/70 bg-muted/40"
             style={{ gridTemplateColumns: gridTemplate }}
           >
-            <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Récap équipe
             </div>
             {dayTotals.map((t, i) => {
@@ -293,7 +323,7 @@ export function MonthOverview({
                   <div
                     className={cn(
                       "font-mono text-[10px] tabular-nums",
-                      t.teamHours > 0 ? "text-zinc-700" : "text-zinc-300"
+                      t.teamHours > 0 ? "text-foreground/85" : "text-muted-foreground/40"
                     )}
                   >
                     {t.teamHours > 0 ? Math.round(t.teamHours) : ""}
@@ -302,7 +332,7 @@ export function MonthOverview({
               );
             })}
             <div className="px-4 py-2 text-right">
-              <span className="font-mono text-[13px] font-semibold tabular-nums text-zinc-900">
+              <span className="font-mono text-[13px] font-semibold tabular-nums text-foreground">
                 {dayTotals.reduce((s, t) => s + t.teamHours, 0).toFixed(0)}h
               </span>
             </div>
@@ -344,6 +374,7 @@ function DayHeatCell({
   isHoverExact,
   isToday,
   onEnter,
+  onOpenDay,
 }: {
   state: DayState;
   weekday: number;
@@ -355,6 +386,8 @@ function DayHeatCell({
   isHoverExact: boolean;
   isToday: boolean;
   onEnter: () => void;
+  /** Double-click → ouvre la vue jour de cette date dans /planning. */
+  onOpenDay: (iso: string) => void;
 }) {
   const isWeekend = weekday >= 5;
 
@@ -401,12 +434,13 @@ function DayHeatCell({
   return (
     <div
       className={cn(
-        "h-10 px-0.5 py-1 transition-all duration-150",
+        "h-10 px-0.5 py-1 transition-all duration-150 cursor-pointer select-none",
         isHoverCross && "bg-violet-50/40",
         isToday && "bg-violet-50/30"
       )}
       onMouseEnter={onEnter}
-      title={title}
+      onDoubleClick={() => onOpenDay(iso)}
+      title={`${title}\n(double-clic : ouvrir le planning de ce jour)`}
     >
       <div
         className={cn(
@@ -431,11 +465,11 @@ function DayHeatCell({
 
 function Legend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-zinc-200/50 bg-white/60 px-4 py-2.5 text-[12px] text-zinc-600">
-      <span className="font-medium text-zinc-500">Légende :</span>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2.5 text-[12px] text-foreground/70">
+      <span className="font-medium text-muted-foreground">Légende :</span>
 
       <span className="inline-flex items-center gap-2">
-        <span className="flex h-3 overflow-hidden rounded-md ring-1 ring-zinc-200">
+        <span className="flex h-3 overflow-hidden rounded-md ring-1 ring-border">
           {[0.3, 0.5, 0.75, 1].map((a) => (
             <span
               key={a}
@@ -471,7 +505,7 @@ function Legend() {
       )}
 
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-3 w-3.5 rounded-md bg-zinc-100/80 ring-1 ring-inset ring-zinc-200" />
+        <span className="h-3 w-3.5 rounded-md bg-muted/40 ring-1 ring-inset ring-border" />
         Repos / Dimanche
       </span>
     </div>

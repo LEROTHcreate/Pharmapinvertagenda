@@ -24,7 +24,7 @@ export default function DashboardLoading() {
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="h-20 rounded-2xl bg-zinc-100/80 ring-1 ring-inset ring-zinc-200/60"
+              className="h-20 rounded-2xl bg-muted/80 ring-1 ring-inset ring-zinc-200/60"
             />
           ))}
         </div>

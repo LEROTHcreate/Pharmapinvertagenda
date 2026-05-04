@@ -120,8 +120,8 @@ export function EmployeesTable({
                   key={e.id}
                   className={
                     e.isActive
-                      ? "hover:bg-muted/30"
-                      : "bg-muted/20 text-muted-foreground hover:bg-muted/30"
+                      ? "hover:bg-muted/40"
+                      : "bg-muted/40 text-muted-foreground hover:bg-muted/40"
                   }
                 >
                   <td className="px-3 py-2">

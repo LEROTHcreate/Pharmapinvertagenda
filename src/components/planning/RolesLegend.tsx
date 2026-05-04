@@ -22,16 +22,16 @@ export function RolesLegend({ employees }: { employees: EmployeeDTO[] }) {
   if (groups.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-zinc-200/60 bg-white/60 px-3 py-2 text-[12px] text-zinc-600">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/60 bg-card/60 px-3 py-2 text-[12px] text-foreground/70">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Rôles
       </span>
       {groups.map(([status, count]) => (
         <div key={status} className="inline-flex items-center gap-2">
           <PaletteDots status={status} />
-          <span className="text-zinc-700">
+          <span className="text-foreground/85">
             {STATUS_LABELS[status]}
-            <span className="ml-1 text-zinc-400">· {count}</span>
+            <span className="ml-1 text-muted-foreground/70">· {count}</span>
           </span>
         </div>
       ))}

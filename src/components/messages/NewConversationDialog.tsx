@@ -121,7 +121,7 @@ export function NewConversationDialog({
         {/* Nom du groupe (si ≥ 2) */}
         {isGroup && (
           <div className="space-y-1.5">
-            <label className="text-[12px] font-medium text-zinc-600 flex items-center gap-1">
+            <label className="text-[12px] font-medium text-foreground/70 flex items-center gap-1">
               <UsersIcon className="h-3.5 w-3.5" />
               Nom du groupe (optionnel)
             </label>
@@ -136,7 +136,7 @@ export function NewConversationDialog({
 
         {/* Recherche */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -148,7 +148,7 @@ export function NewConversationDialog({
         {/* Liste */}
         <div className="max-h-72 overflow-y-auto -mx-6 px-6">
           {filtered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-zinc-400">
+            <p className="py-6 text-center text-sm text-muted-foreground/70">
               Aucun résultat
             </p>
           ) : (
@@ -163,7 +163,7 @@ export function NewConversationDialog({
                         "w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left transition",
                         isSelected
                           ? "bg-violet-50 ring-1 ring-violet-200"
-                          : "hover:bg-zinc-50"
+                          : "hover:bg-muted/40"
                       )}
                     >
                       <span
@@ -189,10 +189,10 @@ export function NewConversationDialog({
                         )}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13.5px] font-medium text-zinc-900 truncate">
+                        <p className="text-[13.5px] font-medium text-foreground truncate">
                           {c.name}
                         </p>
-                        <p className="text-[11.5px] text-zinc-500 truncate">
+                        <p className="text-[11.5px] text-muted-foreground truncate">
                           {c.email}
                         </p>
                       </div>

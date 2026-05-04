@@ -34,7 +34,7 @@ const STATUS_BADGE: Record<
 > = {
   PENDING_TARGET: {
     label: "En attente du collègue",
-    classes: "bg-zinc-100 text-zinc-700",
+    classes: "bg-muted text-foreground/85",
     icon: Hourglass,
   },
   REJECTED_TARGET: {
@@ -59,7 +59,7 @@ const STATUS_BADGE: Record<
   },
   CANCELLED: {
     label: "Annulé",
-    classes: "bg-zinc-100 text-zinc-500",
+    classes: "bg-muted text-muted-foreground",
     icon: X,
   },
 };
@@ -127,24 +127,24 @@ export function SwapCard({ message, currentUser, otherMembers, onUpdated }: Prop
           </span>
         </div>
 
-        <div className="space-y-1.5 text-[13px] text-zinc-800">
+        <div className="space-y-1.5 text-[13px] text-foreground/90">
           <p>
             <span className="font-semibold">{requester}</span> demande à{" "}
             <span className="font-semibold">{target}</span> de couvrir
             son créneau&nbsp;:
           </p>
-          <div className="flex items-center gap-1.5 text-zinc-700">
-            <Calendar className="h-3.5 w-3.5 text-zinc-400" />
+          <div className="flex items-center gap-1.5 text-foreground/85">
+            <Calendar className="h-3.5 w-3.5 text-muted-foreground/70" />
             {formatDate(swap.date)}
           </div>
-          <div className="flex items-center gap-1.5 text-zinc-700">
-            <Clock className="h-3.5 w-3.5 text-zinc-400" />
+          <div className="flex items-center gap-1.5 text-foreground/85">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground/70" />
             {swap.fullDay
               ? "Journée entière"
               : `${swap.startTime} → ${swap.endTime}`}
           </div>
           {swap.reason && (
-            <p className="rounded-lg bg-white/60 px-2.5 py-1.5 text-[12.5px] italic text-zinc-600 mt-1">
+            <p className="rounded-lg bg-card/60 px-2.5 py-1.5 text-[12.5px] italic text-foreground/70 mt-1">
               « {swap.reason} »
             </p>
           )}
@@ -205,19 +205,19 @@ export function SwapCard({ message, currentUser, otherMembers, onUpdated }: Prop
         )}
 
         {isTarget && swap.status === "PENDING_ADMIN" && (
-          <p className="mt-3 text-[12px] text-zinc-500 italic">
+          <p className="mt-3 text-[12px] text-muted-foreground italic">
             Vous avez accepté · transmis à l'admin pour validation
           </p>
         )}
 
         {isRequester && swap.status === "PENDING_TARGET" && (
-          <p className="mt-3 text-[12px] text-zinc-500 italic">
+          <p className="mt-3 text-[12px] text-muted-foreground italic">
             En attente de la réponse de {target}
           </p>
         )}
 
         {currentUser.role === "ADMIN" && swap.status === "PENDING_ADMIN" && (
-          <div className="mt-3 rounded-lg bg-white border border-amber-200 p-2.5">
+          <div className="mt-3 rounded-lg bg-card border border-amber-200 p-2.5">
             <p className="text-[11.5px] font-semibold text-amber-800 mb-2">
               Validation admin requise
             </p>

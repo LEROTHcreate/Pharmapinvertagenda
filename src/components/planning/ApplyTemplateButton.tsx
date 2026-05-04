@@ -197,11 +197,11 @@ export function ApplyTemplateButton({
                   const setSelected = type === "S1" ? setS1Id : setS2Id;
                   return (
                     <div key={type}>
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         Gabarit pour les semaines {type}
                       </p>
                       {list.length === 0 ? (
-                        <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-4 text-center text-[12px] italic text-zinc-400">
+                        <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[12px] italic text-muted-foreground/70">
                           Aucun gabarit {type}
                         </p>
                       ) : (
@@ -233,10 +233,10 @@ export function ApplyTemplateButton({
 
               {/* ─── Durée ─── */}
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Appliquer sur
                 </p>
-                <div className="inline-flex flex-wrap items-stretch gap-0.5 rounded-xl bg-zinc-100/70 p-1 ring-1 ring-inset ring-zinc-200/70">
+                <div className="inline-flex flex-wrap items-stretch gap-0.5 rounded-xl bg-muted/40 p-1 ring-1 ring-inset ring-border">
                   {DURATION_OPTIONS.map((opt) => {
                     const active = duration === opt.value;
                     return (
@@ -248,8 +248,8 @@ export function ApplyTemplateButton({
                         className={cn(
                           "flex flex-col items-center justify-center rounded-lg px-3 py-1.5 transition-all duration-150",
                           active
-                            ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60"
-                            : "text-zinc-600 hover:text-zinc-900"
+                            ? "bg-card text-foreground shadow-sm ring-1 ring-border"
+                            : "text-foreground/70 hover:text-foreground"
                         )}
                       >
                         <span className="text-[12px] font-medium leading-tight">
@@ -258,7 +258,7 @@ export function ApplyTemplateButton({
                         <span
                           className={cn(
                             "text-[10px] leading-tight",
-                            active ? "text-zinc-500" : "text-zinc-400"
+                            active ? "text-muted-foreground" : "text-muted-foreground/70"
                           )}
                         >
                           {opt.sub}
@@ -267,7 +267,7 @@ export function ApplyTemplateButton({
                     );
                   })}
                 </div>
-                <p className="mt-1.5 text-[11px] text-zinc-500">
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
                   {durationHelp({ s1: !!s1Id, s2: !!s2Id, n: duration })}
                 </p>
               </div>
@@ -367,9 +367,9 @@ function TemplateRadio({
         "flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-all duration-150",
         selected
           ? "border-violet-300 bg-violet-50 ring-1 ring-violet-200"
-          : "border-zinc-200/70 bg-white hover:border-zinc-300",
+          : "border-border/70 bg-card hover:border-border",
         disabled && "opacity-60",
-        muted && !selected && "bg-zinc-50/60"
+        muted && !selected && "bg-muted/40"
       )}
     >
       <div
@@ -378,8 +378,8 @@ function TemplateRadio({
           selected
             ? "bg-violet-100 text-violet-700"
             : muted
-              ? "bg-zinc-100 text-zinc-400"
-              : "bg-zinc-50 text-zinc-500"
+              ? "bg-muted text-muted-foreground/70"
+              : "bg-muted/40 text-muted-foreground"
         )}
       >
         {selected ? (
@@ -389,10 +389,10 @@ function TemplateRadio({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-medium tracking-tight text-zinc-900">
+        <p className="truncate text-[13px] font-medium tracking-tight text-foreground">
           {label}
         </p>
-        <p className="text-[11px] text-zinc-500">{sub}</p>
+        <p className="text-[11px] text-muted-foreground">{sub}</p>
       </div>
     </button>
   );

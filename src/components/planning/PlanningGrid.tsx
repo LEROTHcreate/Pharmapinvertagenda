@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   DndContext,
+  MouseSensor,
   TouchSensor,
   useDraggable,
   useDroppable,
@@ -139,12 +140,43 @@ export const PlanningGrid = memo(function PlanningGrid({
     setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches);
   }, []);
 
-  // Sensors : UNIQUEMENT TouchSensor (pas de PointerSensor) pour que le
-  // mouse drag continue d'utiliser la sélection rectangulaire — le DnD est
-  // exclusif au tactile, déclenché par un long-press de 350 ms.
+  // Suivi de la touche Alt : activation du DnD souris uniquement quand
+  // Alt est tenu → préserve la sélection rectangulaire 30min×30min comme
+  // gesture par défaut. Convention courante (Excel, Figma).
+  const [isAltHeld, setIsAltHeld] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key === "Alt") setIsAltHeld(true);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key === "Alt") setIsAltHeld(false);
+    };
+    // Si l'utilisateur fait Alt+Tab, le keyup arrive après un blur — on
+    // reset au blur pour ne pas garder Alt actif "fantôme".
+    const onBlur = () => setIsAltHeld(false);
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+
+  // Sensors :
+  //   - TouchSensor : long-press 350ms (mobile/tablette)
+  //   - MouseSensor : drag direct dès 6px (desktop) — mais SEULEMENT activé
+  //     sur les cellules TASK quand Alt est tenu (cf. `taskCellUsesDnd` plus bas).
+  // L'activation conditionnelle se fait au niveau du Cell (attache des
+  // listeners DnD seulement quand Alt est tenu sur souris).
   const sensors = useSensors(
     useSensor(TouchSensor, {
       activationConstraint: { delay: 350, tolerance: 8 },
+    }),
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 6 },
     })
   );
 
@@ -462,7 +494,7 @@ export const PlanningGrid = memo(function PlanningGrid({
             {/* Ligne unique : nom · statut · contrat · jour · semaine */}
             <tr className="bg-card/80 backdrop-blur-md">
               <th className="sticky left-0 z-20 bg-card/95 backdrop-blur-md px-3 py-3 text-left w-16 min-w-16 align-bottom">
-                <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-zinc-400">
+                <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                   Heure
                 </span>
               </th>
@@ -491,7 +523,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         plage horaire reprend la semaine courante */}
                     <Link
                       href={`/planning/collaborateur/${e.id}?view=week&week=${weekDates[0] ?? ""}`}
-                      className="flex flex-col items-stretch gap-0.5 min-w-0 rounded-md px-1 -mx-1 py-1 -my-1 hover:bg-zinc-50 transition-colors cursor-pointer"
+                      className="flex flex-col items-stretch gap-0.5 min-w-0 rounded-md px-1 -mx-1 py-1 -my-1 hover:bg-muted/40 transition-colors cursor-pointer"
                     >
                       {/* Nom + pastille couleur (légèrement renforcés sur ma colonne) */}
                       <div className="flex items-center gap-1 justify-center min-w-0">
@@ -505,7 +537,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         />
                         <span
                           className={cn(
-                            "truncate text-[12px] tracking-tight text-zinc-900",
+                            "truncate text-[12px] tracking-tight text-foreground",
                             isMe ? "font-semibold" : "font-semibold"
                           )}
                         >
@@ -513,20 +545,20 @@ export const PlanningGrid = memo(function PlanningGrid({
                         </span>
                       </div>
                       {/* Statut */}
-                      <span className="text-[9px] uppercase tracking-[0.04em] text-zinc-400 font-medium text-center truncate">
+                      <span className="text-[9px] uppercase tracking-[0.04em] text-muted-foreground/70 font-medium text-center truncate">
                         {STATUS_LABELS[e.status]}
                       </span>
                       {/* Stats compactes : jour · cumul (delta) */}
-                      <div className="mt-0.5 flex items-center justify-center gap-0.5 font-mono text-[9.5px] text-zinc-500 truncate tabular-nums">
-                        <span className="text-zinc-700">
+                      <div className="mt-0.5 flex items-center justify-center gap-0.5 font-mono text-[9.5px] text-muted-foreground truncate tabular-nums">
+                        <span className="text-foreground/85">
                           {dailyH.toFixed(1)}
                         </span>
-                        <span className="text-zinc-300 mx-0.5">›</span>
+                        <span className="text-muted-foreground/40 mx-0.5">›</span>
                         <span
                           className={cn(
                             "font-medium",
                             Math.abs(delta) < 0.5
-                              ? "text-zinc-700"
+                              ? "text-foreground/85"
                               : delta > 0
                                 ? "text-rose-600"
                                 : "text-amber-600"
@@ -546,7 +578,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                 );
               })}
               <th className="sticky right-0 z-20 bg-card/95 backdrop-blur-md px-3 py-3 w-12 min-w-12 align-bottom">
-                <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-zinc-400">
+                <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                   Eff
                 </span>
               </th>
@@ -570,8 +602,8 @@ export const PlanningGrid = memo(function PlanningGrid({
               // Une cellule TASK / ABSENCE pose son propre fond par-dessus,
               // donc seules les cases vides montrent l'alternance.
               const zebraClass = slotIdx % 2 === 0
-                ? "[&>td:not(.has-content)]:bg-white dark:[&>td:not(.has-content)]:bg-zinc-900"
-                : "[&>td:not(.has-content)]:bg-zinc-100/70 dark:[&>td:not(.has-content)]:bg-zinc-800/50";
+                ? "[&>td:not(.has-content)]:bg-card dark:[&>td:not(.has-content)]:bg-zinc-900"
+                : "[&>td:not(.has-content)]:bg-muted/40 dark:[&>td:not(.has-content)]:bg-zinc-800/50";
               return (
                 <tr
                   key={slot}
@@ -591,8 +623,8 @@ export const PlanningGrid = memo(function PlanningGrid({
                       // masquerait un border-t posé sur le <tr>.
                       isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70",
                       isHourMark
-                        ? "text-zinc-900 font-semibold"
-                        : "text-zinc-300 text-[10.5px]",
+                        ? "text-foreground font-semibold"
+                        : "text-muted-foreground/40 text-[10.5px]",
                       isCurrent && "text-rose-600 font-semibold"
                     )}
                   >
@@ -638,6 +670,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         canEdit={canEdit}
                         dndEnabled={dndEnabled}
                         isTouchDevice={isTouchDevice}
+                        isAltHeld={isAltHeld}
                         isInActiveBlock={activeBlockKeys?.has(key) ?? false}
                         isSelected={isSelected}
                         isOvertime={isOvertime}
@@ -717,6 +750,7 @@ const Cell = memo(function Cell({
   canEdit,
   dndEnabled,
   isTouchDevice,
+  isAltHeld,
   isInActiveBlock,
   isSelected,
   isOvertime,
@@ -738,6 +772,7 @@ const Cell = memo(function Cell({
   canEdit: boolean;
   dndEnabled: boolean;
   isTouchDevice: boolean;
+  isAltHeld: boolean;
   isInActiveBlock: boolean;
   isSelected: boolean;
   isOvertime: boolean;
@@ -775,11 +810,13 @@ const Cell = memo(function Cell({
   const isDragging = draggable.isDragging;
   const isOver = droppable.isOver;
 
-  // DnD activé UNIQUEMENT sur tactile (téléphone/tablette).
-  // - Mouse : taskCellUsesDnd = false → rect-select 30min×30min fonctionne
-  // - Touch : taskCellUsesDnd = true → long-press 350ms démarre le drag
-  //   (tap rapide reste un click → ouvre TaskSelector pour modifier/supprimer)
-  const taskCellUsesDnd = dndEnabled && isTask && isTouchDevice;
+  // DnD activé sur :
+  //   - Tactile : long-press 350ms démarre le drag (tap rapide = TaskSelector)
+  //   - Souris : Alt + drag — sans Alt c'est rect-select 30min×30min.
+  //     Le state Alt est trackeé globalement via window listener (cf. plus haut).
+  // Sur cellule non-TASK ou si dndEnabled=false → DnD jamais actif.
+  const taskCellUsesDnd =
+    dndEnabled && isTask && (isTouchDevice || isAltHeld);
   const isContinuation =
     !!entry &&
     !!prevEntry &&
@@ -797,6 +834,9 @@ const Cell = memo(function Cell({
   const baseClasses = cn(
     "px-1 h-9 text-center font-medium text-[11px] transition-all relative",
     canEdit && "cursor-pointer",
+    // Quand Alt est tenu sur souris + cellule TASK draggable, on change
+    // le curseur en "grab" pour indiquer "tu peux déplacer le bloc".
+    canEdit && isTask && isAltHeld && !isTouchDevice && "cursor-grab",
     isSelected && "ring-2 ring-violet-500/80 ring-inset z-[5]",
     isRecent && "animate-cell-flash",
     // Effet "bloc en cours de drag" : ring violet pulsé + scale léger
@@ -844,7 +884,7 @@ const Cell = memo(function Cell({
         className={cn(
           baseClasses,
           "border-b border-b-zinc-100/80",
-          canEdit && "hover:bg-zinc-50/80",
+          canEdit && "hover:bg-muted/40",
           isMyColumn && "bg-amber-50/50",
           dropTargetRing
         )}

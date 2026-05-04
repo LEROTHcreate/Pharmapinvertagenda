@@ -13,6 +13,7 @@ import {
   LayoutTemplate,
   MessageCircle,
   Settings,
+  StickyNote,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ type NavKey =
   | "employes"
   | "absences"
   | "messages"
+  | "notes"
   | "stats"
   | "utilisateurs"
   | "parametres";
@@ -45,6 +47,7 @@ const NAV: NavItem[] = [
   { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true },
   { key: "absences", href: "/absences", label: "Absences", icon: CalendarOff },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
+  { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
   { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },

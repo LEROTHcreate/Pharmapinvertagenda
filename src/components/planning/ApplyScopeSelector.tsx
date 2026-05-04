@@ -43,7 +43,7 @@ export function ApplyScopeSelector({
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         <Repeat className="h-3 w-3" />
         Appliquer à
       </div>
@@ -57,7 +57,7 @@ export function ApplyScopeSelector({
         )}
       >
         {/* Options numériques (segmented control) */}
-        <div className="inline-flex items-stretch gap-0.5 rounded-xl bg-zinc-100/70 p-1 ring-1 ring-inset ring-zinc-200/70">
+        <div className="inline-flex items-stretch gap-0.5 rounded-xl bg-muted/40 p-1 ring-1 ring-inset ring-border">
           {NUMERIC_OPTIONS.map((opt) => {
             const active = opt.value === value;
             return (
@@ -71,8 +71,8 @@ export function ApplyScopeSelector({
                 className={cn(
                   "flex flex-col items-center justify-center rounded-lg px-3 py-1.5 transition-all duration-150",
                   active
-                    ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60"
-                    : "text-zinc-600 hover:text-zinc-900"
+                    ? "bg-card text-foreground shadow-sm ring-1 ring-border"
+                    : "text-foreground/70 hover:text-foreground"
                 )}
               >
                 <span className="inline-flex items-center gap-1 text-[12px] font-medium leading-tight">
@@ -82,7 +82,7 @@ export function ApplyScopeSelector({
                 <span
                   className={cn(
                     "text-[10px] leading-tight",
-                    active ? "text-zinc-500" : "text-zinc-400"
+                    active ? "text-muted-foreground" : "text-muted-foreground/70"
                   )}
                 >
                   {opt.sub}
@@ -104,7 +104,7 @@ export function ApplyScopeSelector({
               "inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[12px] font-medium transition-all duration-150 ring-1 ring-inset",
               value === "year-pattern"
                 ? "bg-violet-50 text-violet-700 ring-violet-200 shadow-sm"
-                : "bg-white text-zinc-600 ring-zinc-200/70 hover:text-zinc-900 hover:ring-zinc-300"
+                : "bg-card text-foreground/70 ring-border hover:text-foreground hover:ring-zinc-300"
             )}
           >
             <Sparkles className="h-3 w-3" />
@@ -113,7 +113,7 @@ export function ApplyScopeSelector({
               <span
                 className={cn(
                   "text-[10px]",
-                  value === "year-pattern" ? "text-violet-600/80" : "text-zinc-400"
+                  value === "year-pattern" ? "text-violet-600/80" : "text-muted-foreground/70"
                 )}
               >
                 jusqu&apos;à fin décembre
@@ -123,7 +123,7 @@ export function ApplyScopeSelector({
         )}
       </div>
 
-      <p className="mt-1.5 text-[11px] text-zinc-500">
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
         {scopeDescription(value, weekKind)}
       </p>
     </div>
