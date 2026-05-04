@@ -7,6 +7,7 @@ import {
   Users,
   CalendarOff,
   BarChart3,
+  Banknote,
   Menu,
   LogOut,
   UserCog,
@@ -37,6 +38,7 @@ type NavKey =
   | "messages"
   | "notes"
   | "stats"
+  | "remuneration"
   | "utilisateurs"
   | "parametres";
 type NavItem = {
@@ -55,6 +57,7 @@ const NAV: NavItem[] = [
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
+  { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
   { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },
 ];
@@ -68,6 +71,7 @@ export function MobileNav({
   pendingAbsencesCount = 0,
   unreadSwapMessages = 0,
   unreadTextMessages = 0,
+  canViewPayroll = false,
 }: {
   pharmacyName: string;
   userName: string;
@@ -77,6 +81,7 @@ export function MobileNav({
   pendingAbsencesCount?: number;
   unreadSwapMessages?: number;
   unreadTextMessages?: number;
+  canViewPayroll?: boolean;
 }) {
   const pathname = usePathname();
   const isAdmin = userRole === "ADMIN";
@@ -102,7 +107,10 @@ export function MobileNav({
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
             <nav className="mt-6 space-y-1">
-              {NAV.filter((n) => !n.adminOnly || isAdmin).map((item) => {
+              {NAV.filter((n) => {
+                if (n.key === "remuneration") return canViewPayroll;
+                return !n.adminOnly || isAdmin;
+              }).map((item) => {
                 const active = pathname.startsWith(item.href);
                 const Icon = item.icon;
                 const messagesBadgeCount =

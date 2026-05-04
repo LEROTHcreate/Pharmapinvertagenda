@@ -8,6 +8,7 @@ import {
   Users,
   CalendarOff,
   BarChart3,
+  Banknote,
   LogOut,
   UserCog,
   LayoutTemplate,
@@ -31,6 +32,7 @@ type NavKey =
   | "messages"
   | "notes"
   | "stats"
+  | "remuneration"
   | "utilisateurs"
   | "parametres";
 type NavItem = {
@@ -49,6 +51,7 @@ const NAV: NavItem[] = [
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
+  { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
   { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },
 ];
@@ -62,6 +65,7 @@ export function Sidebar({
   pendingAbsencesCount = 0,
   unreadSwapMessages = 0,
   unreadTextMessages = 0,
+  canViewPayroll = false,
 }: {
   pharmacyName: string;
   userName: string;
@@ -73,6 +77,8 @@ export function Sidebar({
   unreadSwapMessages?: number;
   /** Messages TEXT non lus reçus par l'utilisateur (badge bleu). */
   unreadTextMessages?: number;
+  /** Affiche l'item "Rémunération" (super-admin OU admin titulaire autorisé). */
+  canViewPayroll?: boolean;
 }) {
   const pathname = usePathname();
   const isAdmin = userRole === "ADMIN";
@@ -112,7 +118,12 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 p-3 space-y-1">
-        {NAV.filter((n) => !n.adminOnly || isAdmin).map((item) => {
+        {NAV.filter((n) => {
+          // Rémunération : visible UNIQUEMENT si l'utilisateur a explicitement
+          // canViewPayroll=true (super-admin OU admin titulaire autorisé).
+          if (n.key === "remuneration") return canViewPayroll;
+          return !n.adminOnly || isAdmin;
+        }).map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;
           // Pour Messages : priorité au badge rouge (créneaux) sur le bleu (texte)

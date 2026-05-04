@@ -1,10 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Lightbulb, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "@/components/layout/AvatarImage";
 import { pickRandomGreeting } from "@/lib/daily-greeting";
+import type { PlanningTip } from "@/lib/planning-tips";
+
+/** Délai avant auto-hide de la bulle de tip à l'ouverture du site (ms). */
+const BUBBLE_AUTO_HIDE_MS = 9000;
 
 /**
  * Bandeau "Bonjour [prénom]" + phrase du jour, affiché en haut du planning.
@@ -33,12 +37,15 @@ export function WelcomeBanner({
   phrase: initialPhrase,
   color,
   avatarId,
+  tips = [],
 }: {
   firstName: string;
   hello: string;
   phrase: string;
   color?: string | null;
   avatarId?: string | null;
+  /** Tips contextuels (pont, veille de férié…) sur les 7 prochains jours. */
+  tips?: PlanningTip[];
 }) {
   const [phrase, setPhrase] = useState(initialPhrase);
   // Compteur d'animation : sert de `key` pour re-trigger les sparkles + bounce
@@ -49,6 +56,38 @@ export function WelcomeBanner({
   // Tracking des clicks rapides (≤ 600 ms entre chaque)
   const lastClickTimeRef = useRef(0);
   const clickStreakRef = useRef(0);
+
+  // ─── Bulle de tip ─────────────────────────────────────────────────
+  // À l'arrivée sur la page, si on a au moins un tip, on ouvre la bulle
+  // automatiquement. Elle s'efface seule après BUBBLE_AUTO_HIDE_MS, ou
+  // immédiatement si l'utilisateur clique dessus / sur l'ampoule. Un
+  // re-clic sur l'ampoule la ré-ouvre (sans timer cette fois — c'est
+  // intentionnel, l'utilisateur l'a demandée).
+  const [bubbleOpen, setBubbleOpen] = useState(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (tips.length === 0) return;
+    setBubbleOpen(true);
+    hideTimerRef.current = setTimeout(() => {
+      setBubbleOpen(false);
+    }, BUBBLE_AUTO_HIDE_MS);
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [tips.length]);
+
+  function dismissBubble() {
+    setBubbleOpen(false);
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }
+  function toggleBubble() {
+    if (bubbleOpen) dismissBubble();
+    else setBubbleOpen(true);
+  }
 
   function handleAvatarClick() {
     const now = Date.now();
@@ -86,14 +125,23 @@ export function WelcomeBanner({
   return (
     <section
       aria-label="Bandeau de bienvenue"
-      className="no-print rounded-2xl border border-border bg-card/80 backdrop-blur-sm px-4 py-3 sm:px-5 sm:py-4 flex items-center gap-3 sm:gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
+      // `relative` permet de pin l'ampoule en position absolue dans le coin
+      // droit, indépendamment du flux flex — comme ça le contenu (avatar +
+      // texte) peut grandir/rétrécir sans jamais décaler l'ampoule.
+      // `pr-14` réserve 56px à droite pour que le texte ne passe pas dessous.
+      className="no-print relative rounded-2xl border border-border bg-card/80 backdrop-blur-sm px-4 py-3 pr-14 sm:px-5 sm:py-4 sm:pr-16 flex items-center gap-3 sm:gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
     >
       {/* Avatar cliquable — wrapper button pour le focus + accessibilité,
-          relative pour positionner les sparkles autour. */}
+          relative pour positionner les sparkles autour.
+          Dimensions FIGÉES (44×44 = h-11 w-11) pour que les animations scale
+          n'affectent jamais la layout box → l'ampoule à droite ne bouge
+          plus, même pendant le bounce/party. `contain: layout` isole le
+          rendu pour empêcher tout reflow extérieur. */}
       <button
         type="button"
         onClick={handleAvatarClick}
-        className="relative shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+        className="relative shrink-0 h-11 w-11 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+        style={{ contain: "layout" }}
         aria-label="Nouvelle phrase du jour"
         title="Cliquez pour une nouvelle phrase"
       >
@@ -101,8 +149,10 @@ export function WelcomeBanner({
           // `key` re-mount le div à chaque click → l'animation se relance.
           key={animKey}
           className={cn(
+            "h-11 w-11",
             partyMode ? "animate-avatar-party" : "animate-avatar-bounce"
           )}
+          style={{ transformOrigin: "center center" }}
         >
           <AvatarImage
             avatarId={avatarId}
@@ -159,11 +209,102 @@ export function WelcomeBanner({
         </p>
       </div>
 
-      {/* Ornement discret — pictogramme côté droit (caché sur mobile) */}
-      <Sparkles
-        className="hidden sm:block h-4 w-4 shrink-0 text-violet-500/70"
-        aria-hidden
-      />
+      {/* Ampoule pinnée en position absolue au coin droit du bandeau.
+          Indépendante du flux flex → l'avatar et le texte peuvent
+          grandir/rétrécir, l'ampoule ne bouge plus jamais. */}
+      {tips.length > 0 ? (
+        <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2">
+          <button
+            type="button"
+            onClick={toggleBubble}
+            aria-label={`${tips.length} info${tips.length > 1 ? "s" : ""} à venir`}
+            aria-expanded={bubbleOpen}
+            className="relative inline-flex h-8 w-8 items-center justify-center rounded-full text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+            title={`${tips.length} info${tips.length > 1 ? "s" : ""} à venir`}
+          >
+            <Lightbulb className="h-4 w-4" />
+            {!bubbleOpen && (
+              <span
+                className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"
+                aria-hidden
+              />
+            )}
+          </button>
+
+          {bubbleOpen && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={dismissBubble}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
+                  e.preventDefault();
+                  dismissBubble();
+                }
+              }}
+              className={cn(
+                "comic-bubble",
+                // right-0 = on aligne le bord droit de la bulle avec le bord
+                // droit du conteneur de l'ampoule. Combiné aux nouvelles
+                // valeurs CSS du triangle, la flèche pointe pile sur l'ampoule.
+                "absolute right-0 top-full mt-3 z-30 w-[280px] sm:w-[320px]",
+                "rounded-2xl border-2 border-amber-300 dark:border-amber-700",
+                "bg-card px-4 py-3 pr-8 text-left shadow-[0_8px_28px_-6px_rgba(0,0,0,0.18)]",
+                "animate-bubble-pop cursor-pointer select-none",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              )}
+              aria-label="Tips à prévoir cette semaine. Cliquer pour fermer."
+            >
+              {/* Croix de fermeture en coin — purement visuelle, le clic se
+                  fait sur toute la bulle pour rester accessible au tap. */}
+              <span
+                aria-hidden
+                className="absolute top-1.5 right-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/60 hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </span>
+
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+                <p className="text-[11px] uppercase tracking-[0.06em] font-semibold text-amber-700 dark:text-amber-400">
+                  À prévoir cette semaine
+                </p>
+              </div>
+
+              <ul className="space-y-2">
+                {tips.map((tip) => (
+                  <li key={tip.date} className="flex items-start gap-2">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "mt-1 inline-flex h-1.5 w-1.5 shrink-0 rounded-full",
+                        tip.level === "warning"
+                          ? "bg-amber-500"
+                          : "bg-violet-500"
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12.5px] font-semibold text-foreground leading-tight">
+                        {tip.title}
+                      </p>
+                      <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-snug">
+                        {tip.description}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        // Ampoule "inactive" (sans tips) — pinnée au même endroit pour
+        // garantir une position visuelle stable peu importe l'état.
+        <Lightbulb
+          className="hidden sm:block absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-amber-500/40"
+          aria-hidden
+        />
+      )}
     </section>
   );
 }

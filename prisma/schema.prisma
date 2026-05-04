@@ -154,6 +154,12 @@ model User {
   passwordResetTokenHash String?
   passwordResetExpires   DateTime?
 
+  // Accès au module Rémunération (page /remuneration). Par défaut false ;
+  // seul le super-admin (admin sans Employee lié, "compte créateur") peut
+  // l'accorder à d'autres admins. Le super-admin a toujours accès implicite.
+  // Les non-admins n'ont jamais accès, peu importe ce flag.
+  canAccessPayroll Boolean @default(false)
+
   pharmacyId String
   pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 
@@ -187,6 +193,12 @@ model Employee {
   displayOrder Int            @default(0)      // Ordre d'affichage dans la grille
   isActive     Boolean        @default(true)
   hireDate     DateTime?
+
+  // Taux horaire BRUT (€) — utilisé par le module /remuneration pour
+  // estimer le coût mensuel. Null tant que pas saisi par l'admin
+  // titulaire avec accès Rémunération. NB : ce n'est PAS un bulletin de
+  // paie légal (cf. clause d'avertissement sur la page).
+  hourlyGrossRate Float?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 

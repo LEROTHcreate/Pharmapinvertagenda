@@ -66,7 +66,19 @@ export function indexEntriesByEmployee(
   return result;
 }
 
-/** Heures travaillées (TASK uniquement) sur une journée pour un collaborateur */
+/**
+ * Heures « comptabilisées » sur une journée pour un collaborateur.
+ *
+ * Inclut :
+ *  - TASK (postes effectivement travaillés)
+ *  - ABSENCE rémunérée : CONGE, MALADIE, FORMATION_ABS — l'employé a
+ *    droit à ces heures dans son décompte hebdo (congés payés, arrêt
+ *    maladie indemnisé, formation prise sur le temps de travail).
+ *
+ * Exclut :
+ *  - ABSENT (sans précision) — le motif n'étant pas validé comme
+ *    rémunéré, on n'incrémente pas le compteur.
+ */
 export function dailyTaskHours(
   employeeId: string,
   isoDate: string,
@@ -76,7 +88,19 @@ export function dailyTaskHours(
   if (!day) return 0;
   let count = 0;
   day.forEach((e) => {
-    if (e.type === ScheduleType.TASK) count++;
+    if (e.type === ScheduleType.TASK) {
+      count++;
+    } else if (
+      e.type === ScheduleType.ABSENCE &&
+      (e.absenceCode === "CONGE" ||
+        e.absenceCode === "MALADIE" ||
+        e.absenceCode === "FORMATION_ABS")
+    ) {
+      // Absence rémunérée → compte comme heures travaillées pour le
+      // décompte du contrat hebdo (sinon le collaborateur en congé
+      // apparaîtrait à -X heures sous son contrat, ce qui est faux).
+      count++;
+    }
   });
   return count * SLOT_HOURS;
 }

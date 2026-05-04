@@ -28,8 +28,19 @@ const MODES: Array<{
     mode: "month",
     label: "Mois",
     icon: CalendarRange,
-    // Le mois contenant cette semaine — format YYYY-MM
-    pathFor: (week) => `/planning/mois?month=${week.slice(0, 7)}`,
+    // Mois cible : on prend SAMEDI (fin de semaine) plutôt que le lundi.
+    // Pour une semaine chevauchant 2 mois (ex. lun. 27 avril → sam. 2 mai),
+    // c'est le mois d'aujourd'hui (mai) que l'utilisateur attend, pas
+    // celui du lundi (avril). Samedi → toujours dans le mois "principal"
+    // de la semaine du point de vue utilisateur.
+    pathFor: (week) => {
+      const monday = new Date(`${week}T00:00:00`);
+      const saturday = new Date(monday);
+      saturday.setDate(monday.getDate() + 5);
+      const yyyy = saturday.getFullYear();
+      const mm = String(saturday.getMonth() + 1).padStart(2, "0");
+      return `/planning/mois?month=${yyyy}-${mm}`;
+    },
   },
 ];
 

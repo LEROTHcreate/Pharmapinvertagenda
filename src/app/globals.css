@@ -887,3 +887,67 @@ html.theme-transition *::after {
     transform: none;
   }
 }
+
+/* ─── Bulle de BD (tip planning) ─────────────────────────────────── */
+/* Petite queue triangulaire qui pointe vers le haut-droit (vers
+   l'ampoule). Double triangle : un avec la couleur du border, l'autre
+   avec la couleur de fond pour masquer le bord supérieur — produit un
+   contour propre comme une bulle de BD classique. */
+.comic-bubble {
+  position: relative;
+}
+.comic-bubble::before,
+.comic-bubble::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+/* Triangle externe (couleur border-amber-300 ou border-amber-700 dark).
+   La pointe doit s'aligner avec le centre du bouton ampoule (32px de large).
+   Bulle alignée à `right-0` du conteneur ampoule → centre ampoule à 16px
+   du bord droit de la bulle. Triangle = 18px de large (9px+9px), pointe au
+   centre → pour pointe à 16px, on positionne `right: 7px` (16 - 9). */
+.comic-bubble::before {
+  top: -10px;
+  right: 7px;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 10px solid rgb(252 211 77); /* amber-300 */
+}
+.dark .comic-bubble::before {
+  border-bottom-color: rgb(180 83 9); /* amber-700 */
+}
+/* Triangle interne (couleur du fond — masque le bord du triangle externe
+   pour donner l'illusion d'une queue continue). Largeur 14px → `right: 9px`
+   pour que sa pointe s'aligne aussi à 16px du bord droit. */
+.comic-bubble::after {
+  top: -7px;
+  right: 9px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 8px solid hsl(var(--card));
+}
+
+/* Pop "cartoon" de la bulle quand elle apparaît */
+.animate-bubble-pop {
+  opacity: 0;
+  transform: scale(0.85) translateY(-4px);
+  animation: bubble-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: top right;
+}
+@keyframes bubble-pop {
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bubble-pop {
+    opacity: 1;
+    transform: none;
+    animation: none !important;
+  }
+}

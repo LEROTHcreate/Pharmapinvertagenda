@@ -10,6 +10,7 @@ import {
   pickRandomGreeting,
   timeBasedHello,
 } from "@/lib/daily-greeting";
+import { upcomingTips } from "@/lib/planning-tips";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +136,9 @@ export default async function PlanningPage({
   const todayIso = toIsoDate(new Date());
   const phrase = pickRandomGreeting(todayIso);
   const hello = timeBasedHello();
+  // Tips contextuels (ponts, veilles de fériés) sur les 7 prochains jours
+  // → affichés dans le popover de l'étoile à droite du bandeau.
+  const tips = upcomingTips(todayIso, 7);
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -144,6 +148,7 @@ export default async function PlanningPage({
         phrase={phrase}
         color={sessionEmployee?.displayColor}
         avatarId={sessionUser?.avatarId ?? null}
+        tips={tips}
       />
       <PlanningView
         initialWeekStart={weekStartIso}
