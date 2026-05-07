@@ -15,6 +15,7 @@ import type { ConversationDTO, MessageDTO } from "@/types/messaging";
 import { SwapCard } from "@/components/messages/SwapCard";
 import { SwapProposalDialog } from "@/components/messages/SwapProposalDialog";
 import { AvatarImage } from "@/components/layout/AvatarImage";
+import { FEATURES } from "@/lib/features";
 
 type Props = {
   conversation: ConversationDTO;
@@ -162,11 +163,11 @@ export function ConversationPanel({
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
         {loading && messages.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/70" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center text-sm text-muted-foreground/70 py-12">
+          <div className="text-center text-sm text-muted-foreground/70 py-8">
             Aucun message. Soyez le premier à écrire.
           </div>
         ) : (
@@ -268,15 +269,32 @@ export function ConversationPanel({
             </div>
           )}
           <div className="flex items-end gap-2">
-            <button
-              onClick={() => setSwapOpen(true)}
-              disabled={!otherMember && !conversation.isGroup}
-              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted hover:bg-zinc-200 px-3 py-1.5 text-[12px] font-medium text-foreground/85 transition disabled:opacity-50"
-              title="Demander un échange de créneau"
-            >
-              <ArrowLeftRight className="h-3.5 w-3.5" />
-              Échange
-            </button>
+            {FEATURES.shiftSwap ? (
+              <button
+                onClick={() => setSwapOpen(true)}
+                disabled={!otherMember && !conversation.isGroup}
+                className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted hover:bg-zinc-200 px-3 py-1.5 text-[12px] font-medium text-foreground/85 transition disabled:opacity-50"
+                title="Demander un échange de créneau"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                Échange
+              </button>
+            ) : (
+              // Feature en travaux : bouton désactivé + tooltip explicatif.
+              // Le code complet (dialog, API, composants) est conservé pour
+              // réactivation rapide via FEATURES.shiftSwap = true.
+              <button
+                disabled
+                className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted/50 px-3 py-1.5 text-[12px] font-medium text-muted-foreground/60 cursor-not-allowed"
+                title="Fonction en cours de développement"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                Échange
+                <span className="ml-1 rounded-sm bg-amber-100 dark:bg-amber-950/40 px-1 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  Travaux
+                </span>
+              </button>
+            )}
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

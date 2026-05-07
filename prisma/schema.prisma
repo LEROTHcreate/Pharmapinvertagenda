@@ -160,6 +160,12 @@ model User {
   // Les non-admins n'ont jamais accès, peu importe ce flag.
   canAccessPayroll Boolean @default(false)
 
+  // Compte "Support PharmaPlanning" : visible comme contact dans toutes les
+  // pharmacies. Permet aux utilisateurs de toute pharmacie d'écrire au
+  // programmeur du site pour signaler un bug ou poser une question.
+  // Le multi-tenant standard reste appliqué pour tous les autres comptes.
+  isGlobalSupport Boolean @default(false)
+
   pharmacyId String
   pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 

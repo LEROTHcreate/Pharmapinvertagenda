@@ -83,7 +83,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
   }, [month, fetchPayroll]);
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-3 md:p-4 space-y-4">
       {/* En-tête */}
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
@@ -152,7 +152,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
       {/* Tableau des lignes */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
+          <div className="flex items-center justify-center py-10">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : lines.length === 0 ? (

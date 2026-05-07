@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { GripVertical } from "lucide-react";
 import {
   DndContext,
   MouseSensor,
@@ -51,6 +52,19 @@ export function makeCellKey(
   timeSlot: string
 ): CellKey {
   return `${employeeId}|${date}|${timeSlot}`;
+}
+
+/** Préfixe d'ID pour les drags de colonne (réordonnancement des collaborateurs).
+ *  Évite toute collision avec les CellKey (qui contiennent des `|`). */
+const COL_ID_PREFIX = "col:";
+function colId(employeeId: string): string {
+  return `${COL_ID_PREFIX}${employeeId}`;
+}
+function isColId(id: string | number): boolean {
+  return typeof id === "string" && id.startsWith(COL_ID_PREFIX);
+}
+function colIdToEmployeeId(id: string): string {
+  return id.slice(COL_ID_PREFIX.length);
 }
 
 /** Tooltip lisible avec la répartition par poste pour un créneau donné */
@@ -112,6 +126,13 @@ type Props = {
     source: ParsedCell,
     target: ParsedCell
   ) => void;
+  /**
+   * Réordonnancement des colonnes (admin desktop). Si fourni, une poignée
+   * de drag apparaît au hover de chaque en-tête. Le parent reçoit la
+   * nouvelle liste d'ids dans l'ordre voulu et fait l'optimistic update +
+   * appel API.
+   */
+  onReorderColumns?: (orderedIds: string[]) => void;
 };
 
 export const PlanningGrid = memo(function PlanningGrid({
@@ -129,8 +150,13 @@ export const PlanningGrid = memo(function PlanningGrid({
   currentEmployeeId,
   onMoveTask,
   onMoveBlock,
+  onReorderColumns,
 }: Props) {
   const dndEnabled = canEdit && !!onMoveTask;
+  // Réordonnancement de colonnes : desktop uniquement (sur tactile, l'écran
+  // est trop étroit et le long-press est déjà pris par le déplacement de
+  // tâche). Activé seulement si le parent fournit un handler.
+  const colReorderEnabled = canEdit && !!onReorderColumns;
 
   // Détection device tactile : `(pointer: coarse)` couvre téléphone + tablette.
   // SSR-safe (le matchMedia n'existe que côté client).
@@ -235,6 +261,10 @@ export const PlanningGrid = memo(function PlanningGrid({
     null
   );
 
+  // ID de la colonne actuellement draggée — sert à styler la source en
+  // transparence et à mettre la cible en surbrillance pendant le réordon.
+  const [draggingColId, setDraggingColId] = useState<string | null>(null);
+
   // Feedback haptique léger (15ms) + détection du bloc au démarrage du drag.
   const handleDragStart = useCallback(
     (event: { active: { id: string | number } }) => {
@@ -244,6 +274,11 @@ export const PlanningGrid = memo(function PlanningGrid({
         } catch {
           /* ignored */
         }
+      }
+      // Drag de colonne → on retient l'id pour styler la source ; pas de bloc.
+      if (isColId(event.active.id)) {
+        setDraggingColId(colIdToEmployeeId(event.active.id as string));
+        return;
       }
       const source = parseCellKey(event.active.id as string);
       const block = computeBlock(source);
@@ -261,9 +296,28 @@ export const PlanningGrid = memo(function PlanningGrid({
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveBlockKeys(null);
+      setDraggingColId(null);
       const { active, over } = event;
       if (!over || !active) return;
       if (active.id === over.id) return;
+
+      // ── Drag de colonne (réordonnancement des collaborateurs) ───────
+      if (isColId(active.id) && isColId(over.id) && onReorderColumns) {
+        const sourceEmpId = colIdToEmployeeId(active.id as string);
+        const targetEmpId = colIdToEmployeeId(over.id as string);
+        const fromIdx = employees.findIndex((e) => e.id === sourceEmpId);
+        const toIdx = employees.findIndex((e) => e.id === targetEmpId);
+        if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+        const next = employees.slice();
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        onReorderColumns(next.map((e) => e.id));
+        return;
+      }
+      // Mix col/cell : on ignore (un drag colonne sur une cellule, ou
+      // l'inverse, n'a pas de sens métier).
+      if (isColId(active.id) || isColId(over.id)) return;
+
       const source = parseCellKey(active.id as string);
       const target = parseCellKey(over.id as string);
       const block = computeBlock(source);
@@ -275,12 +329,13 @@ export const PlanningGrid = memo(function PlanningGrid({
         onMoveTask(source, target);
       }
     },
-    [computeBlock, onMoveTask, onMoveBlock]
+    [computeBlock, onMoveTask, onMoveBlock, onReorderColumns, employees]
   );
 
   // Si l'utilisateur annule (esc ou drop hors zone), nettoie le state.
   const handleDragCancel = useCallback(() => {
     setActiveBlockKeys(null);
+    setDraggingColId(null);
   }, []);
   const dragRef = useRef<{
     startEmpIdx: number;
@@ -474,9 +529,20 @@ export const PlanningGrid = memo(function PlanningGrid({
           // au prix de la lisibilité des labels dans les cellules.
           className={cn(
             "w-full border-collapse text-[10.5px] sm:text-[12px]",
+            // Largeurs colonnes adaptatives par breakpoint, calibrées pour
+            // que 17 collaborateurs tiennent sur l'écran sans scroll H :
+            //   mobile (<640px)  : 28px — vue compacte (scroll H accepté)
+            //   sm (640-767px)   : 42px — vue tablette confortable
+            //   md (768-1023px)  : sidebar visible 256px → 36px par col
+            //   lg (1024-1279px) : sidebar 256 → ~38px par col (laptop 1024)
+            //   xl (1280-1535px) : sidebar 256 → ~50px par col (laptop 1280+)
+            //   2xl (≥1536px)    : sidebar 256 → ~64px par col (Full HD+)
             "[--col-w:28px] [--time-w:36px] [--eff-w:28px]",
             "sm:[--col-w:42px] sm:[--time-w:44px] sm:[--eff-w:36px]",
-            "md:[--col-w:56px] md:[--time-w:52px] md:[--eff-w:44px]"
+            "md:[--col-w:32px] md:[--time-w:38px] md:[--eff-w:30px]",
+            "lg:[--col-w:40px] lg:[--time-w:44px] lg:[--eff-w:34px]",
+            "xl:[--col-w:50px] xl:[--time-w:48px] xl:[--eff-w:40px]",
+            "2xl:[--col-w:64px] 2xl:[--time-w:52px] 2xl:[--eff-w:44px]"
           )}
           style={{
             tableLayout: "fixed",
@@ -503,78 +569,21 @@ export const PlanningGrid = memo(function PlanningGrid({
                 const dailyH = h?.dailyH ?? 0;
                 const weeklyH = h?.weeklyH ?? 0;
                 const delta = weeklyH - e.weeklyHours;
-
                 const isMe = !!currentEmployeeId && e.id === currentEmployeeId;
+                const weekStartDate = weekDates[0] ?? "";
 
                 return (
-                  <th
+                  <HeaderCell
                     key={e.id}
-                    className={cn(
-                      "px-1 pt-2.5 pb-2 align-top overflow-hidden relative",
-                      // Lane "ma colonne" — cream warm très subtil, façon Apple Notes
-                      isMe &&
-                        "bg-gradient-to-b from-amber-50/70 via-amber-50/40 to-transparent"
-                    )}
-                    title={`${e.firstName} ${e.lastName} · ${STATUS_LABELS[e.status]} · contrat ${e.weeklyHours}h · jour ${dailyH.toFixed(1)}h · semaine ${weeklyH.toFixed(1)}h${
-                      Math.abs(delta) >= 0.5 ? ` (${delta > 0 ? "+" : ""}${delta.toFixed(1)}h)` : ""
-                    } — Cliquer pour voir son planning`}
-                  >
-                    {/* Lien vers la fiche planning du collaborateur — la
-                        plage horaire reprend la semaine courante */}
-                    <Link
-                      href={`/planning/collaborateur/${e.id}?view=week&week=${weekDates[0] ?? ""}`}
-                      className="flex flex-col items-stretch gap-0.5 min-w-0 rounded-md px-1 -mx-1 py-1 -my-1 hover:bg-muted/40 transition-colors cursor-pointer"
-                    >
-                      {/* Nom + pastille couleur (légèrement renforcés sur ma colonne) */}
-                      <div className="flex items-center gap-1 justify-center min-w-0">
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "rounded-full shrink-0",
-                            isMe ? "h-2 w-2 ring-2 ring-white" : "h-1.5 w-1.5"
-                          )}
-                          style={{ background: e.displayColor }}
-                        />
-                        <span
-                          className={cn(
-                            "truncate text-[12px] tracking-tight text-foreground",
-                            isMe ? "font-semibold" : "font-semibold"
-                          )}
-                        >
-                          {e.firstName}
-                        </span>
-                      </div>
-                      {/* Statut */}
-                      <span className="text-[9px] uppercase tracking-[0.04em] text-muted-foreground/70 font-medium text-center truncate">
-                        {STATUS_LABELS[e.status]}
-                      </span>
-                      {/* Stats compactes : jour · cumul (delta) */}
-                      <div className="mt-0.5 flex items-center justify-center gap-0.5 font-mono text-[9.5px] text-muted-foreground truncate tabular-nums">
-                        <span className="text-foreground/85">
-                          {dailyH.toFixed(1)}
-                        </span>
-                        <span className="text-muted-foreground/40 mx-0.5">›</span>
-                        <span
-                          className={cn(
-                            "font-medium",
-                            Math.abs(delta) < 0.5
-                              ? "text-foreground/85"
-                              : delta > 0
-                                ? "text-rose-600"
-                                : "text-amber-600"
-                          )}
-                        >
-                          {weeklyH.toFixed(1)}
-                          {Math.abs(delta) >= 0.5 && (
-                            <span className="ml-0.5">
-                              {delta > 0 ? "+" : ""}
-                              {delta.toFixed(0)}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    </Link>
-                  </th>
+                    employee={e}
+                    dailyH={dailyH}
+                    weeklyH={weeklyH}
+                    delta={delta}
+                    isMe={isMe}
+                    weekStartDate={weekStartDate}
+                    colReorderEnabled={colReorderEnabled}
+                    isDragging={draggingColId === e.id}
+                  />
                 );
               })}
               <th className="sticky right-0 z-20 bg-card/95 backdrop-blur-md px-3 py-3 w-12 min-w-12 align-bottom">
@@ -658,6 +667,8 @@ export const PlanningGrid = memo(function PlanningGrid({
                       (overtimeCells?.has(makeCellKey(emp.id, date, prevSlot)) ?? false);
                     const nextOvertime = !!nextSlot &&
                       (overtimeCells?.has(makeCellKey(emp.id, date, nextSlot)) ?? false);
+                    // Toute la colonne se "soulève" pendant un drag de réordonnancement
+                    const isInDragSourceCol = !!draggingColId && draggingColId === emp.id;
                     return (
                       <Cell
                         key={emp.id}
@@ -678,6 +689,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         isNextOvertime={nextOvertime}
                         isRecent={isRecent}
                         isMyColumn={isMyColumn}
+                        isInDragSourceCol={isInDragSourceCol}
                         onMouseDown={handleCellMouseDown}
                         onMouseEnter={handleCellMouseEnter}
                         onMouseUp={handleCellMouseUp}
@@ -699,11 +711,30 @@ export const PlanningGrid = memo(function PlanningGrid({
                       <TooltipTrigger asChild>
                         <span
                           className={cn(
-                            "inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-[10.5px] font-semibold tabular-nums cursor-help",
-                            level === "ok" && "bg-emerald-50 text-emerald-700",
-                            level === "warning" && "bg-amber-50 text-amber-700",
-                            level === "critical" && "bg-rose-50 text-rose-700"
+                            "inline-flex items-center justify-center rounded-full font-semibold tabular-nums cursor-help transition-all",
+                            // OK (≥ seuil) : discret pour ne pas surcharger
+                            // l'œil quand tout va bien.
+                            level === "ok" &&
+                              "min-w-[22px] h-5 px-1.5 text-[10.5px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+                            // WARNING (2-3 si min=4) : badge plein ambre +
+                            // texte blanc + ring → visible d'un coup d'œil.
+                            level === "warning" &&
+                              "min-w-[24px] h-[22px] px-1.5 text-[11px] bg-amber-500 text-white ring-2 ring-amber-200 dark:ring-amber-900/50 shadow-sm",
+                            // CRITICAL avec staff > 0 : rouge saturé.
+                            // CRITICAL avec staff === 0 : rouge sombre +
+                            // pulse → flash quand personne au comptoir.
+                            level === "critical" &&
+                              staff > 0 &&
+                              "min-w-[24px] h-[22px] px-1.5 text-[11px] bg-rose-500 text-white ring-2 ring-rose-200 dark:ring-rose-900/50 shadow-sm",
+                            level === "critical" &&
+                              staff === 0 &&
+                              "min-w-[24px] h-[22px] px-1.5 text-[11px] bg-red-600 text-white ring-2 ring-red-300 dark:ring-red-900/60 shadow-md animate-pulse"
                           )}
+                          aria-label={
+                            staff === 0
+                              ? "Aucun pharmacien/préparateur ce créneau"
+                              : `${staff} au comptoir`
+                          }
                         >
                           {staff}
                         </span>
@@ -722,7 +753,9 @@ export const PlanningGrid = memo(function PlanningGrid({
     </div>
   );
 
-  if (!dndEnabled) return grid;
+  // DndContext nécessaire dès que l'une des deux DnD est active : drag de
+  // cellule (déplacement de tâche) OU drag de colonne (réordonnancement).
+  if (!dndEnabled && !colReorderEnabled) return grid;
 
   return (
     <DndContext
@@ -758,6 +791,7 @@ const Cell = memo(function Cell({
   isNextOvertime,
   isRecent,
   isMyColumn,
+  isInDragSourceCol,
   onMouseDown,
   onMouseEnter,
   onMouseUp,
@@ -780,6 +814,9 @@ const Cell = memo(function Cell({
   isNextOvertime: boolean;
   isRecent: boolean;
   isMyColumn: boolean;
+  /** True quand cette cellule appartient à la colonne en cours de drag de
+   *  réordonnancement → on baisse l'opacité pour signaler "tout ce bloc bouge". */
+  isInDragSourceCol: boolean;
   onMouseDown: (e: React.MouseEvent, empIdx: number, slotIdx: number) => void;
   onMouseEnter: (empIdx: number, slotIdx: number) => void;
   onMouseUp: (empIdx: number, slotIdx: number) => void;
@@ -833,6 +870,9 @@ const Cell = memo(function Cell({
 
   const baseClasses = cn(
     "px-1 h-9 text-center font-medium text-[11px] transition-all relative",
+    // Toute la colonne en cours de réordonnancement → semi-transparente,
+    // pour que l'admin voie clairement quel bloc complet est en train d'être déplacé.
+    isInDragSourceCol && "opacity-40",
     canEdit && "cursor-pointer",
     // Quand Alt est tenu sur souris + cellule TASK draggable, on change
     // le curseur en "grab" pour indiquer "tu peux déplacer le bloc".
@@ -1003,5 +1043,152 @@ const Cell = memo(function Cell({
       {...handlers}
       className={cn(baseClasses, isMyColumn && "bg-amber-50/50")}
     />
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/*                          HeaderCell component                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * En-tête de colonne (un par collaborateur). Affiche prénom, statut, heures.
+ * Quand `colReorderEnabled` est vrai, une poignée de drag (GripVertical)
+ * apparaît au hover en haut à gauche de la cellule — l'admin peut alors
+ * traîner la colonne sur une autre pour réordonner.
+ *
+ * Le drag n'est attaché QU'à la poignée (et pas au <th> entier) pour ne
+ * pas casser le clic du <Link> qui mène à la fiche planning du collaborateur.
+ * Le <th> entier est en revanche droppable, pour qu'on puisse lâcher
+ * n'importe où sur la colonne cible (UX plus tolérante).
+ */
+const HeaderCell = memo(function HeaderCell({
+  employee,
+  dailyH,
+  weeklyH,
+  delta,
+  isMe,
+  weekStartDate,
+  colReorderEnabled,
+  isDragging,
+}: {
+  employee: EmployeeDTO;
+  dailyH: number;
+  weeklyH: number;
+  delta: number;
+  isMe: boolean;
+  weekStartDate: string;
+  colReorderEnabled: boolean;
+  isDragging: boolean;
+}) {
+  const draggable = useDraggable({
+    id: colId(employee.id),
+    disabled: !colReorderEnabled,
+  });
+  const droppable = useDroppable({
+    id: colId(employee.id),
+    disabled: !colReorderEnabled,
+  });
+
+  const setNodeRef = (node: HTMLElement | null) => {
+    draggable.setNodeRef(node);
+    droppable.setNodeRef(node);
+  };
+
+  // Surbrillance quand une autre colonne survole celle-ci → indication
+  // visuelle "tu vas insérer ici". On masque l'indicateur si c'est la
+  // colonne en cours de drag elle-même (sinon ring redondant).
+  const isDropTarget = droppable.isOver && !isDragging;
+
+  return (
+    <th
+      ref={setNodeRef}
+      className={cn(
+        "px-1 pt-2.5 pb-2 align-top overflow-hidden relative group/col transition-all",
+        // Lane "ma colonne" — cream warm très subtil, façon Apple Notes
+        isMe &&
+          "bg-gradient-to-b from-amber-50/70 via-amber-50/40 to-transparent",
+        // Source en cours de drag → semi-transparente
+        isDragging && "opacity-40",
+        // Cible survolée → rail violet à gauche pour signaler l'insertion
+        isDropTarget && "ring-2 ring-violet-500/70 ring-inset bg-violet-50/60"
+      )}
+      title={`${employee.firstName} ${employee.lastName} · ${STATUS_LABELS[employee.status]} · contrat ${employee.weeklyHours}h · jour ${dailyH.toFixed(1)}h · semaine ${weeklyH.toFixed(1)}h${
+        Math.abs(delta) >= 0.5 ? ` (${delta > 0 ? "+" : ""}${delta.toFixed(1)}h)` : ""
+      }${colReorderEnabled ? " — Glisser la poignée pour réordonner" : " — Cliquer pour voir son planning"}`}
+    >
+      {/* Poignée de drag — visible uniquement au hover, et seulement si
+          le réordonnancement est activé. Position absolute pour ne pas
+          repousser le contenu du header. */}
+      {colReorderEnabled && (
+        <button
+          type="button"
+          ref={draggable.setActivatorNodeRef}
+          {...draggable.listeners}
+          {...draggable.attributes}
+          aria-label={`Réordonner ${employee.firstName}`}
+          className={cn(
+            "absolute top-1 left-1 z-10 inline-flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/50",
+            "opacity-0 group-hover/col:opacity-100 transition-opacity",
+            "hover:bg-violet-100 hover:text-violet-700",
+            "cursor-grab active:cursor-grabbing",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+          )}
+        >
+          <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      )}
+
+      {/* Lien vers la fiche planning du collaborateur */}
+      <Link
+        href={`/planning/collaborateur/${employee.id}?view=week&week=${weekStartDate}`}
+        className="flex flex-col items-stretch gap-0.5 min-w-0 rounded-md px-1 -mx-1 py-1 -my-1 hover:bg-muted/40 transition-colors cursor-pointer"
+        // Pendant un drag de colonne, on évite que le clic Link ne se
+        // déclenche par accident à la fin du drag (si l'utilisateur
+        // relâche au point de départ par exemple).
+        draggable={false}
+      >
+        {/* Nom + pastille couleur */}
+        <div className="flex items-center gap-1 justify-center min-w-0">
+          <span
+            aria-hidden
+            className={cn(
+              "rounded-full shrink-0",
+              isMe ? "h-2 w-2 ring-2 ring-white" : "h-1.5 w-1.5"
+            )}
+            style={{ background: employee.displayColor }}
+          />
+          <span className="truncate text-[12px] tracking-tight text-foreground font-semibold">
+            {employee.firstName}
+          </span>
+        </div>
+        {/* Statut */}
+        <span className="text-[9px] uppercase tracking-[0.04em] text-muted-foreground/70 font-medium text-center truncate">
+          {STATUS_LABELS[employee.status]}
+        </span>
+        {/* Stats compactes : jour · cumul (delta) */}
+        <div className="mt-0.5 flex items-center justify-center gap-0.5 font-mono text-[9.5px] text-muted-foreground truncate tabular-nums">
+          <span className="text-foreground/85">{dailyH.toFixed(1)}</span>
+          <span className="text-muted-foreground/40 mx-0.5">›</span>
+          <span
+            className={cn(
+              "font-medium",
+              Math.abs(delta) < 0.5
+                ? "text-foreground/85"
+                : delta > 0
+                  ? "text-rose-600"
+                  : "text-amber-600"
+            )}
+          >
+            {weeklyH.toFixed(1)}
+            {Math.abs(delta) >= 0.5 && (
+              <span className="ml-0.5">
+                {delta > 0 ? "+" : ""}
+                {delta.toFixed(1)}
+              </span>
+            )}
+          </span>
+        </div>
+      </Link>
+    </th>
   );
 });

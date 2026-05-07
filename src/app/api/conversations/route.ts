@@ -22,14 +22,24 @@ export async function GET(req: Request) {
   const all = url.searchParams.get("all") === "1";
   const isAdmin = session.user.role === "ADMIN";
 
+  // Le compte Support PharmaPlanning voit toutes ses conversations, quelle
+  // que soit la pharmacie d'origine — il accompagne plusieurs officines.
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isGlobalSupport: true },
+  });
+  const isSupport = me?.isGlobalSupport === true;
+
   // Mode "all" : seulement pour admin (shadow access pour modération)
   const where =
     all && isAdmin
       ? { pharmacyId: session.user.pharmacyId }
-      : {
-          pharmacyId: session.user.pharmacyId,
-          members: { some: { userId: session.user.id } },
-        };
+      : isSupport
+        ? { members: { some: { userId: session.user.id } } }
+        : {
+            pharmacyId: session.user.pharmacyId,
+            members: { some: { userId: session.user.id } },
+          };
 
   const conversations = await prisma.conversation.findMany({
     where,
@@ -136,13 +146,17 @@ export async function POST(req: Request) {
     );
   }
 
-  // Vérifie que tous les membres appartiennent à la même pharmacie
+  // Vérifie que tous les membres sont accessibles : soit dans la même
+  // pharmacie, soit comptes "Support PharmaPlanning" cross-pharmacy.
   const targetUsers = await prisma.user.findMany({
     where: {
       id: { in: memberIds },
-      pharmacyId: session.user.pharmacyId,
       isActive: true,
       status: "APPROVED",
+      OR: [
+        { pharmacyId: session.user.pharmacyId },
+        { isGlobalSupport: true },
+      ],
     },
     select: { id: true },
   });

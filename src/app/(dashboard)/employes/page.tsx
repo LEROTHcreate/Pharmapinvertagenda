@@ -42,8 +42,8 @@ export default async function EmployesPage() {
   }));
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl">
-      <header className="mb-6 flex items-center justify-between gap-4">
+    <div className="p-3 sm:p-4 lg:p-6 max-w-6xl">
+      <header className="mb-4 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Équipe</h1>
           <p className="text-sm text-muted-foreground">

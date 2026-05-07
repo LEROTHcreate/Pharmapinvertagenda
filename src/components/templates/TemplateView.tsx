@@ -342,7 +342,7 @@ export function TemplateView({
   );
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-3 md:p-4 space-y-4">
       {/* En-tête */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -499,7 +499,7 @@ export function TemplateView({
 
       {/* Barre flottante multi-sélection */}
       {multiSelection.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border bg-card shadow-2xl px-4 py-2.5">
+        <div className="fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border bg-card shadow-2xl px-4 py-2.5">
           <span className="text-sm">
             <span className="font-semibold">{multiSelection.size}</span>{" "}
             <span className="text-muted-foreground">sélectionné(s)</span>

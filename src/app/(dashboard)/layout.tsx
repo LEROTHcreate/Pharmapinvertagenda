@@ -9,8 +9,10 @@ import {
   getPharmacyHeader,
 } from "@/lib/dashboard-data";
 import { canViewPayroll } from "@/lib/payroll-permissions";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { PageTransition } from "@/components/layout/PageTransition";
 
 export default async function DashboardLayout({
@@ -93,10 +95,29 @@ export default async function DashboardLayout({
         unreadTextMessages={messagesUnread.text}
         canViewPayroll={canSeePayroll}
       />
-      <main className="flex-1 min-w-0 overflow-x-hidden">
+      <main
+        className={cn(
+          "flex-1 min-w-0 overflow-x-hidden",
+          // Espace en bas sur mobile pour que le contenu ne passe pas sous
+          // la tab bar fixe (~56px) + safe-area iOS. Desktop : pas besoin.
+          "pb-[calc(60px+env(safe-area-inset-bottom,0px))] md:pb-0"
+        )}
+      >
         {/* Fade-up subtil à chaque navigation entre routes */}
         <PageTransition>{children}</PageTransition>
       </main>
+
+      {/* Tab bar mobile — fixée en bas, pouce-friendly. Visible uniquement
+          sur mobile (md:hidden interne). Les pages secondaires admin
+          (Gabarits, Stats, Rémunération, Utilisateurs, Paramètres) restent
+          accessibles via le burger MobileNav en haut à gauche. */}
+      <MobileTabBar
+        userRole={session.user.role}
+        pendingAbsencesCount={pendingAbsencesCount}
+        pendingSwapsCount={pendingSwapsCount}
+        unreadSwapMessages={messagesUnread.swap}
+        unreadTextMessages={messagesUnread.text}
+      />
     </div>
   );
 }

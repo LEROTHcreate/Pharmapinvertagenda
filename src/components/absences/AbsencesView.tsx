@@ -122,7 +122,7 @@ export function AbsencesView({ currentUser }: Props) {
   });
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-3 md:p-4 space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight">Absences</h1>
@@ -154,11 +154,11 @@ export function AbsencesView({ currentUser }: Props) {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : sorted.length === 0 ? (
-        <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground text-sm">
+        <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground text-sm">
           Aucune demande d'absence pour le moment.
           {canSubmit && (
             <p className="mt-2 text-xs">

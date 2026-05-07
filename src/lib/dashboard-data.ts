@@ -33,9 +33,12 @@ export const getPendingUsersCount = (pharmacyId: string) =>
     { tags: [`users-pending:${pharmacyId}`], revalidate: 30 }
   )();
 
-/** Compte les demandes d'échange en attente de validation admin (pour le badge sidebar). */
-export const getPendingSwapsCount = (pharmacyId: string) =>
-  unstable_cache(
+/** Compte les demandes d'échange en attente de validation admin (pour le badge sidebar).
+ *  Renvoie 0 si la feature shiftSwap est désactivée — pas de badge fantôme. */
+export const getPendingSwapsCount = async (pharmacyId: string) => {
+  const { FEATURES } = await import("@/lib/features");
+  if (!FEATURES.shiftSwap) return 0;
+  return unstable_cache(
     async () => {
       return prisma.shiftSwapRequest.count({
         where: { pharmacyId, status: "PENDING_ADMIN" },
@@ -44,6 +47,7 @@ export const getPendingSwapsCount = (pharmacyId: string) =>
     ["swaps-pending-count", pharmacyId],
     { tags: [`swaps-pending:${pharmacyId}`], revalidate: 30 }
   )();
+};
 
 /** Compte les demandes d'absence en attente de validation admin. */
 export const getPendingAbsencesCount = (pharmacyId: string) =>

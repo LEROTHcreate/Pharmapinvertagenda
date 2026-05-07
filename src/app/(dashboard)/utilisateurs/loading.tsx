@@ -1,7 +1,7 @@
 export default function UtilisateursLoading() {
   return (
-    <div className="max-w-5xl p-4 sm:p-6 lg:p-8">
-      <div className="animate-pulse space-y-8">
+    <div className="max-w-5xl p-3 sm:p-4 lg:p-6">
+      <div className="animate-pulse space-y-5">
         {/* Header */}
         <div className="space-y-2">
           <div className="h-7 w-44 rounded-md bg-zinc-200/80" />

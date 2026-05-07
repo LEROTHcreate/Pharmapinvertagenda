@@ -10,17 +10,32 @@ export default async function MessagesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  // Liste des contacts (autres utilisateurs actifs de la pharmacie)
-  // — pour le modal "Nouvelle conversation"
+  // Liste des contacts : autres utilisateurs actifs de la même pharmacie,
+  // PLUS les comptes "Support PharmaPlanning" (cross-pharmacy) pour qu'un
+  // utilisateur de n'importe quelle officine puisse écrire au programmeur.
   const contacts = await prisma.user.findMany({
     where: {
-      pharmacyId: session.user.pharmacyId,
-      isActive: true,
-      status: "APPROVED",
-      id: { not: session.user.id },
+      AND: [
+        { id: { not: session.user.id } },
+        { isActive: true },
+        { status: "APPROVED" },
+        {
+          OR: [
+            { pharmacyId: session.user.pharmacyId },
+            { isGlobalSupport: true },
+          ],
+        },
+      ],
     },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, email: true, role: true },
+    // Support en haut, puis tri alphabétique
+    orderBy: [{ isGlobalSupport: "desc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isGlobalSupport: true,
+    },
   });
 
   return (

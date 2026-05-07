@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { rejectSwapInput } from "@/validators/swap";
+import { featureGate } from "@/lib/features";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,8 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
+  const gate = featureGate("shiftSwap");
+  if (gate) return gate;
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

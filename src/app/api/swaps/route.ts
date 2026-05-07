@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createSwapInput } from "@/validators/swap";
+import { featureGate } from "@/lib/features";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,8 @@ export const runtime = "nodejs";
  * même conversation. Crée aussi un Message de type SWAP_REQUEST associé.
  */
 export async function POST(req: Request) {
+  const gate = featureGate("shiftSwap");
+  if (gate) return gate;
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -96,6 +99,8 @@ export async function POST(req: Request) {
  * un collaborateur voit ses propres demandes (faites OU reçues).
  */
 export async function GET(req: Request) {
+  const gate = featureGate("shiftSwap");
+  if (gate) return gate;
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

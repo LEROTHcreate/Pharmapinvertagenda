@@ -4,8 +4,8 @@
  */
 export default function DashboardLoading() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="animate-pulse space-y-6">
+    <div className="p-3 sm:p-4 lg:p-6">
+      <div className="animate-pulse space-y-4">
         {/* Header */}
         <div className="space-y-2">
           <div className="h-7 w-44 rounded-md bg-zinc-200/80" />

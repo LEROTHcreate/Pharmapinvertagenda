@@ -70,7 +70,7 @@ export function GabaritsList({ rows }: { rows: GabaritRow[] }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {error && (
         <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-inset ring-red-100">
           {error}

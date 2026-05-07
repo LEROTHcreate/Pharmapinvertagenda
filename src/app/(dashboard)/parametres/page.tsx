@@ -25,7 +25,7 @@ export default async function ParametresPage() {
   if (!pharmacy) redirect("/planning");
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl space-y-5">
+    <div className="p-3 md:p-4 max-w-2xl space-y-5">
       <header>
         <h1 className="text-xl md:text-2xl font-bold tracking-tight">
           Paramètres

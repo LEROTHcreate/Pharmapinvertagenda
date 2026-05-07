@@ -107,7 +107,7 @@ export function EmployeesTable({
               <tr>
                 <td
                   colSpan={7}
-                  className="px-3 py-12 text-center text-muted-foreground"
+                  className="px-3 py-8 text-center text-muted-foreground"
                 >
                   Aucun collaborateur. Cliquez sur « Nouveau collaborateur » pour commencer.
                 </td>

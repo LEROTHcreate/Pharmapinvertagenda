@@ -123,7 +123,7 @@ export default async function ProfilPage() {
   const weekDelta = employee ? weekHours - employee.weeklyHours : 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-3xl">
+    <div className="p-3 md:p-4 space-y-4 max-w-3xl">
       <div>
         <h1 className="text-xl md:text-2xl font-bold tracking-tight">
           Mon profil
@@ -134,7 +134,7 @@ export default async function ProfilPage() {
       </div>
 
       {/* ─── Identité ────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-border bg-card p-5">
+      <section className="rounded-2xl border border-border bg-card p-4">
         <p className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70 mb-3">
           Compte
         </p>
@@ -203,7 +203,7 @@ export default async function ProfilPage() {
 
       {/* ─── Heures et solde (si profil métier) ────────────────────── */}
       {employee && (
-        <section className="rounded-2xl border border-border bg-card p-5">
+        <section className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
             <p className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70">
               Mes heures
@@ -266,7 +266,7 @@ export default async function ProfilPage() {
 
       {/* ─── Prochaines absences ──────────────────────────────────── */}
       {employee && (
-        <section className="rounded-2xl border border-border bg-card p-5">
+        <section className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-baseline justify-between mb-3">
             <p className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70">
               Mes prochaines absences
@@ -330,7 +330,7 @@ export default async function ProfilPage() {
       )}
 
       {/* ─── Avatar (perso médicament façon mascotte) ───────────────── */}
-      <section className="rounded-2xl border border-border bg-card p-5">
+      <section className="rounded-2xl border border-border bg-card p-4">
         <p className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70 mb-1">
           Avatar
         </p>
@@ -354,7 +354,7 @@ export default async function ProfilPage() {
       </section>
 
       {/* ─── Sécurité — changement de mot de passe ─────────────────── */}
-      <section className="rounded-2xl border border-border bg-card p-5">
+      <section className="rounded-2xl border border-border bg-card p-4">
         <p className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70 mb-1">
           Sécurité
         </p>

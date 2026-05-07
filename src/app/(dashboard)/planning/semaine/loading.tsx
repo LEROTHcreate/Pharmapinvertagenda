@@ -1,6 +1,6 @@
 export default function WeekOverviewLoading() {
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4 p-3 md:p-4">
       <div className="animate-pulse space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between">

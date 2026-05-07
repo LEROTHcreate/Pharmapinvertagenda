@@ -4,7 +4,7 @@
  */
 export default function PlanningLoading() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-3 sm:p-4 lg:p-6">
       <div className="animate-pulse space-y-5">
         {/* Barre de navigation semaine */}
         <div className="flex items-center justify-between gap-3">

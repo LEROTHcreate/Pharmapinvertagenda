@@ -20,6 +20,10 @@ export type EmployeeStat = {
   overtimeHours: number;
   // Solde HS-Abs (à la française) : HS cumulées - absences cumulées
   hsAbsBalance: number;
+  // Nombre de semaines avec activité (TASK ou ABSENCE)
+  weekCount: number;
+  // Moyenne hebdo planifiée sur les semaines avec activité
+  avgWeeklyHours: number;
   // Série hebdomadaire (pour le mini-graphique) — ordre chronologique
   weekly: Array<{ weekStart: string; taskHours: number }>;
 };
@@ -183,6 +187,9 @@ export async function computeStats(
       absenceHours: totalAbsenceHours,
       overtimeHours: totalOvertimeHours,
       hsAbsBalance: totalOvertimeHours - totalAbsenceHours,
+      weekCount: weekly.length,
+      avgWeeklyHours:
+        weekly.length > 0 ? totalTaskHours / weekly.length : 0,
       weekly,
     };
   });

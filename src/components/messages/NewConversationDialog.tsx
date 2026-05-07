@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, Users as UsersIcon, X } from "lucide-react";
+import { Code2, Loader2, Search, Users as UsersIcon, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -189,18 +189,27 @@ export function NewConversationDialog({
                         )}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13.5px] font-medium text-foreground truncate">
+                        <p className="text-[13.5px] font-medium text-foreground truncate flex items-center gap-1.5">
                           {c.name}
+                          {c.isGlobalSupport && (
+                            <Code2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden />
+                          )}
                         </p>
                         <p className="text-[11.5px] text-muted-foreground truncate">
-                          {c.email}
+                          {c.isGlobalSupport
+                            ? "Programmeur du site — questions / bugs"
+                            : c.email}
                         </p>
                       </div>
-                      {c.role === "ADMIN" && (
+                      {c.isGlobalSupport ? (
+                        <span className="text-[10px] uppercase tracking-wide font-medium text-emerald-700 bg-emerald-50 ring-1 ring-emerald-100 rounded-full px-1.5 py-0.5">
+                          Support
+                        </span>
+                      ) : c.role === "ADMIN" ? (
                         <span className="text-[10px] uppercase tracking-wide font-medium text-violet-600 bg-violet-50 rounded-full px-1.5 py-0.5">
                           Admin
                         </span>
-                      )}
+                      ) : null}
                     </button>
                   </li>
                 );

@@ -163,7 +163,7 @@ export function UsersAdmin({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {error && (
         <div className="animate-shake rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-inset ring-red-100">
           {error}
@@ -650,7 +650,7 @@ function RejectedCard({
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center rounded-2xl border border-dashed border-border bg-card/60 px-6 py-10">
+    <div className="flex items-center justify-center rounded-2xl border border-dashed border-border bg-card/60 px-6 py-7">
       <div className="flex flex-col items-center text-center">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/70">
           <Check className="h-5 w-5" />

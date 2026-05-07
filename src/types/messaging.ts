@@ -75,4 +75,7 @@ export type ContactDTO = {
   name: string;
   email: string;
   role: "ADMIN" | "EMPLOYEE";
+  /** Compte "Support PharmaPlanning" — visible cross-pharmacy. Affiche un
+   *  badge dédié dans la liste de contacts (ex. "Programmeur · Support"). */
+  isGlobalSupport?: boolean;
 };

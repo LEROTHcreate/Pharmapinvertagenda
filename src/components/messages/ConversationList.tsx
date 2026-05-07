@@ -73,7 +73,7 @@ export function ConversationList({
 }: Props) {
   if (loading && conversations.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground/70">
+      <div className="flex items-center justify-center py-8 text-muted-foreground/70">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
@@ -81,7 +81,7 @@ export function ConversationList({
 
   if (conversations.length === 0) {
     return (
-      <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+      <div className="px-6 py-8 text-center text-sm text-muted-foreground">
         Aucune conversation. Clique sur « Nouvelle » pour démarrer.
       </div>
     );

@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
+import { featureGate } from "@/lib/features";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,8 @@ export async function POST(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
+  const gate = featureGate("shiftSwap");
+  if (gate) return gate;
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

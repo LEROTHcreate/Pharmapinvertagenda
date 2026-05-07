@@ -22,12 +22,26 @@ async function checkAccess(conversationId: string, userId: string) {
 
   const session = await auth();
   if (!session?.user) return { ok: false as const, status: 401 };
-  if (conv.pharmacyId !== session.user.pharmacyId) {
+
+  // Le compte Support PharmaPlanning peut accéder aux conversations dont
+  // il est membre, peu importe la pharmacie. Pour les autres comptes, on
+  // garde le multi-tenant strict.
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isGlobalSupport: true },
+  });
+  const isSupport = me?.isGlobalSupport === true;
+
+  if (!isSupport && conv.pharmacyId !== session.user.pharmacyId) {
     return { ok: false as const, status: 403 };
   }
 
   const isMember = conv.members.length > 0;
-  const isAdminShadow = !isMember && session.user.role === "ADMIN";
+  // Shadow access admin : seulement pour les admins de la pharmacie de la conv
+  const isAdminShadow =
+    !isMember &&
+    session.user.role === "ADMIN" &&
+    conv.pharmacyId === session.user.pharmacyId;
 
   if (!isMember && !isAdminShadow) {
     return { ok: false as const, status: 403 };

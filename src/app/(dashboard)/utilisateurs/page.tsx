@@ -89,8 +89,8 @@ export default async function UtilisateursPage() {
   }));
 
   return (
-    <div className="max-w-5xl p-4 sm:p-6 lg:p-8">
-      <header className="mb-6">
+    <div className="max-w-5xl p-3 sm:p-4 lg:p-6">
+      <header className="mb-4">
         <h1 className="text-2xl font-semibold tracking-tight">Utilisateurs</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Approuvez les nouvelles demandes et gérez les accès au planning.

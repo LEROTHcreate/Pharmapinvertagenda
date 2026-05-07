@@ -6,6 +6,7 @@ import { reviewSwapInput } from "@/validators/swap";
 import { TIME_SLOTS } from "@/types";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { isTaskAllowed } from "@/lib/role-task-rules";
+import { featureGate } from "@/lib/features";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,8 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
+  const gate = featureGate("shiftSwap");
+  if (gate) return gate;
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

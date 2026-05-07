@@ -96,6 +96,34 @@ function applyEntriesUpdate(
   return Array.from(map.values());
 }
 
+/* ─── Undo (Ctrl+Z) ────────────────────────────────────────────────
+   On capture l'état "avant mutation" des cellules touchées, sous forme
+   de petites snapshots (pas l'intégralité du state). Sur Ctrl+Z, on
+   restaure ces snapshots via l'API.
+   Limites :
+   - Conservé en mémoire seulement (refresh = perdu)
+   - Si une modif a une portée multi-semaines mais que les semaines
+     non-visibles n'avaient pas encore été chargées dans `entries`,
+     leur état "avant" est considéré comme vide (cas rare en pratique).
+*/
+type CellSnapshot = {
+  employeeId: string;
+  date: string;
+  timeSlot: string;
+  /** null = la case était vide ; sinon, contenu exact à restaurer. */
+  before:
+    | { type: "TASK" | "ABSENCE"; taskCode: TaskCode | null; absenceCode: AbsenceCode | null }
+    | null;
+};
+
+type UndoAction = {
+  /** Court label affiché dans le toast après undo (ex. "modification") */
+  label: string;
+  snapshots: CellSnapshot[];
+};
+
+const UNDO_HISTORY_MAX = 50;
+
 /** Pendant optimiste : suppression locale d'entrées. */
 function applyEntriesDelete(
   prev: ScheduleEntryDTO[],
@@ -113,7 +141,7 @@ function applyEntriesDelete(
 export function PlanningView({
   initialWeekStart,
   initialDayIndex,
-  employees,
+  employees: initialEmployees,
   initialEntries,
   role,
   minStaff,
@@ -133,6 +161,24 @@ export function PlanningView({
   const { toast } = useToast();
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [entries, setEntries] = useState<ScheduleEntryDTO[]>(initialEntries);
+  // Ref miroir : permet aux helpers de capturer l'état courant sans
+  // dépendance React (évite de recréer les callbacks à chaque modif).
+  const entriesRef = useRef<ScheduleEntryDTO[]>(initialEntries);
+  useEffect(() => {
+    entriesRef.current = entries;
+  }, [entries]);
+  // Idem pour les dates visibles — utilisé par handleUndo. On l'initialise
+  // côté ref ; la valeur est mise à jour plus bas via useEffect une fois
+  // que `dayDates` est calculé.
+  const dayDatesRef = useRef<string[]>([]);
+  // Liste de collaborateurs locale — mirror du prop, mais éditable quand
+  // l'admin réordonne les colonnes via drag & drop. Resync sur l'initial
+  // dès que le serveur renvoie une nouvelle liste (changement de pharmacie,
+  // ajout/suppression de membre, etc.).
+  const [employees, setEmployees] = useState<EmployeeDTO[]>(initialEmployees);
+  useEffect(() => {
+    setEmployees(initialEmployees);
+  }, [initialEmployees]);
   const [dayIndex, setDayIndex] = useState(() => {
     // Priorité au paramètre d'URL `?day=N` si fourni (depuis la vue semaine)
     if (
@@ -151,6 +197,14 @@ export function PlanningView({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [recentlySaved, setRecentlySaved] = useState<Set<CellKey>>(new Set());
+  // Pile d'undo (Ctrl+Z). On garde une useState pour permettre une éventuelle
+  // UI "n actions à annuler" plus tard, mais on lit aussi via ref pour
+  // éviter de re-créer les handlers à chaque push.
+  const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
+  const undoStackRef = useRef<UndoAction[]>([]);
+  useEffect(() => {
+    undoStackRef.current = undoStack;
+  }, [undoStack]);
   // Filtre par statut : Set vide = aucun filtre (tous les collaborateurs visibles)
   const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
 
@@ -214,6 +268,172 @@ export function PlanningView({
     }
   }
 
+  /**
+   * Capture l'état actuel des cellules listées et l'empile dans la pile
+   * d'undo. À appeler AVANT d'appliquer la mutation (sinon on capture
+   * l'état d'après — inutile pour Ctrl+Z).
+   */
+  const pushUndo = useCallback(
+    (
+      label: string,
+      cellRefs: Array<{ employeeId: string; date: string; timeSlot: string }>
+    ) => {
+      if (cellRefs.length === 0) return;
+      const cur = entriesRef.current;
+      // Dédupe par cellKey : une même cellule listée 2x ne se snapshot qu'1x
+      const seen = new Set<string>();
+      const snapshots: CellSnapshot[] = [];
+      for (const ref of cellRefs) {
+        const k = entryKey(ref);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const e = cur.find(
+          (en) =>
+            en.employeeId === ref.employeeId &&
+            en.date === ref.date &&
+            en.timeSlot === ref.timeSlot
+        );
+        snapshots.push({
+          employeeId: ref.employeeId,
+          date: ref.date,
+          timeSlot: ref.timeSlot,
+          before: e
+            ? {
+                type: e.type,
+                taskCode: e.taskCode ?? null,
+                absenceCode: e.absenceCode ?? null,
+              }
+            : null,
+        });
+      }
+      setUndoStack((prev) => [
+        ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
+        { label, snapshots },
+      ]);
+    },
+    []
+  );
+
+  /**
+   * Annule la dernière mutation enregistrée. Restaure l'état "avant" via :
+   *  - DELETE pour les cellules qui étaient vides initialement
+   *  - POST (force=true) pour les cellules qui avaient une tâche/absence
+   * Optimistic local + rollback si l'API échoue.
+   */
+  const handleUndo = useCallback(async () => {
+    const stack = undoStackRef.current;
+    if (stack.length === 0) {
+      toast({
+        tone: "info",
+        title: "Rien à annuler",
+        duration: 1500,
+      });
+      return;
+    }
+    const action = stack[stack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+
+    const toRestore = action.snapshots.filter((s) => s.before !== null);
+    const toDelete = action.snapshots.filter((s) => s.before === null);
+    const previousEntries = entriesRef.current;
+    const visibleDates = new Set(dayDatesRef.current);
+
+    // Optimistic
+    setEntries((prev) => {
+      let next = applyEntriesDelete(
+        prev,
+        toDelete.map((s) => ({
+          employeeId: s.employeeId,
+          date: s.date,
+          timeSlot: s.timeSlot,
+        })),
+        visibleDates
+      );
+      next = applyEntriesUpdate(
+        next,
+        toRestore.map((s) => ({
+          employeeId: s.employeeId,
+          date: s.date,
+          timeSlot: s.timeSlot,
+          type: s.before!.type,
+          taskCode: s.before!.taskCode,
+          absenceCode: s.before!.absenceCode,
+        })),
+        visibleDates
+      );
+      return next;
+    });
+    flashCells(action.snapshots.map((s) => entryKey(s)));
+
+    // Backend
+    try {
+      const promises: Array<Promise<unknown>> = [];
+      for (const c of toDelete) {
+        const params = new URLSearchParams({
+          employeeId: c.employeeId,
+          date: c.date,
+          timeSlot: c.timeSlot,
+        });
+        promises.push(
+          fetch(`/api/planning?${params.toString()}`, { method: "DELETE" })
+        );
+      }
+      if (toRestore.length > 0) {
+        promises.push(
+          postPlanningEntries(
+            toRestore.map((s) => ({
+              employeeId: s.employeeId,
+              date: s.date,
+              timeSlot: s.timeSlot,
+              type: s.before!.type,
+              taskCode: s.before!.taskCode,
+              absenceCode: s.before!.absenceCode,
+            })),
+            true // force : on restaure un état précédent, on bypass le check d'absence
+          )
+        );
+      }
+      await Promise.all(promises);
+      toast({
+        tone: "success",
+        title: "Annulé",
+        description: action.label,
+        duration: 1800,
+      });
+    } catch {
+      setEntries(previousEntries);
+      toast({
+        tone: "error",
+        title: "Annulation impossible",
+        description: "Erreur réseau.",
+      });
+    }
+    // postPlanningEntries + dayDatesRef sont accédés via closure/ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast]);
+
+  // Raccourci clavier : Ctrl+Z (Cmd+Z sur Mac). On évite de capturer la
+  // frappe quand l'utilisateur est en train de taper dans un input/textarea
+  // (TaskSelector, BulkTaskSelector, formulaires de notes, etc.) — l'undo
+  // natif du champ doit rester prioritaire.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z";
+      if (!isUndo) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) {
+          return;
+        }
+      }
+      e.preventDefault();
+      void handleUndo();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleUndo]);
+
   // Mode focus : cache la sidebar via un attribut data sur <body>
   useEffect(() => {
     if (focusMode) {
@@ -232,6 +452,9 @@ export function PlanningView({
 
   useEffect(() => {
     setWeekStart(initialWeekStart);
+    // Changer de semaine vide la pile d'undo : un Ctrl+Z dans la nouvelle
+    // semaine ne doit pas modifier silencieusement des cellules d'une autre.
+    setUndoStack([]);
   }, [initialWeekStart]);
 
   // Si l'URL change avec un `?day=N` (ex. clic depuis la vue semaine),
@@ -261,6 +484,11 @@ export function PlanningView({
   const monday = useMemo(() => new Date(`${weekStart}T00:00:00`), [weekStart]);
   const days = useMemo(() => weekDays(monday), [monday]);
   const dayDates = useMemo(() => days.map(toIsoDate), [days]);
+  // Sync vers le ref pour que handleUndo (défini plus haut) ait toujours la
+  // dernière valeur sans figer de dépendance React.
+  useEffect(() => {
+    dayDatesRef.current = dayDates;
+  }, [dayDates]);
   const selectedDay = dayDates[dayIndex];
   const weekNumber = isoWeekNumber(monday);
   const weekKind = weekTypeFor(monday);
@@ -463,6 +691,9 @@ export function PlanningView({
       absenceCode: basePayload.absenceCode ?? null,
     }));
 
+    // Snapshot pour Ctrl+Z (avant la mutation)
+    pushUndo("modification", updates);
+
     // ─── Optimistic update : on applique localement avant le POST ───
     const previousEntries = entries;
     const visibleDates = new Set(dayDates);
@@ -526,6 +757,9 @@ export function PlanningView({
       date,
       timeSlot: sel.timeSlot,
     }));
+
+    // Snapshot pour Ctrl+Z (avant la mutation)
+    pushUndo("effacement", deletes);
 
     // Optimistic delete
     const previousEntries = entries;
@@ -606,6 +840,9 @@ export function PlanningView({
         });
         return;
       }
+
+      // Snapshot pour Ctrl+Z (avant la mutation)
+      pushUndo("déplacement", [source, target]);
 
       // ─── Optimistic : on supprime la source ET on écrit la target ───
       const previousEntries = entries;
@@ -782,6 +1019,12 @@ export function PlanningView({
         return;
       }
 
+      // Snapshot pour Ctrl+Z : on capture toutes les cellules touchées (from + to)
+      pushUndo("déplacement de bloc", [
+        ...moves.map((m) => m.from),
+        ...moves.map((m) => m.to),
+      ]);
+
       // Optimistic : delete sources + add targets en local
       const previousEntries = entries;
       const visibleDates = new Set(dayDates);
@@ -854,6 +1097,48 @@ export function PlanningView({
     [entries, employees, dayDates, toast]
   );
 
+  /* ---------- Réordonnancement de colonnes (admin) ---------- */
+  // Optimistic : on applique immédiatement le nouvel ordre côté UI puis on
+  // appelle l'API. Si ça échoue, on rollback et on prévient l'utilisateur.
+  const handleReorderColumns = useCallback(
+    async (orderedIds: string[]) => {
+      const previous = employees;
+      const byId = new Map(previous.map((e) => [e.id, e]));
+      const next = orderedIds
+        .map((id) => byId.get(id))
+        .filter((e): e is EmployeeDTO => !!e);
+      // Filet de sécurité : si on perd des collaborateurs (cas impossible
+      // en théorie puisque l'API source n'envoie que des ids existants),
+      // on réinjecte ceux qui manquent à la fin.
+      if (next.length !== previous.length) {
+        const seen = new Set(next.map((e) => e.id));
+        for (const e of previous) if (!seen.has(e.id)) next.push(e);
+      }
+      setEmployees(next);
+
+      try {
+        const res = await fetch("/api/employees/reorder", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ orderedIds: next.map((e) => e.id) }),
+        });
+        if (!res.ok) throw new Error("api");
+        // Refresh discret pour resync les autres pages (vue semaine / mois)
+        // au prochain rendu — sans bloquer la grille courante.
+        router.refresh();
+      } catch {
+        setEmployees(previous);
+        toast({
+          tone: "error",
+          title: "Réordonnancement impossible",
+          description: "Le serveur a refusé la modification. Réessayez.",
+          duration: 3500,
+        });
+      }
+    },
+    [employees, router, toast]
+  );
+
   /* ---------- Bulk multi-cell apply / clear ---------- */
 
   async function handleBulkApply(payload: {
@@ -874,6 +1159,9 @@ export function PlanningView({
         absenceCode: basePayload.absenceCode ?? null,
       }))
     );
+
+    // Snapshot pour Ctrl+Z (avant la mutation)
+    pushUndo("modification bulk", expanded);
 
     // Optimistic update
     const previousEntries = entries;
@@ -935,6 +1223,9 @@ export function PlanningView({
         timeSlot: c.timeSlot,
       }))
     );
+
+    // Snapshot pour Ctrl+Z (avant la mutation)
+    pushUndo("effacement bulk", expanded);
 
     // Optimistic delete
     const previousEntries = entries;
@@ -1176,16 +1467,19 @@ export function PlanningView({
                   <span className="text-muted-foreground/40">/</span>
                   {(date.getMonth() + 1).toString().padStart(2, "0")}
                 </span>
-                {/* Pastille férié (gauche) — distincte de la pastille absences (droite) */}
+                {/* Pastille férié à DROITE (petit dot 8px), pastille
+                    absences à GAUCHE (badge 16px min). On les sépare pour
+                    éviter le chevauchement quand un jour est à la fois
+                    férié + a des absences. */}
                 {holiday && (
                   <span
                     aria-hidden
-                    className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-zinc-100/70"
+                    className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-zinc-100/70 dark:ring-zinc-800/70"
                   />
                 )}
                 {absCount > 0 && (
                   <span
-                    className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-semibold text-white inline-flex items-center justify-center tabular-nums"
+                    className="absolute -top-1 -left-1 h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-semibold text-white inline-flex items-center justify-center tabular-nums"
                     aria-label={`${absCount} absent(s)`}
                   >
                     {absCount}
@@ -1266,6 +1560,7 @@ export function PlanningView({
         currentEmployeeId={currentEmployeeId ?? null}
         onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
         onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
+        onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
       />
 
       {/* Modal d'édition unitaire */}
@@ -1306,7 +1601,7 @@ export function PlanningView({
 
       {/* Barre d'action flottante (sélection multi) — glass Apple-style */}
       {effectiveCanEdit && multiSelection.size > 0 && (
-        <div className="no-print safe-bottom fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/85 backdrop-blur-xl shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
+        <div className="no-print fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/85 backdrop-blur-xl shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
           <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
           <span className="text-[12.5px] tracking-tight">
             <span className="font-semibold tabular-nums">{multiSelection.size}</span>{" "}

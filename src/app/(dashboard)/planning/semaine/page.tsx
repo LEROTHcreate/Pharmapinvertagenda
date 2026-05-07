@@ -74,7 +74,7 @@ export default async function PlanningSemainePage({
   )}`;
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4 p-3 md:p-4">
       <PlanningHeader
         weekStart={weekStartIso}
         mode="week"
