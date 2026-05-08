@@ -166,27 +166,33 @@ export const PlanningGrid = memo(function PlanningGrid({
     setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches);
   }, []);
 
-  // Suivi de la touche Alt : activation du DnD souris uniquement quand
-  // Alt est tenu → préserve la sélection rectangulaire 30min×30min comme
-  // gesture par défaut. Convention courante (Excel, Figma).
-  const [isAltHeld, setIsAltHeld] = useState(false);
+  // Suivi de la touche modificatrice de DnD (Ctrl sur Win/Linux, Cmd sur
+  // Mac) : activation du DnD souris uniquement quand la touche est tenue
+  // → préserve la sélection rectangulaire 30min×30min comme gesture par
+  // défaut.
+  // On surveille sur 3 sources pour fiabiliser la détection :
+  //   - keydown/keyup (Control / Meta)
+  //   - tout event clavier (e.ctrlKey / e.metaKey) — couvre les combos
+  //     genre Ctrl+Tab où la touche Control elle-même peut ne pas générer
+  //     un keydown standard
+  //   - tout mousemove (e.ctrlKey / e.metaKey) — couvre le cas où
+  //     l'utilisateur tient Ctrl avant que la fenêtre ait reçu le focus
+  const [isModHeld, setIsModHeld] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onDown = (e: KeyboardEvent) => {
-      if (e.key === "Alt") setIsAltHeld(true);
-    };
-    const onUp = (e: KeyboardEvent) => {
-      if (e.key === "Alt") setIsAltHeld(false);
-    };
-    // Si l'utilisateur fait Alt+Tab, le keyup arrive après un blur — on
-    // reset au blur pour ne pas garder Alt actif "fantôme".
-    const onBlur = () => setIsAltHeld(false);
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
+    const sync = (e: KeyboardEvent | MouseEvent) =>
+      setIsModHeld(e.ctrlKey || e.metaKey);
+    const onBlur = () => setIsModHeld(false);
+    window.addEventListener("keydown", sync);
+    window.addEventListener("keyup", sync);
+    window.addEventListener("mousemove", sync);
+    window.addEventListener("mousedown", sync);
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("keydown", sync);
+      window.removeEventListener("keyup", sync);
+      window.removeEventListener("mousemove", sync);
+      window.removeEventListener("mousedown", sync);
       window.removeEventListener("blur", onBlur);
     };
   }, []);
@@ -194,9 +200,10 @@ export const PlanningGrid = memo(function PlanningGrid({
   // Sensors :
   //   - TouchSensor : long-press 350ms (mobile/tablette)
   //   - MouseSensor : drag direct dès 6px (desktop) — mais SEULEMENT activé
-  //     sur les cellules TASK quand Alt est tenu (cf. `taskCellUsesDnd` plus bas).
+  //     sur les cellules TASK quand Ctrl/Cmd est tenu (cf. `taskCellUsesDnd`
+  //     plus bas).
   // L'activation conditionnelle se fait au niveau du Cell (attache des
-  // listeners DnD seulement quand Alt est tenu sur souris).
+  // listeners DnD seulement quand le modifier est tenu sur souris).
   const sensors = useSensors(
     useSensor(TouchSensor, {
       activationConstraint: { delay: 350, tolerance: 8 },
@@ -445,7 +452,10 @@ export const PlanningGrid = memo(function PlanningGrid({
     (e: React.MouseEvent, empIdx: number, slotIdx: number) => {
       if (!canEdit) return;
       if (e.button !== 0) return;
-      const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+      // Shift seul = additive (étendre la sélection). Ctrl/Cmd est
+      // réservé au DnD (cf. isModHeld plus haut) : on ne les met pas ici
+      // pour éviter que Ctrl+drag déclenche aussi une rect-select.
+      const additive = e.shiftKey;
       dragRef.current = {
         startEmpIdx: empIdx,
         startSlotIdx: slotIdx,
@@ -681,7 +691,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         canEdit={canEdit}
                         dndEnabled={dndEnabled}
                         isTouchDevice={isTouchDevice}
-                        isAltHeld={isAltHeld}
+                        isModHeld={isModHeld}
                         isInActiveBlock={activeBlockKeys?.has(key) ?? false}
                         isSelected={isSelected}
                         isOvertime={isOvertime}
@@ -783,7 +793,7 @@ const Cell = memo(function Cell({
   canEdit,
   dndEnabled,
   isTouchDevice,
-  isAltHeld,
+  isModHeld,
   isInActiveBlock,
   isSelected,
   isOvertime,
@@ -806,7 +816,7 @@ const Cell = memo(function Cell({
   canEdit: boolean;
   dndEnabled: boolean;
   isTouchDevice: boolean;
-  isAltHeld: boolean;
+  isModHeld: boolean;
   isInActiveBlock: boolean;
   isSelected: boolean;
   isOvertime: boolean;
@@ -849,11 +859,11 @@ const Cell = memo(function Cell({
 
   // DnD activé sur :
   //   - Tactile : long-press 350ms démarre le drag (tap rapide = TaskSelector)
-  //   - Souris : Alt + drag — sans Alt c'est rect-select 30min×30min.
-  //     Le state Alt est trackeé globalement via window listener (cf. plus haut).
+  //   - Souris : Ctrl/Cmd + drag — sans modifier c'est rect-select 30min×30min.
+  //     Le state du modifier est tracké globalement via window listener (cf. plus haut).
   // Sur cellule non-TASK ou si dndEnabled=false → DnD jamais actif.
   const taskCellUsesDnd =
-    dndEnabled && isTask && (isTouchDevice || isAltHeld);
+    dndEnabled && isTask && (isTouchDevice || isModHeld);
   const isContinuation =
     !!entry &&
     !!prevEntry &&
@@ -874,9 +884,9 @@ const Cell = memo(function Cell({
     // pour que l'admin voie clairement quel bloc complet est en train d'être déplacé.
     isInDragSourceCol && "opacity-40",
     canEdit && "cursor-pointer",
-    // Quand Alt est tenu sur souris + cellule TASK draggable, on change
+    // Quand Ctrl/Cmd est tenu sur souris + cellule TASK draggable, on change
     // le curseur en "grab" pour indiquer "tu peux déplacer le bloc".
-    canEdit && isTask && isAltHeld && !isTouchDevice && "cursor-grab",
+    canEdit && isTask && isModHeld && !isTouchDevice && "cursor-grab",
     isSelected && "ring-2 ring-violet-500/80 ring-inset z-[5]",
     isRecent && "animate-cell-flash",
     // Effet "bloc en cours de drag" : ring violet pulsé + scale léger

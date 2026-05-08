@@ -19,9 +19,10 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PharmaPlanning",
-  description: "Gestion de planning d'équipe pour officines de pharmacie",
-  applicationName: "PharmaPlanning",
+  // Titre de l'onglet navigateur + valeur par défaut des sous-pages
+  title: "Pharma PinVert",
+  description: "Planning d'équipe — Pharmacie du Pinvert, Aubagne",
+  applicationName: "Pharma PinVert",
   icons: {
     icon: "/logo.png",
     apple: "/apple-touch-icon.png",
@@ -29,7 +30,8 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "Planning",
+    // Affiché sous l'icône sur l'écran d'accueil iOS — 14 caractères, OK
+    title: "Pharma PinVert",
     statusBarStyle: "default",
   },
   manifest: "/manifest.webmanifest",

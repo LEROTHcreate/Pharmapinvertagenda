@@ -17,6 +17,7 @@ import {
 } from "@/lib/planning-utils";
 import { TIME_SLOTS } from "@/types";
 import { PlanningGrid, type CellKey, type ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
+import { MyDayView } from "@/components/planning/MyDayView";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { TASK_LABELS, STATUS_LABELS } from "@/types";
 import { TaskSelector } from "@/components/planning/TaskSelector";
@@ -197,16 +198,32 @@ export function PlanningView({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [recentlySaved, setRecentlySaved] = useState<Set<CellKey>>(new Set());
-  // Pile d'undo (Ctrl+Z). On garde une useState pour permettre une éventuelle
-  // UI "n actions à annuler" plus tard, mais on lit aussi via ref pour
-  // éviter de re-créer les handlers à chaque push.
+  // Pile d'undo (Ctrl+Z) et pile de redo (Ctrl+Y / Ctrl+Shift+Z). On garde
+  // un useState pour permettre une éventuelle UI "n actions à annuler" plus
+  // tard, mais on lit aussi via ref pour éviter de re-créer les handlers à
+  // chaque push.
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const undoStackRef = useRef<UndoAction[]>([]);
   useEffect(() => {
     undoStackRef.current = undoStack;
   }, [undoStack]);
+  const [redoStack, setRedoStack] = useState<UndoAction[]>([]);
+  const redoStackRef = useRef<UndoAction[]>([]);
+  useEffect(() => {
+    redoStackRef.current = redoStack;
+  }, [redoStack]);
   // Filtre par statut : Set vide = aucun filtre (tous les collaborateurs visibles)
   const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
+
+  // ─── Mode d'affichage mobile ─────────────────────────────────────
+  // "mine" : timeline verticale du jour de l'utilisateur connecté (par
+  // défaut quand il a une fiche Employee). Beaucoup plus lisible sur
+  // téléphone qu'une grille à 20 colonnes.
+  // "team" : grille équipe complète (mode admin classique).
+  // Sur desktop ce state est ignoré (la grille s'affiche toujours).
+  const [mobileView, setMobileView] = useState<"mine" | "team">(
+    currentEmployeeId ? "mine" : "team"
+  );
 
   // Liste filtrée passée à la grille — quand le filtre est vide, tout passe.
   const visibleEmployees = useMemo(
@@ -269,18 +286,15 @@ export function PlanningView({
   }
 
   /**
-   * Capture l'état actuel des cellules listées et l'empile dans la pile
-   * d'undo. À appeler AVANT d'appliquer la mutation (sinon on capture
-   * l'état d'après — inutile pour Ctrl+Z).
+   * Capture l'état actuel des cellules listées sous forme de snapshots
+   * (dédupliqués). Utilisé par pushUndo (snapshot AVANT mutation) ET par
+   * handleUndo/handleRedo (snapshot inverse pour rotation entre piles).
    */
-  const pushUndo = useCallback(
+  const captureSnapshots = useCallback(
     (
-      label: string,
       cellRefs: Array<{ employeeId: string; date: string; timeSlot: string }>
-    ) => {
-      if (cellRefs.length === 0) return;
+    ): CellSnapshot[] => {
       const cur = entriesRef.current;
-      // Dédupe par cellKey : une même cellule listée 2x ne se snapshot qu'1x
       const seen = new Set<string>();
       const snapshots: CellSnapshot[] = [];
       for (const ref of cellRefs) {
@@ -306,120 +320,202 @@ export function PlanningView({
             : null,
         });
       }
-      setUndoStack((prev) => [
-        ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
-        { label, snapshots },
-      ]);
+      return snapshots;
     },
     []
   );
 
   /**
-   * Annule la dernière mutation enregistrée. Restaure l'état "avant" via :
-   *  - DELETE pour les cellules qui étaient vides initialement
+   * Capture l'état actuel des cellules listées et l'empile dans la pile
+   * d'undo. À appeler AVANT d'appliquer la mutation (sinon on capture
+   * l'état d'après — inutile pour Ctrl+Z).
+   * Toute nouvelle action invalide la pile redo : on ne peut pas refaire
+   * une action contredite par un nouvel état.
+   */
+  const pushUndo = useCallback(
+    (
+      label: string,
+      cellRefs: Array<{ employeeId: string; date: string; timeSlot: string }>
+    ) => {
+      if (cellRefs.length === 0) return;
+      const snapshots = captureSnapshots(cellRefs);
+      setUndoStack((prev) => [
+        ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
+        { label, snapshots },
+      ]);
+      setRedoStack([]);
+    },
+    [captureSnapshots]
+  );
+
+  /**
+   * Restaure l'état décrit par une UndoAction (utilisé par undo ET redo) :
+   *  - DELETE pour les cellules qui étaient vides dans le snapshot
    *  - POST (force=true) pour les cellules qui avaient une tâche/absence
-   * Optimistic local + rollback si l'API échoue.
+   * Optimistic local + rollback si l'API échoue. Renvoie true en cas de
+   * succès, false sinon.
+   */
+  const applySnapshots = useCallback(
+    async (action: UndoAction): Promise<boolean> => {
+      const toRestore = action.snapshots.filter((s) => s.before !== null);
+      const toDelete = action.snapshots.filter((s) => s.before === null);
+      const previousEntries = entriesRef.current;
+      const visibleDates = new Set(dayDatesRef.current);
+
+      setEntries((prev) => {
+        let next = applyEntriesDelete(
+          prev,
+          toDelete.map((s) => ({
+            employeeId: s.employeeId,
+            date: s.date,
+            timeSlot: s.timeSlot,
+          })),
+          visibleDates
+        );
+        next = applyEntriesUpdate(
+          next,
+          toRestore.map((s) => ({
+            employeeId: s.employeeId,
+            date: s.date,
+            timeSlot: s.timeSlot,
+            type: s.before!.type,
+            taskCode: s.before!.taskCode,
+            absenceCode: s.before!.absenceCode,
+          })),
+          visibleDates
+        );
+        return next;
+      });
+      flashCells(action.snapshots.map((s) => entryKey(s)));
+
+      try {
+        const promises: Array<Promise<unknown>> = [];
+        for (const c of toDelete) {
+          const params = new URLSearchParams({
+            employeeId: c.employeeId,
+            date: c.date,
+            timeSlot: c.timeSlot,
+          });
+          promises.push(
+            fetch(`/api/planning?${params.toString()}`, { method: "DELETE" })
+          );
+        }
+        if (toRestore.length > 0) {
+          promises.push(
+            postPlanningEntries(
+              toRestore.map((s) => ({
+                employeeId: s.employeeId,
+                date: s.date,
+                timeSlot: s.timeSlot,
+                type: s.before!.type,
+                taskCode: s.before!.taskCode,
+                absenceCode: s.before!.absenceCode,
+              })),
+              true // force : on bypass le check d'absence pour restaurer un état précédent
+            )
+          );
+        }
+        await Promise.all(promises);
+        return true;
+      } catch {
+        setEntries(previousEntries);
+        return false;
+      }
+    },
+    // postPlanningEntries + dayDatesRef sont accédés via closure/ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  /**
+   * Annule la dernière mutation. La pile redo récupère l'état courant des
+   * cellules concernées AVANT la restauration, pour permettre Ctrl+Y.
    */
   const handleUndo = useCallback(async () => {
     const stack = undoStackRef.current;
     if (stack.length === 0) {
-      toast({
-        tone: "info",
-        title: "Rien à annuler",
-        duration: 1500,
-      });
+      toast({ tone: "info", title: "Rien à annuler", duration: 1500 });
       return;
     }
     const action = stack[stack.length - 1];
+    // Avant d'écraser l'état courant, on capture les cellules ciblées :
+    // c'est exactement le snapshot qui permettra de "refaire" l'action.
+    const redoAction: UndoAction = {
+      label: action.label,
+      snapshots: captureSnapshots(action.snapshots),
+    };
     setUndoStack((prev) => prev.slice(0, -1));
-
-    const toRestore = action.snapshots.filter((s) => s.before !== null);
-    const toDelete = action.snapshots.filter((s) => s.before === null);
-    const previousEntries = entriesRef.current;
-    const visibleDates = new Set(dayDatesRef.current);
-
-    // Optimistic
-    setEntries((prev) => {
-      let next = applyEntriesDelete(
-        prev,
-        toDelete.map((s) => ({
-          employeeId: s.employeeId,
-          date: s.date,
-          timeSlot: s.timeSlot,
-        })),
-        visibleDates
-      );
-      next = applyEntriesUpdate(
-        next,
-        toRestore.map((s) => ({
-          employeeId: s.employeeId,
-          date: s.date,
-          timeSlot: s.timeSlot,
-          type: s.before!.type,
-          taskCode: s.before!.taskCode,
-          absenceCode: s.before!.absenceCode,
-        })),
-        visibleDates
-      );
-      return next;
-    });
-    flashCells(action.snapshots.map((s) => entryKey(s)));
-
-    // Backend
-    try {
-      const promises: Array<Promise<unknown>> = [];
-      for (const c of toDelete) {
-        const params = new URLSearchParams({
-          employeeId: c.employeeId,
-          date: c.date,
-          timeSlot: c.timeSlot,
-        });
-        promises.push(
-          fetch(`/api/planning?${params.toString()}`, { method: "DELETE" })
-        );
-      }
-      if (toRestore.length > 0) {
-        promises.push(
-          postPlanningEntries(
-            toRestore.map((s) => ({
-              employeeId: s.employeeId,
-              date: s.date,
-              timeSlot: s.timeSlot,
-              type: s.before!.type,
-              taskCode: s.before!.taskCode,
-              absenceCode: s.before!.absenceCode,
-            })),
-            true // force : on restaure un état précédent, on bypass le check d'absence
-          )
-        );
-      }
-      await Promise.all(promises);
+    setRedoStack((prev) => [
+      ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
+      redoAction,
+    ]);
+    const ok = await applySnapshots(action);
+    if (ok) {
       toast({
         tone: "success",
         title: "Annulé",
         description: action.label,
         duration: 1800,
       });
-    } catch {
-      setEntries(previousEntries);
+    } else {
       toast({
         tone: "error",
         title: "Annulation impossible",
         description: "Erreur réseau.",
       });
     }
-    // postPlanningEntries + dayDatesRef sont accédés via closure/ref
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast]);
+  }, [toast, captureSnapshots, applySnapshots]);
 
-  // Raccourci clavier : Ctrl+Z (Cmd+Z sur Mac). On évite de capturer la
-  // frappe quand l'utilisateur est en train de taper dans un input/textarea
-  // (TaskSelector, BulkTaskSelector, formulaires de notes, etc.) — l'undo
-  // natif du champ doit rester prioritaire.
+  /**
+   * Refait la dernière action annulée. Symétrique de handleUndo : la pile
+   * undo récupère l'état courant avant la restauration.
+   */
+  const handleRedo = useCallback(async () => {
+    const stack = redoStackRef.current;
+    if (stack.length === 0) {
+      toast({ tone: "info", title: "Rien à refaire", duration: 1500 });
+      return;
+    }
+    const action = stack[stack.length - 1];
+    const undoAction: UndoAction = {
+      label: action.label,
+      snapshots: captureSnapshots(action.snapshots),
+    };
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [
+      ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
+      undoAction,
+    ]);
+    const ok = await applySnapshots(action);
+    if (ok) {
+      toast({
+        tone: "success",
+        title: "Refait",
+        description: action.label,
+        duration: 1800,
+      });
+    } else {
+      toast({
+        tone: "error",
+        title: "Refaire impossible",
+        description: "Erreur réseau.",
+      });
+    }
+  }, [toast, captureSnapshots, applySnapshots]);
+
+  // Raccourci clavier : Ctrl+Z (undo), Ctrl+Y ou Ctrl+Shift+Z (redo).
+  // Cmd+… sur Mac. On évite de capturer la frappe quand l'utilisateur est
+  // en train de taper dans un input/textarea (TaskSelector, BulkTaskSelector,
+  // formulaires de notes, etc.) — l'undo natif du champ doit rester prioritaire.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z";
-      if (!isUndo) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      const isUndo = !e.shiftKey && key === "z";
+      const isRedo =
+        (!e.shiftKey && key === "y") || (e.shiftKey && key === "z");
+      if (!isUndo && !isRedo) return;
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -428,11 +524,12 @@ export function PlanningView({
         }
       }
       e.preventDefault();
-      void handleUndo();
+      if (isUndo) void handleUndo();
+      else void handleRedo();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleUndo]);
+  }, [handleUndo, handleRedo]);
 
   // Mode focus : cache la sidebar via un attribut data sur <body>
   useEffect(() => {
@@ -452,9 +549,11 @@ export function PlanningView({
 
   useEffect(() => {
     setWeekStart(initialWeekStart);
-    // Changer de semaine vide la pile d'undo : un Ctrl+Z dans la nouvelle
-    // semaine ne doit pas modifier silencieusement des cellules d'une autre.
+    // Changer de semaine vide les piles d'undo/redo : un Ctrl+Z (ou Ctrl+Y)
+    // dans la nouvelle semaine ne doit pas modifier silencieusement des
+    // cellules d'une autre.
     setUndoStack([]);
+    setRedoStack([]);
   }, [initialWeekStart]);
 
   // Si l'URL change avec un `?day=N` (ex. clic depuis la vue semaine),
@@ -534,6 +633,14 @@ export function PlanningView({
     const openSlots = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
     return analyzeCoverage(employees, dayDates, index, openSlots);
   }, [employees, dayDates, index]);
+
+  // Filtre selon le jour sélectionné : le lundi on garde la vue d'ensemble
+  // de la semaine (utile en début de semaine pour repérer les trous), les
+  // autres jours on n'affiche que les warnings du jour pour ne pas surcharger.
+  const visibleCoverageWarnings = useMemo(() => {
+    if (dayIndex === 0) return coverageWarnings;
+    return coverageWarnings.filter((w) => w.date === selectedDay);
+  }, [coverageWarnings, dayIndex, selectedDay]);
 
   const absentToday = useMemo(() => {
     return employees
@@ -1496,12 +1603,12 @@ export function PlanningView({
           sur lesquelles ils ne peuvent pas agir). `no-print` car en
           impression on veut juste la grille, pas les alertes manquements
           d'effectif (qui prendraient une page entière inutilement). */}
-      {isAdmin && (absentToday.length > 0 || coverageWarnings.length > 0) && (
+      {isAdmin && (absentToday.length > 0 || visibleCoverageWarnings.length > 0) && (
         <div className="no-print rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
           <div className="mb-2 flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
             <span className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-foreground/70">
-              Statut équipe — semaine en cours
+              Statut équipe — {dayIndex === 0 ? "semaine en cours" : "jour sélectionné"}
             </span>
           </div>
           <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-6 sm:gap-y-2.5">
@@ -1525,7 +1632,7 @@ export function PlanningView({
                 ))}
               </div>
             )}
-            <CoverageWarnings warnings={coverageWarnings} />
+            <CoverageWarnings warnings={visibleCoverageWarnings} />
           </div>
         </div>
       )}
@@ -1544,24 +1651,92 @@ export function PlanningView({
         </div>
       )}
 
-      {/* Grille */}
-      <PlanningGrid
-        employees={visibleEmployees}
-        date={selectedDay}
-        weekDates={dayDates}
-        index={index}
-        canEdit={effectiveCanEdit}
-        minStaff={minStaff}
-        selection={multiSelection}
-        onSelectionChange={setMultiSelection}
-        onCellClick={handleCellClick}
-        overtimeCells={overtimeCells}
-        recentlySaved={recentlySaved}
-        currentEmployeeId={currentEmployeeId ?? null}
-        onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
-        onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
-        onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
-      />
+      {/* ─── Toggle "Mon jour / Équipe" — mobile uniquement ─────────
+          Affiché seulement si l'utilisateur a une fiche Employee : un
+          admin "pur" sans collaborateur lié n'a pas de jour personnel
+          à afficher, on saute le toggle et on montre la grille équipe. */}
+      {currentEmployeeId && (
+        <div className="md:hidden">
+          <div
+            role="tablist"
+            aria-label="Mode d'affichage"
+            className="inline-flex w-full items-center gap-0.5 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/60 p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileView === "mine"}
+              onClick={() => setMobileView("mine")}
+              className={cn(
+                "flex-1 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-all",
+                mobileView === "mine"
+                  ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:shadow-none dark:ring-1 dark:ring-zinc-700"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Mon jour
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileView === "team"}
+              onClick={() => setMobileView("team")}
+              className={cn(
+                "flex-1 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-all",
+                mobileView === "team"
+                  ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:shadow-none dark:ring-1 dark:ring-zinc-700"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Équipe
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Vue "Mon jour" — mobile uniquement, mode mine ──────── */}
+      {currentEmployeeId && mobileView === "mine" && (() => {
+        const me = employees.find((e) => e.id === currentEmployeeId);
+        if (!me) return null;
+        return (
+          <div className="md:hidden">
+            <MyDayView
+              employee={me}
+              date={selectedDay}
+              entries={entries}
+            />
+          </div>
+        );
+      })()}
+
+      {/* ─── Grille équipe ─────────────────────────────────────────
+          Toujours visible sur desktop. Sur mobile, cachée si l'utilisateur
+          a choisi "Mon jour" (et qu'il a une fiche Employee). */}
+      <div
+        className={cn(
+          currentEmployeeId &&
+            mobileView === "mine" &&
+            "hidden md:block"
+        )}
+      >
+        <PlanningGrid
+          employees={visibleEmployees}
+          date={selectedDay}
+          weekDates={dayDates}
+          index={index}
+          canEdit={effectiveCanEdit}
+          minStaff={minStaff}
+          selection={multiSelection}
+          onSelectionChange={setMultiSelection}
+          onCellClick={handleCellClick}
+          overtimeCells={overtimeCells}
+          recentlySaved={recentlySaved}
+          currentEmployeeId={currentEmployeeId ?? null}
+          onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
+          onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
+          onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
+        />
+      </div>
 
       {/* Modal d'édition unitaire */}
       {selection && selectedEmployee && (
