@@ -1417,18 +1417,20 @@ export function PlanningView({
   const effectiveCanEdit = isAdmin && !adminLocked;
 
   return (
-    <div className="p-4 md:p-6 space-y-4 relative">
+    <div className="p-3 md:p-6 space-y-3 md:space-y-4 relative">
       {/* En-tête : titre + navigation, design Apple épuré */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-foreground">
+            {/* Sur mobile : titre compact ("Planning · S19") en 18px,
+                sur desktop : version complète 26px */}
+            <h1 className="text-[18px] md:text-[26px] font-semibold tracking-tight text-foreground">
               Planning
             </h1>
-            <span className="text-[22px] md:text-[26px] font-semibold tracking-tight text-muted-foreground/40">
+            <span className="text-[18px] md:text-[26px] font-semibold tracking-tight text-muted-foreground/40">
               ·
             </span>
-            <span className="text-[22px] md:text-[26px] font-semibold tracking-tight text-muted-foreground">
+            <span className="text-[18px] md:text-[26px] font-semibold tracking-tight text-muted-foreground">
               S{weekNumber}
             </span>
             <span className="ml-1 text-[10.5px] uppercase tracking-[0.08em] font-medium text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
@@ -1453,7 +1455,10 @@ export function PlanningView({
               </span>
             )}
           </div>
-          <p className="text-[12.5px] text-muted-foreground mt-0.5 tabular-nums">
+          {/* Date "04 mai — 09 mai 2026" : redondante sur mobile avec le
+              day picker juste en dessous → cachée. Garde sur desktop pour
+              donner le contexte semaine sans avoir à scanner les onglets. */}
+          <p className="hidden md:block text-[12.5px] text-muted-foreground mt-0.5 tabular-nums">
             {days[0].toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}
             {" "}—{" "}
             {days[5].toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}
@@ -1461,35 +1466,46 @@ export function PlanningView({
         </div>
         <div className="flex items-center gap-1.5 flex-wrap no-print">
           <ViewModeSelector current="day" weekStart={weekStart} />
-          {isAdmin && (
-            <ApplyTemplateButton
-              weekStart={weekStart}
-              onApplied={() => refetchWeek(weekStart)}
-            />
-          )}
-          {isAdmin && <ExportXlsxButton weekStart={weekStart} />}
-          <EmployeeStatusFilter
-            selected={statusFilter}
-            onChange={setStatusFilter}
-          />
-          <PrintButton
-            currentEmployeeId={currentEmployeeId}
-            weekStart={weekStart}
-          />
-          <button
-            onClick={() => setFocusMode((v) => !v)}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-card text-foreground/70 hover:bg-accent/50 transition-colors"
-            title={focusMode ? "Quitter le mode focus" : "Mode focus (cache la barre latérale)"}
-            aria-label="Mode focus"
-          >
-            {focusMode ? (
-              <Minimize2 className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
+          {/* Boutons "outils admin" cachés sur mobile pour libérer l'espace
+              et focus sur l'agenda — accessibles depuis desktop ou via les
+              pages dédiées (/gabarits pour les templates).
+              Restent visibles sur mobile : verrou admin (anti-tap accidentel),
+              DatePicker et nav semaine (essentiels). */}
+          {/* Outils admin desktop-only — wrappés dans un container invisible
+              sur mobile pour libérer l'espace haut d'écran. Restent
+              accessibles côté desktop ou via les pages dédiées. */}
+          <div className="hidden md:contents">
+            {isAdmin && (
+              <ApplyTemplateButton
+                weekStart={weekStart}
+                onApplied={() => refetchWeek(weekStart)}
+              />
             )}
-          </button>
+            {isAdmin && <ExportXlsxButton weekStart={weekStart} />}
+            <EmployeeStatusFilter
+              selected={statusFilter}
+              onChange={setStatusFilter}
+            />
+            <PrintButton
+              currentEmployeeId={currentEmployeeId}
+              weekStart={weekStart}
+            />
+            <button
+              onClick={() => setFocusMode((v) => !v)}
+              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-card text-foreground/70 hover:bg-accent/50 transition-colors"
+              title={focusMode ? "Quitter le mode focus" : "Mode focus (cache la barre latérale)"}
+              aria-label="Mode focus"
+            >
+              {focusMode ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
+            </button>
+          </div>
           {/* Verrou admin — bascule lecture seule pour éviter les modifs
-              accidentelles sur tactile. Préférence persistée en localStorage. */}
+              accidentelles sur tactile. Préférence persistée en localStorage.
+              GARDÉ sur mobile car c'est exactement le bon contexte d'usage. */}
           {isAdmin && (
             <button
               onClick={toggleAdminLock}
@@ -1514,9 +1530,7 @@ export function PlanningView({
               )}
             </button>
           )}
-          {/* Date picker — clique sur l'icône calendrier pour choisir
-              n'importe quelle date. Le natif `<input type="date">` ouvre
-              le calendrier OS (Mac, iOS, Android, Windows) au clic. */}
+          {/* Date picker + nav semaine — gardés sur mobile, essentiels */}
           <DatePickerButton selectedDate={selectedDay} onPick={goToDate} />
           <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5 ml-1">
             <button
