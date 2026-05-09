@@ -568,8 +568,10 @@ export const PlanningGrid = memo(function PlanningGrid({
           </colgroup>
           <thead>
             {/* Ligne unique : nom · statut · contrat · jour · semaine */}
-            <tr className="bg-card/80 backdrop-blur-md">
-              <th className="sticky left-0 z-20 bg-card/95 backdrop-blur-md px-3 py-3 text-left w-16 min-w-16 align-bottom">
+            {/* Sur mobile : fond plein (perf + lisibilité). Sur desktop :
+                léger blur sous l'en-tête sticky pour effet "frosted glass". */}
+            <tr className="bg-card md:bg-card/80 md:backdrop-blur-md">
+              <th className="sticky left-0 z-20 bg-card md:bg-card/95 md:backdrop-blur-md px-3 py-3 text-left w-16 min-w-16 align-bottom">
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                   Heure
                 </span>
@@ -596,7 +598,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                   />
                 );
               })}
-              <th className="sticky right-0 z-20 bg-card/95 backdrop-blur-md px-3 py-3 w-12 min-w-12 align-bottom">
+              <th className="sticky right-0 z-20 bg-card md:bg-card/95 md:backdrop-blur-md px-3 py-3 w-12 min-w-12 align-bottom">
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                   Eff
                 </span>

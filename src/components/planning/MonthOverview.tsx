@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 import type { AbsenceCode } from "@prisma/client";
 import {
   ABSENCE_LABELS,
@@ -461,54 +462,66 @@ function DayHeatCell({
   );
 }
 
-/* ─── Légende ─────────────────────────────────────────────────────── */
+/* ─── Légende — dépliable via <details> natif ─────────────────────
+   Pas d'état React, pas de JS, comportement natif clavier/screen-reader.
+   Fermée par défaut → libère l'espace en bas de la vue mois ; click sur
+   l'en-tête pour déplier. Chevron animé pour signaler l'interaction. */
 
 function Legend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2.5 text-[12px] text-foreground/70">
-      <span className="font-medium text-muted-foreground">Légende :</span>
-
-      <span className="inline-flex items-center gap-2">
-        <span className="flex h-3 overflow-hidden rounded-md ring-1 ring-border">
-          {[0.3, 0.5, 0.75, 1].map((a) => (
-            <span
-              key={a}
-              className="h-3 w-3.5"
-              // Gradient gris neutre — la VRAIE couleur est celle du rôle
-              // (cf. RolesLegend juste au-dessus). Ici on montre uniquement
-              // que l'intensité reflète le nombre d'heures travaillées.
-              style={{ backgroundColor: `rgba(82, 82, 91, ${a * 0.7})` }}
-            />
-          ))}
+    <details className="group rounded-xl border border-border/50 bg-card/60 text-[12px] text-foreground/70">
+      <summary className="flex items-center gap-2 cursor-pointer list-none px-4 py-2 select-none hover:bg-muted/40 rounded-xl transition-colors">
+        <ChevronRight
+          className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-90"
+          aria-hidden
+        />
+        <span className="font-medium text-muted-foreground">
+          Légende des couleurs et absences
         </span>
-        Couleur = rôle · intensité = heures
-      </span>
-
-      {(["CONGE", "MALADIE", "FORMATION_ABS", "ABSENT"] as AbsenceCode[]).map(
-        (code) => {
-          const s = ABSENCE_STYLES[code];
-          return (
-            <span key={code} className="inline-flex items-center gap-1.5">
+      </summary>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border/40 px-4 py-2.5">
+        <span className="inline-flex items-center gap-2">
+          <span className="flex h-3 overflow-hidden rounded-md ring-1 ring-border">
+            {[0.3, 0.5, 0.75, 1].map((a) => (
               <span
-                className="h-3 w-3.5 rounded-md ring-1 ring-inset"
-                style={{
-                  backgroundColor: s.bg,
-                  borderColor: s.border,
-                  backgroundImage:
-                    "repeating-linear-gradient(45deg, rgba(0,0,0,0.18) 0 1.5px, transparent 1.5px 6px)",
-                }}
+                key={a}
+                className="h-3 w-3.5"
+                // Gradient gris neutre — la VRAIE couleur est celle du rôle
+                // (cf. RolesLegend juste au-dessus). Ici on montre uniquement
+                // que l'intensité reflète le nombre d'heures travaillées.
+                style={{ backgroundColor: `rgba(82, 82, 91, ${a * 0.7})` }}
               />
-              {ABSENCE_LABELS[code]}
-            </span>
-          );
-        }
-      )}
+            ))}
+          </span>
+          Couleur = rôle · intensité = heures
+        </span>
 
-      <span className="inline-flex items-center gap-1.5">
-        <span className="h-3 w-3.5 rounded-md bg-muted/40 ring-1 ring-inset ring-border" />
-        Repos / Dimanche
-      </span>
-    </div>
+        {(["CONGE", "MALADIE", "FORMATION_ABS", "ABSENT"] as AbsenceCode[]).map(
+          (code) => {
+            const s = ABSENCE_STYLES[code];
+            return (
+              <span key={code} className="inline-flex items-center gap-1.5">
+                <span
+                  className="h-3 w-3.5 rounded-md ring-1 ring-inset"
+                  style={{
+                    backgroundColor: s.bg,
+                    borderColor: s.border,
+                    backgroundImage:
+                      "repeating-linear-gradient(45deg, rgba(0,0,0,0.18) 0 1.5px, transparent 1.5px 6px)",
+                  }}
+                />
+                {ABSENCE_LABELS[code]}
+              </span>
+            );
+          }
+        )}
+
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-3.5 rounded-md bg-muted/40 ring-1 ring-inset ring-border" />
+          Repos / Dimanche
+        </span>
+      </div>
+    </details>
   );
 }
 
