@@ -1,7 +1,7 @@
 {
-  "name": "Pharma PinVert — Pharmacie du Pinvert",
-  "short_name": "Pharma PinVert",
-  "description": "Planning d'équipe — Pharmacie du Pinvert, Aubagne",
+  "name": "PharmaPlanning — Planning d'officine",
+  "short_name": "PharmaPlanning",
+  "description": "Le planning d'équipe pour officines de pharmacie.",
   "start_url": "/planning",
   "scope": "/",
   "display": "standalone",

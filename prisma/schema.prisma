@@ -112,6 +112,10 @@ model Pharmacy {
   phone     String?
   siret     String?  @unique
   minStaff  Int      @default(4)           // Seuil minimum d'effectif par créneau
+  // Logo de l'officine — data URL base64 (uploadée depuis Paramètres,
+  // max 200KB) ou chemin relatif (ex: "/logo.png" pour les pharmacies
+  // seedées). Null = fallback sur le logo générique PharmaPlanning.
+  logoUrl   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -366,6 +370,13 @@ model Message {
   type      MessageType @default(TEXT)
   createdAt DateTime    @default(now())
 
+  // Pièce jointe optionnelle — image (PNG/JPG/WebP) stockée en base64
+  // data URL. Limite 500KB max après compression côté client. Pour des
+  // pièces lourdes (PDF, vidéo), on switchera vers Supabase Storage.
+  attachmentUrl  String?  @db.Text       // data:image/jpeg;base64,...
+  attachmentName String?                  // nom original (display only)
+  attachmentMime String?                  // image/png, image/jpeg, image/webp
+
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -446,6 +457,13 @@ model PayrollNote {
   status        PayrollNoteStatus @default(PENDING)
   accountedAt   DateTime?
   accountedById String?
+
+  // Pièce jointe optionnelle — image en base64 data URL (max 500KB après
+  // compression). Sert à joindre une preuve : capture d'écran de SMS
+  // d'absence, scan d'arrêt maladie, etc.
+  attachmentUrl  String?  @db.Text
+  attachmentName String?
+  attachmentMime String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

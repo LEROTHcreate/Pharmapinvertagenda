@@ -92,6 +92,33 @@
   }
 }
 
+/* ─── Pages légales (mentions, CGU, confidentialité) ─────────────────
+   Mini "prose" sans @tailwindcss/typography pour rester léger. */
+.legal-prose h2 {
+  @apply mt-10 mb-3 text-[20px] font-semibold tracking-tight text-foreground;
+}
+.legal-prose h3 {
+  @apply mt-6 mb-2 text-[15.5px] font-semibold tracking-tight text-foreground;
+}
+.legal-prose p {
+  @apply mt-3 text-[14px] leading-[1.7] text-foreground/85;
+}
+.legal-prose ul {
+  @apply mt-3 list-disc pl-5 text-[14px] leading-[1.7] text-foreground/85;
+}
+.legal-prose ul li {
+  @apply mt-1.5;
+}
+.legal-prose strong {
+  @apply font-semibold text-foreground;
+}
+.legal-prose a {
+  @apply text-violet-600 hover:text-violet-700 underline underline-offset-2;
+}
+.legal-prose .legal-placeholder {
+  @apply font-mono text-[12.5px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -356,13 +383,18 @@
 
 /* ─── Login success burst ─────────────────────────────────────────── */
 
-/* Voile lumineux qui apparaît en fondu sur tout l'écran */
-.success-veil {
-  animation: veil-in 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+/* Voile interne à la card — masque entièrement le formulaire derrière
+   avec un gradient solide violet → blanc → emerald (ton "réussite"). */
+.success-card-veil {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 60%),
+    linear-gradient(135deg, #f5f3ff 0%, #ffffff 45%, #ecfdf5 100%);
+  opacity: 0;
+  animation: veil-card-in 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-@keyframes veil-in {
-  from { opacity: 0; backdrop-filter: blur(0); }
-  to   { opacity: 1; backdrop-filter: blur(8px); }
+@keyframes veil-card-in {
+  from { opacity: 0; transform: scale(1.02); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 /* 3 anneaux concentriques qui partent du centre — effet "déverrouillage" */
@@ -402,33 +434,7 @@
   100% { transform: scale(1); }
 }
 
-/* ─── Login success WOW v2 : flash + confettis + pop dramatique ──── */
-
-/* Flash radial blanc qui part du centre et balaie tout l'écran (~600ms) */
-.success-flash {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 200px;
-  height: 200px;
-  margin: -100px 0 0 -100px;
-  border-radius: 9999px;
-  background: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(167, 139, 250, 0.6) 40%,
-    rgba(56, 189, 248, 0) 70%
-  );
-  pointer-events: none;
-  opacity: 0;
-  animation: flash-out 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  will-change: transform, opacity;
-}
-@keyframes flash-out {
-  0%   { transform: scale(0); opacity: 0; }
-  20%  { opacity: 0.9; }
-  100% { transform: scale(8); opacity: 0; }
-}
+/* ─── Login success WOW v3 : célébration in-card ──────────────────── */
 
 /* Pop dramatique du check (rebond + rotation) */
 .animate-check-pop {
@@ -441,26 +447,28 @@
   100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
-/* Confettis qui tombent depuis le haut, drift latéral + rotation continue */
-.confetti {
+/* Confettis contenus à l'intérieur de la card (chute ~360px puis fade) */
+.confetti-card {
   position: absolute;
-  top: -20px;
-  width: 8px;
-  height: 14px;
+  top: -12px;
+  width: 7px;
+  height: 12px;
   pointer-events: none;
   opacity: 0;
-  animation: confetti-fall var(--cd, 1200ms) cubic-bezier(0.42, 0, 0.58, 1) forwards;
+  border-radius: 1px;
+  animation: confetti-card-fall var(--cd, 1200ms) cubic-bezier(0.42, 0, 0.58, 1) forwards;
   animation-delay: var(--cdelay, 0ms);
   will-change: transform, opacity;
 }
-@keyframes confetti-fall {
+@keyframes confetti-card-fall {
   0%   { transform: translate(0, 0) rotate(0deg); opacity: 0; }
-  10%  { opacity: 1; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
   100% {
     transform:
-      translate(var(--cx, 0px), 110vh)
+      translate(var(--cx, 0px), 360px)
       rotate(var(--cr, 720deg));
-    opacity: 1;
+    opacity: 0;
   }
 }
 
@@ -562,17 +570,16 @@
   .shimmer-text,
   .starry,
   .aurora-stage,
-  .success-veil,
+  .success-card-veil,
   .success-ring,
   .success-check-path,
   .animate-success-pop,
-  .success-flash,
   .animate-check-pop,
-  .confetti,
+  .confetti-card,
   .sparkle-rise {
     animation: none !important;
   }
-  .confetti, .sparkle-rise, .success-flash { opacity: 0 !important; }
+  .confetti-card, .sparkle-rise { opacity: 0 !important; }
   .animate-check-pop { opacity: 1 !important; transform: none !important; }
   .animate-fade-up,
   .animate-fade-in {
@@ -583,7 +590,7 @@
     -webkit-text-fill-color: #6366f1;
     color: #6366f1;
   }
-  .success-veil { opacity: 1; }
+  .success-card-veil { opacity: 1; transform: none; }
   .success-check-path { stroke-dashoffset: 0; }
 }
 

@@ -60,32 +60,10 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
-  const { name, email, password } = parsed.data;
+  const data = parsed.data;
+  const { name, email, password } = data;
 
-  // ─── Mode mono-pharmacie ────────────────────────────────────────
-  // L'app est en mono-pharmacie pour l'instant : on attache le compte à
-  // l'unique pharmacie de la base.
-  // ⚠️ Garde-fou anti-régression : si jamais une 2ᵉ pharmacie est ajoutée
-  // (multi-tenant), ce flow devient une faille (cross-tenant signup) — on
-  // refuse alors l'inscription tant que le formulaire ne demande pas un
-  // identifiant pharmacie (cf. tâche 3 de l'audit, à réactiver). Ne pas
-  // retirer ce garde-fou sans réintroduire une sélection explicite côté UI.
-  const pharmacyCount = await prisma.pharmacy.count();
-  if (pharmacyCount > 1) {
-    return NextResponse.json(
-      { error: "MULTI_PHARMACY_REQUIRES_SIRET" },
-      { status: 503 }
-    );
-  }
-  const pharmacy = await prisma.pharmacy.findFirst({
-    select: { id: true, name: true },
-    orderBy: { createdAt: "asc" },
-  });
-  if (!pharmacy) {
-    return NextResponse.json({ error: "PHARMACY_NOT_FOUND" }, { status: 404 });
-  }
-
-  // Email unique global.
+  // Email unique global, peu importe le mode
   const existing = await prisma.user.findUnique({
     where: { email },
     select: { id: true },
@@ -96,53 +74,139 @@ export async function POST(req: Request) {
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  await prisma.user.create({
-    data: {
+  if (data.mode === "join") {
+    // ─── Mode "Rejoindre une officine existante" ───────────────────
+    // L'utilisateur fournit le SIRET. On vérifie que l'officine existe
+    // ET qu'elle a bien un admin actif (sinon il faut passer par "create"
+    // pour la première inscription).
+    const pharmacy = await prisma.pharmacy.findUnique({
+      where: { siret: data.pharmacySiret },
+      select: { id: true, name: true },
+    });
+    if (!pharmacy) {
+      return NextResponse.json(
+        { error: "PHARMACY_NOT_FOUND" },
+        { status: 404 }
+      );
+    }
+
+    // Vérifie qu'au moins un admin actif existe : si non, l'officine est
+    // "vide" → l'utilisateur doit créer le compte en mode "create" (et
+    // c'est lui qui devient titulaire).
+    const adminCount = await prisma.user.count({
+      where: {
+        pharmacyId: pharmacy.id,
+        role: "ADMIN",
+        isActive: true,
+        status: "APPROVED",
+      },
+    });
+    if (adminCount === 0) {
+      return NextResponse.json(
+        { error: "PHARMACY_NOT_INITIALIZED" },
+        { status: 409 }
+      );
+    }
+
+    await prisma.user.create({
+      data: {
+        name,
+        email,
+        hashedPassword,
+        pharmacyId: pharmacy.id,
+        role: "EMPLOYEE",
+        status: "PENDING",
+        isActive: false,
+      },
+    });
+
+    revalidateTag(DASHBOARD_CACHE_TAGS.usersPending(pharmacy.id));
+
+    await sendSignupConfirmation({
+      to: email,
       name,
-      email,
-      hashedPassword,
-      pharmacyId: pharmacy.id,
-      role: "EMPLOYEE",   // Rôle par défaut — l'admin choisira lors de l'approbation
-      status: "PENDING",  // En attente d'examen
-      isActive: false,    // Inactif tant que non approuvé
-    },
+      pharmacyName: pharmacy.name,
+    });
+
+    void (async () => {
+      try {
+        const admins = await prisma.user.findMany({
+          where: {
+            pharmacyId: pharmacy.id,
+            role: "ADMIN",
+            isActive: true,
+            status: "APPROVED",
+          },
+          select: { email: true },
+        });
+        if (admins.length === 0) return;
+        await sendNewSignupAdminNotification({
+          to: admins.map((a) => a.email),
+          newUserName: name,
+          newUserEmail: email,
+          pharmacyName: pharmacy.name,
+        });
+      } catch (e) {
+        console.error("[signup-admin-email] échec envoi notif admin:", e);
+      }
+    })();
+
+    return NextResponse.json({ ok: true, mode: "join" }, { status: 201 });
+  }
+
+  // ─── Mode "Créer une nouvelle officine" ──────────────────────────
+  // Le créateur devient automatiquement ADMIN APPROVED actif (titulaire).
+  // Il pourra ensuite valider les futures demandes des collaborateurs.
+  // On vérifie que le SIRET n'est pas déjà pris.
+  const existingPharmacy = await prisma.pharmacy.findUnique({
+    where: { siret: data.pharmacySiret },
+    select: { id: true },
+  });
+  if (existingPharmacy) {
+    return NextResponse.json(
+      { error: "PHARMACY_ALREADY_EXISTS" },
+      { status: 409 }
+    );
+  }
+
+  // Création atomique pharmacie + premier admin
+  const created = await prisma.$transaction(async (tx) => {
+    const pharmacy = await tx.pharmacy.create({
+      data: {
+        name: data.pharmacyName,
+        siret: data.pharmacySiret,
+        address: data.pharmacyAddress?.trim() || null,
+        phone: data.pharmacyPhone?.trim() || null,
+      },
+      select: { id: true, name: true },
+    });
+
+    const user = await tx.user.create({
+      data: {
+        name,
+        email,
+        hashedPassword,
+        pharmacyId: pharmacy.id,
+        role: "ADMIN",
+        status: "APPROVED",
+        isActive: true,
+        reviewedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    return { pharmacy, user };
   });
 
-  // Invalide le compteur "demandes en attente" du dashboard admin.
-  revalidateTag(DASHBOARD_CACHE_TAGS.usersPending(pharmacy.id));
-
-  // Email de confirmation au demandeur (best-effort, ne bloque pas le signup)
+  // Email de bienvenue — on réutilise le template "confirmation"
   await sendSignupConfirmation({
     to: email,
     name,
-    pharmacyName: pharmacy.name,
+    pharmacyName: created.pharmacy.name,
   });
 
-  // Notification aux admins de la pharmacie — best-effort en arrière-plan
-  // pour ne pas bloquer la réponse au signup (les requêtes DB + envoi mail
-  // peuvent prendre 1-2s, on ne fait pas attendre l'utilisateur pour ça).
-  void (async () => {
-    try {
-      const admins = await prisma.user.findMany({
-        where: {
-          pharmacyId: pharmacy.id,
-          role: "ADMIN",
-          isActive: true,
-          status: "APPROVED",
-        },
-        select: { email: true },
-      });
-      if (admins.length === 0) return;
-      await sendNewSignupAdminNotification({
-        to: admins.map((a) => a.email),
-        newUserName: name,
-        newUserEmail: email,
-        pharmacyName: pharmacy.name,
-      });
-    } catch (e) {
-      console.error("[signup-admin-email] échec envoi notif admin:", e);
-    }
-  })();
-
-  return NextResponse.json({ ok: true }, { status: 201 });
+  return NextResponse.json(
+    { ok: true, mode: "create", pharmacyId: created.pharmacy.id },
+    { status: 201 }
+  );
 }

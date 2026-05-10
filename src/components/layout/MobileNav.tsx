@@ -17,6 +17,7 @@ import {
   StickyNote,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
+import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
 import {
   Sheet,
   SheetContent,
@@ -64,6 +65,7 @@ const NAV: NavItem[] = [
 
 export function MobileNav({
   pharmacyName,
+  pharmacyLogoUrl,
   userName,
   userRole,
   pendingUsersCount = 0,
@@ -74,6 +76,7 @@ export function MobileNav({
   canViewPayroll = false,
 }: {
   pharmacyName: string;
+  pharmacyLogoUrl?: string | null;
   userName: string;
   userRole: UserRole;
   pendingUsersCount?: number;
@@ -176,12 +179,22 @@ export function MobileNav({
           </SheetContent>
         </Sheet>
 
-        {/* Titre — prend toute la largeur dispo */}
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-none">PharmaPlanning</p>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">
-            {pharmacyName}
-          </p>
+        {/* Titre + logo officine — prend toute la largeur dispo */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <PharmacyLogo
+            logoUrl={pharmacyLogoUrl}
+            size={28}
+            className="shrink-0"
+            alt={`Logo ${pharmacyName}`}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold leading-none truncate">
+              {pharmacyName}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              PharmaPlanning
+            </p>
+          </div>
         </div>
 
         {/* Actions secondaires (notifs, dark mode) restent à droite */}

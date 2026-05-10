@@ -75,6 +75,7 @@ export default async function DashboardLayout({
       </div>
       <Sidebar
         pharmacyName={pharmacy?.name ?? "Pharmacie"}
+        pharmacyLogoUrl={pharmacy?.logoUrl ?? null}
         userName={session.user.name}
         userRole={session.user.role}
         pendingUsersCount={pendingUsersCount}
@@ -86,6 +87,7 @@ export default async function DashboardLayout({
       />
       <MobileNav
         pharmacyName={pharmacy?.name ?? "Pharmacie"}
+        pharmacyLogoUrl={pharmacy?.logoUrl ?? null}
         userName={session.user.name}
         userRole={session.user.role}
         pendingUsersCount={pendingUsersCount}

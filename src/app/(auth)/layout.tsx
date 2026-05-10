@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -31,6 +33,18 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
       {/* Couche 5 — grain léger pour texturer le fond */}
       <div aria-hidden className="grain absolute inset-0 pointer-events-none" />
+
+      {/* Lien retour vers la landing page — discret, en haut à gauche.
+          Apparaît sur toutes les pages auth (login, signup, forgot, reset)
+          pour que le visiteur puisse revenir à la présentation produit
+          sans utiliser le bouton retour du navigateur. */}
+      <Link
+        href="/"
+        className="group absolute top-4 left-4 z-20 inline-flex items-center gap-1.5 rounded-full bg-white/70 backdrop-blur-md px-3 py-1.5 text-[12.5px] font-medium text-foreground/75 ring-1 ring-zinc-200/70 hover:bg-white hover:text-foreground transition-all sm:top-6 sm:left-6"
+      >
+        <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
+        Accueil
+      </Link>
 
       {/* Contenu */}
       <div className="relative flex min-h-screen items-center justify-center p-4 sm:p-6">

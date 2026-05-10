@@ -113,6 +113,13 @@ export async function GET(
       body: m.body,
       type: m.type,
       createdAt: m.createdAt.toISOString(),
+      attachment: m.attachmentUrl
+        ? {
+            url: m.attachmentUrl,
+            name: m.attachmentName ?? "image",
+            mime: m.attachmentMime ?? "image/jpeg",
+          }
+        : null,
       author: {
         id: m.author.id,
         name: m.author.name,
@@ -179,6 +186,9 @@ export async function POST(
       authorId: session.user.id,
       body: parsed.data.body,
       type: "TEXT",
+      attachmentUrl: parsed.data.attachment?.url ?? null,
+      attachmentName: parsed.data.attachment?.name ?? null,
+      attachmentMime: parsed.data.attachment?.mime ?? null,
     },
   });
   // Bumpe la conv pour qu'elle remonte dans la liste

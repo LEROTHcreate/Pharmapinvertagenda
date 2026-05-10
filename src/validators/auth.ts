@@ -1,11 +1,50 @@
 import { z } from "zod";
 
-/** Schéma de demande d'inscription (mono-pharmacie pour l'instant). */
-export const signupSchema = z.object({
-  name: z.string().trim().min(2).max(80),
-  email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(8).max(128),
-});
+/**
+ * SIRET français : 14 chiffres exactement. On accepte les espaces dans la
+ * saisie utilisateur (les officines l'écrivent souvent groupé) puis on les
+ * normalise en `transform`.
+ */
+const siretSchema = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/\s+/g, ""))
+  .refine((v) => /^\d{14}$/.test(v), {
+    message: "Le SIRET doit contenir 14 chiffres",
+  });
+
+/**
+ * Schéma de signup — discriminated union sur `mode` :
+ *
+ * - **"join"** : l'utilisateur rejoint une officine existante. Il fournit
+ *   le SIRET de la pharmacie. Le compte est créé en PENDING/EMPLOYEE,
+ *   l'admin titulaire de l'officine valide ensuite.
+ *
+ * - **"create"** : l'utilisateur crée une nouvelle officine et en devient
+ *   l'admin titulaire (APPROVED + actif d'emblée). Il fournit les
+ *   informations de l'officine (nom, ville, SIRET, téléphone).
+ */
+export const signupSchema = z.discriminatedUnion("mode", [
+  // ─── Rejoindre une officine existante ──────────────────────────
+  z.object({
+    mode: z.literal("join"),
+    name: z.string().trim().min(2).max(80),
+    email: z.string().trim().toLowerCase().email(),
+    password: z.string().min(8).max(128),
+    pharmacySiret: siretSchema,
+  }),
+  // ─── Créer une nouvelle officine ───────────────────────────────
+  z.object({
+    mode: z.literal("create"),
+    name: z.string().trim().min(2).max(80),
+    email: z.string().trim().toLowerCase().email(),
+    password: z.string().min(8).max(128),
+    pharmacyName: z.string().trim().min(2).max(120),
+    pharmacySiret: siretSchema,
+    pharmacyAddress: z.string().trim().max(200).optional().nullable(),
+    pharmacyPhone: z.string().trim().max(30).optional().nullable(),
+  }),
+]);
 
 /** Demande de réinitialisation : on prend juste l'email. */
 export const forgotPasswordSchema = z.object({

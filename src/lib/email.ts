@@ -87,9 +87,14 @@ async function safeSend(params: {
 /* ─── Templates HTML ─────────────────────────────────────────────── */
 
 const LOGO_URL = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/logo.png`;
-const ADMIN_PHONE = process.env.ADMIN_CONTACT_PHONE ?? "07.69.46.24.46";
+// Coordonnées de contact affichées en footer des emails. Toutes
+// configurables via env pour qu'une pharmacie puisse afficher SES
+// coordonnées plutôt que celles du SaaS. Les défauts ci-dessous sont
+// volontairement minimalistes (le contact pharmacie reste à la charge
+// de l'admin de l'officine).
+const ADMIN_PHONE = process.env.ADMIN_CONTACT_PHONE ?? "";
 const ADMIN_EMAIL =
-  process.env.ADMIN_CONTACT_EMAIL ?? "pharmapinvert.agenda@gmail.com";
+  process.env.ADMIN_CONTACT_EMAIL ?? "support@pharmaplanning.fr";
 const ADMIN_NAME = process.env.ADMIN_CONTACT_NAME ?? "l'administrateur";
 
 /** Wrapper commun : header logo + corps + footer contact */
@@ -137,11 +142,15 @@ function layout(opts: { title: string; bodyHtml: string }): string {
                   Contacte ${escapeHtml(ADMIN_NAME)} :
                 </p>
                 <p style="margin:0; font-size:12.5px; color:#71717a; line-height:1.7;">
-                  📞
+                  ${
+                    ADMIN_PHONE
+                      ? `📞
                   <a href="tel:${ADMIN_PHONE.replace(/\./g, "")}" style="color:#7c3aed; font-weight:500; text-decoration:none;">
                     ${escapeHtml(ADMIN_PHONE)}
                   </a>
-                  &nbsp;·&nbsp;
+                  &nbsp;·&nbsp;`
+                      : ""
+                  }
                   ✉️
                   <a href="mailto:${escapeHtml(ADMIN_EMAIL)}" style="color:#7c3aed; font-weight:500; text-decoration:none;">
                     ${escapeHtml(ADMIN_EMAIL)}

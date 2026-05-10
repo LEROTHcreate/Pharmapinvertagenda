@@ -16,6 +16,11 @@ import { SwapCard } from "@/components/messages/SwapCard";
 import { SwapProposalDialog } from "@/components/messages/SwapProposalDialog";
 import { AvatarImage } from "@/components/layout/AvatarImage";
 import { FEATURES } from "@/lib/features";
+import {
+  ImageAttachmentInput,
+  extractImageFromClipboard,
+} from "@/components/shared/ImageAttachmentInput";
+import { compressImage, type CompressedImage } from "@/lib/compress-image";
 
 type Props = {
   conversation: ConversationDTO;
@@ -74,10 +79,25 @@ export function ConversationPanel({
   onSwapUpdated,
 }: Props) {
   const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState<CompressedImage | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [swapOpen, setSwapOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  /** Ctrl+V dans le textarea : si le presse-papier contient une image,
+      on la compresse et on l'attache à la place du paste texte par défaut. */
+  async function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const file = extractImageFromClipboard(e);
+    if (!file) return; // texte normal : laisse le paste se faire
+    e.preventDefault();
+    try {
+      const compressed = await compressImage(file);
+      setAttachment(compressed);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   // Auto-scroll en bas à chaque nouveau message
   useEffect(() => {
@@ -88,14 +108,25 @@ export function ConversationPanel({
 
   async function handleSend() {
     const body = draft.trim();
-    if (!body || sending) return;
+    // Au moins texte ou pièce jointe — envoie vide bloqué
+    if (!body && !attachment) return;
+    if (sending) return;
     setSending(true);
     setError(null);
     try {
       const res = await fetch(`/api/conversations/${conversation.id}/messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({
+          body,
+          attachment: attachment
+            ? {
+                url: attachment.dataUrl,
+                name: attachment.name,
+                mime: attachment.mime,
+              }
+            : null,
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -103,6 +134,7 @@ export function ConversationPanel({
         return;
       }
       setDraft("");
+      setAttachment(null);
       onMessageSent();
     } finally {
       setSending(false);
@@ -233,9 +265,34 @@ export function ConversationPanel({
                             {m.author.name}
                           </p>
                         )}
-                        <p className="whitespace-pre-wrap break-words">
-                          {m.body}
-                        </p>
+                        {/* Pièce jointe image — vignette cliquable qui ouvre
+                            la full-size dans un nouvel onglet. Position au
+                            DESSUS du texte pour la mise en avant visuelle. */}
+                        {m.attachment && (
+                          <a
+                            href={m.attachment.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              "block mb-1.5 -mx-1 -mt-1 overflow-hidden rounded-xl",
+                              "max-w-[280px]"
+                            )}
+                            title={`Ouvrir ${m.attachment.name}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={m.attachment.url}
+                              alt={m.attachment.name}
+                              className="w-full h-auto max-h-[320px] object-contain bg-card"
+                              loading="lazy"
+                            />
+                          </a>
+                        )}
+                        {m.body && (
+                          <p className="whitespace-pre-wrap break-words">
+                            {m.body}
+                          </p>
+                        )}
                         <p
                           className={cn(
                             "text-[10px] mt-1 opacity-70",
@@ -268,6 +325,17 @@ export function ConversationPanel({
               {error}
             </div>
           )}
+          {/* Preview de la PJ en cours (au-dessus du textarea, sur sa
+              propre ligne pour ne pas réduire l'espace de saisie) */}
+          {attachment && (
+            <div className="mb-2">
+              <ImageAttachmentInput
+                value={attachment}
+                onChange={setAttachment}
+                disabled={sending}
+              />
+            </div>
+          )}
           <div className="flex items-end gap-2">
             {FEATURES.shiftSwap ? (
               <button
@@ -281,8 +349,6 @@ export function ConversationPanel({
               </button>
             ) : (
               // Feature en travaux : bouton désactivé + tooltip explicatif.
-              // Le code complet (dialog, API, composants) est conservé pour
-              // réactivation rapide via FEATURES.shiftSwap = true.
               <button
                 disabled
                 className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted/50 px-3 py-1.5 text-[12px] font-medium text-muted-foreground/60 cursor-not-allowed"
@@ -295,21 +361,38 @@ export function ConversationPanel({
                 </span>
               </button>
             )}
+            {/* Trombone : bouton seulement (sans preview, déjà rendu au-dessus
+                quand une PJ est attachée). */}
+            {!attachment && (
+              <ImageAttachmentInput
+                value={null}
+                onChange={setAttachment}
+                disabled={sending}
+                className="shrink-0"
+              />
+            )}
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   handleSend();
                 }
               }}
-              placeholder="Écrire un message…"
+              placeholder={
+                attachment ? "Légende (optionnel)…" : "Écrire un message…"
+              }
               rows={1}
               className="flex-1 resize-none rounded-2xl border border-border bg-card px-3 py-2 text-[14px] outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 max-h-32"
               disabled={sending}
             />
-            <Button size="sm" onClick={handleSend} disabled={!draft.trim() || sending}>
+            <Button
+              size="sm"
+              onClick={handleSend}
+              disabled={(!draft.trim() && !attachment) || sending}
+            >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>

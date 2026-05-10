@@ -3,6 +3,21 @@ import { z } from "zod";
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (YYYY-MM-DD)");
 
 /**
+ * Pièce jointe image — data URL base64, max ~700KB encodé (~500KB binaire
+ * après compression côté client).
+ */
+const attachmentSchema = z.object({
+  url: z
+    .string()
+    .max(750_000, "Pièce jointe trop lourde (max 500 KB après compression)")
+    .regex(/^data:image\/(png|jpe?g|webp|gif);base64,/, "Format invalide"),
+  name: z.string().trim().min(1).max(200),
+  mime: z
+    .string()
+    .regex(/^image\/(png|jpe?g|webp|gif)$/, "Type MIME non autorisé"),
+});
+
+/**
  * Création d'une note de régul par un collaborateur (ou un admin).
  * `authorId` n'est pas dans le payload — toujours = session.user.id côté API.
  */
@@ -10,6 +25,7 @@ export const createPayrollNoteInput = z.object({
   date: isoDate,
   infos: z.string().trim().min(1, "Le texte est requis").max(500),
   motif: z.string().trim().max(500).optional().nullable(),
+  attachment: attachmentSchema.optional().nullable(),
 });
 export type CreatePayrollNoteInput = z.infer<typeof createPayrollNoteInput>;
 

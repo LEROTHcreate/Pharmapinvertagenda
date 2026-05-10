@@ -15,6 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AvatarImage } from "@/components/layout/AvatarImage";
+import {
+  ImageAttachmentInput,
+  extractImageFromClipboard,
+} from "@/components/shared/ImageAttachmentInput";
+import { compressImage, type CompressedImage } from "@/lib/compress-image";
 import { cn } from "@/lib/utils";
 
 type PayrollNoteDTO = {
@@ -26,6 +31,7 @@ type PayrollNoteDTO = {
   status: "PENDING" | "ACCOUNTED";
   accountedAt: string | null;
   accountedById: string | null;
+  attachment: { url: string; name: string; mime: string } | null;
   createdAt: string;
   author: {
     id: string;
@@ -230,6 +236,24 @@ export function PayrollNotesView({ currentUser }: Props) {
                       <p className="text-[13px] whitespace-pre-wrap break-words">
                         {n.infos}
                       </p>
+                      {/* Vignette PJ — clic pour ouvrir en grand */}
+                      {n.attachment && (
+                        <a
+                          href={n.attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1.5 inline-block rounded-md overflow-hidden ring-1 ring-border hover:ring-violet-300 transition-all"
+                          title={`Ouvrir ${n.attachment.name}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={n.attachment.url}
+                            alt={n.attachment.name}
+                            className="h-16 w-auto max-w-[120px] object-cover"
+                            loading="lazy"
+                          />
+                        </a>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 max-w-[200px]">
                       {n.motif ? (
@@ -445,6 +469,7 @@ function NewNoteDialog({
   const [date, setDate] = useState(todayIso());
   const [infos, setInfos] = useState("");
   const [motif, setMotif] = useState("");
+  const [attachment, setAttachment] = useState<CompressedImage | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -452,7 +477,23 @@ function NewNoteDialog({
     setDate(todayIso());
     setInfos("");
     setMotif("");
+    setAttachment(null);
     setError(null);
+  }
+
+  /** Ctrl+V dans le textarea : capture image et l'attache. */
+  async function handlePaste(
+    e: React.ClipboardEvent<HTMLTextAreaElement>
+  ) {
+    const file = extractImageFromClipboard(e);
+    if (!file) return;
+    e.preventDefault();
+    try {
+      const compressed = await compressImage(file);
+      setAttachment(compressed);
+    } catch (err) {
+      setError((err as Error).message);
+    }
   }
 
   async function submit() {
@@ -470,6 +511,13 @@ function NewNoteDialog({
           date,
           infos: infos.trim(),
           motif: motif.trim() || null,
+          attachment: attachment
+            ? {
+                url: attachment.dataUrl,
+                name: attachment.name,
+                mime: attachment.mime,
+              }
+            : null,
         }),
       });
       if (!res.ok) {
@@ -509,11 +557,22 @@ function NewNoteDialog({
               id="note-infos"
               value={infos}
               onChange={(e) => setInfos(e.target.value)}
+              onPaste={handlePaste}
               maxLength={500}
               rows={3}
-              placeholder="Ex: 1h de retard ce matin"
+              placeholder="Ex: 1h de retard ce matin (Ctrl+V pour coller une capture)"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-100 focus:border-violet-500 resize-none"
               autoFocus
+            />
+          </div>
+
+          {/* Pièce jointe optionnelle (capture, ordonnance scannée, etc.) */}
+          <div className="space-y-1.5">
+            <Label>Pièce jointe (optionnel)</Label>
+            <ImageAttachmentInput
+              value={attachment}
+              onChange={setAttachment}
+              disabled={busy}
             />
           </div>
 

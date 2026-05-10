@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { updatePharmacyInput, type UpdatePharmacyInput } from "@/validators/pharmacy";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
+import { isSuperAdmin } from "@/lib/payroll-permissions";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -22,6 +23,40 @@ export async function updatePharmacy(input: UpdatePharmacyInput): Promise<Action
     };
   }
 
+  // SIRET : modification réservée au super-admin (compte créateur de
+  // l'officine, sans fiche Employee liée). Les autres admins voient le
+  // champ en lecture seule côté UI ; mais on double-check côté serveur
+  // au cas où un appel API contournerait la front.
+  const isSuper = isSuperAdmin({
+    role: session.user.role,
+    employeeId: session.user.employeeId ?? null,
+  });
+  let siretUpdate: { siret: string } | object = {};
+  if (parsed.data.siret !== undefined) {
+    if (!isSuper) {
+      return {
+        ok: false,
+        error:
+          "Seul le compte créateur de l'officine peut modifier le SIRET.",
+      };
+    }
+    // Vérifie que le SIRET n'est pas déjà pris par une AUTRE pharmacie
+    const conflict = await prisma.pharmacy.findFirst({
+      where: {
+        siret: parsed.data.siret,
+        NOT: { id: session.user.pharmacyId },
+      },
+      select: { id: true },
+    });
+    if (conflict) {
+      return {
+        ok: false,
+        error: "Ce SIRET est déjà utilisé par une autre officine.",
+      };
+    }
+    siretUpdate = { siret: parsed.data.siret };
+  }
+
   await prisma.pharmacy.update({
     where: { id: session.user.pharmacyId },
     data: {
@@ -29,6 +64,7 @@ export async function updatePharmacy(input: UpdatePharmacyInput): Promise<Action
       address: parsed.data.address ?? null,
       phone: parsed.data.phone ?? null,
       minStaff: parsed.data.minStaff,
+      ...siretUpdate,
     },
   });
 
@@ -37,6 +73,61 @@ export async function updatePharmacy(input: UpdatePharmacyInput): Promise<Action
   revalidatePath("/parametres");
   // Le minStaff impacte la grille planning (couleurs effectif)
   revalidatePath("/planning");
+
+  return { ok: true };
+}
+
+/* ─── Logo de l'officine ─────────────────────────────────────────────
+   Upload sous forme de data URL base64 (encodage côté client). Limite
+   à 200 KB pour ne pas alourdir la BDD. Type MIME restreint à PNG/JPEG/
+   WebP/SVG (les formats raster + vectoriel courants pour un logo).
+   Passer `null` retire le logo et restaure le fallback PharmaPlanning.
+*/
+const ALLOWED_LOGO_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/svg+xml",
+]);
+const LOGO_MAX_BYTES = 200 * 1024;
+
+export async function setPharmacyLogo(
+  dataUrl: string | null
+): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Non authentifié" };
+  if (session.user.role !== "ADMIN") return { ok: false, error: "Accès admin requis" };
+
+  if (dataUrl !== null) {
+    // Format attendu : "data:<mime>;base64,<payload>"
+    const match = /^data:([^;,]+);base64,(.+)$/.exec(dataUrl);
+    if (!match) {
+      return { ok: false, error: "Format de fichier non reconnu." };
+    }
+    const mime = match[1].toLowerCase();
+    if (!ALLOWED_LOGO_MIMES.has(mime)) {
+      return {
+        ok: false,
+        error: "Format non supporté. Utilisez PNG, JPG, WebP ou SVG.",
+      };
+    }
+    // Estimation de la taille décodée : 3/4 du payload base64 (ratio fixe).
+    const approxBytes = Math.ceil((match[2].length * 3) / 4);
+    if (approxBytes > LOGO_MAX_BYTES) {
+      return {
+        ok: false,
+        error: `Logo trop lourd (${Math.round(approxBytes / 1024)} KB). Maximum 200 KB.`,
+      };
+    }
+  }
+
+  await prisma.pharmacy.update({
+    where: { id: session.user.pharmacyId },
+    data: { logoUrl: dataUrl },
+  });
+
+  revalidateTag(DASHBOARD_CACHE_TAGS.pharmacy(session.user.pharmacyId));
+  revalidatePath("/parametres");
 
   return { ok: true };
 }

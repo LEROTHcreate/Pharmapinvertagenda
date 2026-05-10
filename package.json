@@ -1,5 +1,5 @@
 {
-  "name": "agendapharmapinvert",
+  "name": "pharma-planning",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,6 +13,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:pinvert": "tsx prisma/seed.ts pin-vert",
+    "db:seed:template": "tsx prisma/seed.ts template",
     "db:studio": "prisma studio",
     "db:update-admin": "tsx prisma/update-admin.ts",
     "postinstall": "prisma generate"

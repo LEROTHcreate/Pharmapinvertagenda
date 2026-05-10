@@ -53,11 +53,22 @@ export type SwapRequestDTO = {
   rejectionNote: string | null;
 };
 
+export type MessageAttachmentDTO = {
+  /** Data URL `data:image/...;base64,...` (image, max 500KB après compression). */
+  url: string;
+  /** Nom de fichier original (display only). */
+  name: string;
+  /** Mime du fichier — image/png, image/jpeg, image/webp, image/gif. */
+  mime: string;
+};
+
 export type MessageDTO = {
   id: string;
   body: string;
   type: "TEXT" | "SWAP_REQUEST" | "SYSTEM";
   createdAt: string;
+  /** Pièce jointe optionnelle (image). Null si pas de PJ. */
+  attachment: MessageAttachmentDTO | null;
   author: {
     id: string;
     name: string;

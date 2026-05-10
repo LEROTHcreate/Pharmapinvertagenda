@@ -166,6 +166,14 @@ export default async function ProfilPage() {
                 : "Collaborateur"}
             </p>
           </div>
+          <div>
+            <p className="text-muted-foreground text-[11.5px] mb-0.5">
+              Mot de passe
+            </p>
+            <p className="font-medium text-foreground tracking-[0.15em]">
+              ••••••••
+            </p>
+          </div>
           {employee && (
             <>
               <div>

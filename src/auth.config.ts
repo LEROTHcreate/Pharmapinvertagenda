@@ -15,9 +15,15 @@ export const authConfig = {
       const isOnSignup = path.startsWith("/signup");
       const isOnForgot = path.startsWith("/forgot-password");
       const isOnReset = path.startsWith("/reset-password");
+      const isOnHome = path === "/"; // landing page produit
       const isOnApi = path.startsWith("/api");
 
       if (isOnApi) return true; // chaque route API gère son auth
+
+      // Landing page racine : publique. La page elle-même redirige les
+      // utilisateurs déjà connectés vers /planning, donc on laisse passer.
+      if (isOnHome) return true;
+
       // Pages publiques (auth) : accessibles sans session ;
       // utilisateur déjà connecté → redirigé vers le planning.
       if (isOnLogin || isOnSignup || isOnForgot || isOnReset) {

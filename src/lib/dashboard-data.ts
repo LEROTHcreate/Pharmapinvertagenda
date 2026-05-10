@@ -15,7 +15,7 @@ export const getPharmacyHeader = (pharmacyId: string) =>
     async () => {
       return prisma.pharmacy.findUnique({
         where: { id: pharmacyId },
-        select: { name: true },
+        select: { name: true, logoUrl: true },
       });
     },
     ["pharmacy-header", pharmacyId],

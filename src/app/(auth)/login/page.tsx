@@ -1,8 +1,8 @@
 import { Suspense } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { Card3DTilt } from "@/components/auth/Card3DTilt";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export const metadata = { title: "Connexion · PharmaPlanning" };
 
@@ -22,21 +22,15 @@ export default function LoginPage() {
 
             {/* Logo + titre */}
             <div className="flex flex-col items-center text-center">
-              {/* Halo lumineux derrière le logo qui respire */}
-              <div className="relative animate-fade-up">
-                <span
-                  aria-hidden
-                  className="animate-pulse-glow pointer-events-none absolute inset-0 -m-4 rounded-full bg-gradient-to-br from-violet-400/60 via-fuchsia-300/40 to-sky-300/50 blur-xl"
-                />
-                <Image
-                  src="/logo.png"
-                  alt="PharmaPlanning"
-                  width={72}
-                  height={72}
-                  className="relative h-[72px] w-[72px] object-contain drop-shadow-[0_8px_24px_rgba(124,58,237,0.35)] animate-float"
-                  priority
-                />
-              </div>
+              {/* Logo générique de la marque + halo violet pulsant.
+                  Cliquable → ramène à la landing page produit. */}
+              <Link
+                href="/"
+                aria-label="Retour à l'accueil"
+                className="animate-fade-up animate-float transition-transform hover:scale-105"
+              >
+                <BrandLogo size={72} withHalo />
+              </Link>
 
               {/* Titre avec dégradé animé qui sweep */}
               <h1 className="animate-fade-up delay-75 mt-6 text-[28px] font-semibold tracking-[-0.02em]">

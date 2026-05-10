@@ -3,20 +3,20 @@
 import type { CSSProperties } from "react";
 
 /**
- * Overlay plein écran "WOW v2" affiché ~1100 ms entre une connexion
- * réussie et la redirection vers /planning. Empile :
- *  - voile semi-transparent qui flou le background (success-veil)
- *  - flash radial blanc qui balaie depuis le centre (success-flash)
- *  - 3 anneaux concentriques émeraude qui pulsent (success-ring)
- *  - 18 confettis colorés qui tombent avec rotation (confetti)
- *  - 8 sparkles qui s'élèvent depuis le centre (sparkle-rise)
- *  - check vert qui pop avec rebond + rotate (animate-check-pop)
- *  - "Connecté ✨" texte en fade-up
+ * Overlay de succès — affiché ~1100 ms entre une connexion réussie et la
+ * redirection vers /planning. Positionné EN ABSOLU dans la card de login
+ * (pas plein écran) pour ne plus laisser apparaître le formulaire derrière
+ * un voile semi-transparent. La card devient elle-même le panneau de succès.
  *
- * 100 % CSS — pas de lib externe. Toutes les positions/délais sont
- * pré-calculés au render (déterministes : pas de Math.random côté JSX
- * pour éviter les mismatchs SSR, mais ici l'overlay ne s'affiche que
- * côté client après le clic donc c'est safe).
+ * Empile :
+ *  - fond gradient violet → emerald solide qui masque le formulaire
+ *  - 14 confettis colorés qui retombent à l'intérieur de la card
+ *  - 3 anneaux émeraude qui pulsent depuis le centre
+ *  - 8 sparkles qui s'élèvent en cercle autour du check
+ *  - check vert qui pop avec rebond + halo glow
+ *  - "Connecté !" en fade-up + sous-titre "Redirection en cours…"
+ *
+ * 100 % CSS — pas de lib externe.
  */
 
 const CONFETTI_COLORS = [
@@ -30,13 +30,13 @@ const CONFETTI_COLORS = [
   "#22d3ee", // cyan
 ];
 
-/** 18 confettis répartis sur la largeur de l'écran avec drift latéral aléatoire */
-const CONFETTIS = Array.from({ length: 18 }, (_, i) => {
-  const startX = (i / 18) * 100; // % de la largeur
-  const drift = (Math.random() - 0.5) * 200; // dérive ±100px
-  const rotation = 360 + Math.random() * 720; // 1 à 3 tours
-  const duration = 1100 + Math.random() * 400; // 1.1s à 1.5s
-  const delay = Math.random() * 200; // staggered start
+/** 14 confettis répartis sur la largeur de la card avec drift latéral */
+const CONFETTIS = Array.from({ length: 14 }, (_, i) => {
+  const startX = ((i + 0.5) / 14) * 100; // % de la largeur
+  const drift = (Math.random() - 0.5) * 80; // dérive ±40px (contenu carte)
+  const rotation = 360 + Math.random() * 540;
+  const duration = 1000 + Math.random() * 350;
+  const delay = Math.random() * 250;
   return {
     left: `${startX}%`,
     color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
@@ -50,12 +50,12 @@ const CONFETTIS = Array.from({ length: 18 }, (_, i) => {
 /** 8 sparkles qui s'élèvent en cercle autour du check */
 const SPARKLES = Array.from({ length: 8 }, (_, i) => {
   const angle = (i * 360) / 8;
-  const distance = 90 + Math.random() * 30;
+  const distance = 70 + Math.random() * 25;
   const rad = (angle * Math.PI) / 180;
   return {
     rx: `${Math.cos(rad) * distance}px`,
-    ry: `${Math.sin(rad) * distance - 20}px`, // léger biais vers le haut
-    sdelay: `${200 + i * 40}ms`,
+    ry: `${Math.sin(rad) * distance - 16}px`,
+    sdelay: `${200 + i * 35}ms`,
     color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
   };
 });
@@ -65,17 +65,14 @@ export function LoginSuccessOverlay() {
     <div
       role="status"
       aria-live="polite"
-      className="success-veil fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-white/40"
+      className="success-card-veil absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden rounded-[28px]"
     >
-      {/* Flash radial qui balaie depuis le centre */}
-      <span aria-hidden className="success-flash" />
-
-      {/* Confettis qui tombent depuis le haut */}
+      {/* Confettis qui retombent à l'intérieur de la card */}
       {CONFETTIS.map((c, i) => (
         <span
           key={`confetti-${i}`}
           aria-hidden
-          className="confetti rounded-sm"
+          className="confetti-card rounded-sm"
           style={
             {
               left: c.left,
@@ -89,7 +86,7 @@ export function LoginSuccessOverlay() {
         />
       ))}
 
-      <div className="relative flex flex-col items-center gap-4">
+      <div className="relative flex flex-col items-center gap-5">
         {/* Sparkles qui s'élèvent depuis le centre du check */}
         <div className="pointer-events-none absolute left-1/2 top-12 h-0 w-0">
           {SPARKLES.map((s, i) => (
@@ -120,7 +117,7 @@ export function LoginSuccessOverlay() {
           <span aria-hidden className="success-ring success-ring--3 inset-0" />
 
           {/* Disque central — check qui pop avec rebond */}
-          <div className="animate-check-pop relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_12px_40px_-6px_rgba(16,185,129,0.7),0_0_0_8px_rgba(16,185,129,0.12)]">
+          <div className="animate-check-pop relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_18px_48px_-8px_rgba(16,185,129,0.65),0_0_0_10px_rgba(16,185,129,0.12)]">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -128,7 +125,7 @@ export function LoginSuccessOverlay() {
               strokeWidth="3.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-10 w-10 drop-shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+              className="h-10 w-10 drop-shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
               aria-hidden
             >
               <path d="M5 12.5l4.5 4.5L19 7" />
@@ -137,9 +134,14 @@ export function LoginSuccessOverlay() {
         </div>
 
         {/* Texte sous l'animation */}
-        <p className="animate-fade-up text-[16px] font-semibold tracking-tight text-zinc-900 [animation-delay:400ms] [animation-fill-mode:both] opacity-0">
-          Connecté ✨
-        </p>
+        <div className="text-center">
+          <p className="animate-fade-up text-[20px] font-semibold tracking-tight text-zinc-900 [animation-delay:300ms] [animation-fill-mode:both] opacity-0">
+            Connecté&nbsp;!
+          </p>
+          <p className="animate-fade-up mt-1 text-[13px] text-zinc-500 [animation-delay:500ms] [animation-fill-mode:both] opacity-0">
+            Redirection en cours…
+          </p>
+        </div>
       </div>
     </div>
   );

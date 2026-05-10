@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
 import {
   Calendar,
   Users,
@@ -58,6 +58,7 @@ const NAV: NavItem[] = [
 
 export function Sidebar({
   pharmacyName,
+  pharmacyLogoUrl,
   userName,
   userRole,
   pendingUsersCount = 0,
@@ -68,6 +69,7 @@ export function Sidebar({
   canViewPayroll = false,
 }: {
   pharmacyName: string;
+  pharmacyLogoUrl?: string | null;
   userName: string;
   userRole: UserRole;
   pendingUsersCount?: number;
@@ -95,20 +97,18 @@ export function Sidebar({
   return (
     <aside className="hidden md:flex flex-col w-64 border-r bg-card">
       <div className="flex items-center gap-3 px-5 py-5 border-b">
-        <Image
-          src="/logo.png"
-          alt="PharmaPlanning"
-          width={40}
-          height={40}
-          className="h-10 w-10 object-contain shrink-0"
-          priority
+        <PharmacyLogo
+          logoUrl={pharmacyLogoUrl}
+          size={40}
+          className="shrink-0"
+          alt={`Logo ${pharmacyName}`}
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-none truncate">
-            PharmaPlanning
+            {pharmacyName}
           </p>
           <p className="text-xs text-muted-foreground truncate mt-1">
-            {pharmacyName}
+            PharmaPlanning
           </p>
         </div>
         <div className="flex items-center gap-0.5">

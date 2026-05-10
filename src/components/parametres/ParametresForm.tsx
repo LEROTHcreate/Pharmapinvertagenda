@@ -12,15 +12,21 @@ type Initial = {
   name: string;
   address: string;
   phone: string;
+  siret: string;
   minStaff: number;
 };
 
 export function ParametresForm({
   initial,
-  siret,
+  canEditSiret = false,
 }: {
   initial: Initial;
-  siret: string | null;
+  /**
+   * Autorise la modification du SIRET. True uniquement pour le super-admin
+   * (compte créateur de l'officine, admin sans fiche Employee). Pour les
+   * autres admins, le champ reste en lecture seule.
+   */
+  canEditSiret?: boolean;
 }) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -36,10 +42,16 @@ export function ParametresForm({
     e.preventDefault();
     setError(null);
     startTransition(async () => {
+      const trimmedSiret = form.siret.trim();
       const res = await updatePharmacy({
         name: form.name.trim(),
         address: form.address.trim() || null,
         phone: form.phone.trim() || null,
+        // On envoie le SIRET seulement s'il a été modifié ET si l'admin est
+        // autorisé. Sinon, le serveur l'ignore proprement.
+        ...(canEditSiret && trimmedSiret !== initial.siret.trim()
+          ? { siret: trimmedSiret }
+          : {}),
         minStaff: Number(form.minStaff) || 0,
       });
       if (!res.ok) {
@@ -91,20 +103,35 @@ export function ParametresForm({
             maxLength={40}
           />
         </Field>
-        {/* SIRET en lecture seule (identifiant administratif, pas modifiable depuis l'UI) */}
+        {/* SIRET — éditable UNIQUEMENT pour le super-admin (créateur de
+            l'officine, admin sans fiche Employee). Sinon lecture seule. */}
         <Field label="SIRET" htmlFor="siret">
-          <div className="relative">
+          {canEditSiret ? (
             <Input
               id="siret"
-              value={siret ?? "—"}
-              readOnly
-              disabled
-              className="pr-9 bg-zinc-50 text-zinc-500"
+              value={form.siret}
+              onChange={(e) => set("siret", e.target.value)}
+              disabled={isPending}
+              placeholder="14 chiffres (ex. 798 898 599 00013)"
+              maxLength={20}
+              inputMode="numeric"
             />
-            <Lock className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-          </div>
+          ) : (
+            <div className="relative">
+              <Input
+                id="siret"
+                value={form.siret || "—"}
+                readOnly
+                disabled
+                className="pr-9 bg-zinc-50 text-zinc-500"
+              />
+              <Lock className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+            </div>
+          )}
           <p className="text-[11.5px] text-zinc-400 mt-1">
-            Identifiant administratif — non modifiable depuis l'interface.
+            {canEditSiret
+              ? "Identifiant administratif partagé aux collaborateurs pour s'inscrire. Espaces autorisés à la saisie."
+              : "Identifiant administratif — modifiable uniquement par le compte créateur de l'officine."}
           </p>
         </Field>
       </Section>

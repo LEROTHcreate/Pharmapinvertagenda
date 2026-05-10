@@ -20,18 +20,25 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   // Titre de l'onglet navigateur + valeur par défaut des sous-pages
-  title: "Pharma PinVert",
-  description: "Planning d'équipe — Pharmacie du Pinvert, Aubagne",
-  applicationName: "Pharma PinVert",
+  title: "PharmaPlanning",
+  description:
+    "Le planning d'équipe pour officines de pharmacie — gestion intuitive des plannings, absences, échanges et heures supplémentaires.",
+  applicationName: "PharmaPlanning",
   icons: {
-    icon: "/logo.png",
+    // SVG pour les onglets (crisp à toutes les résolutions / dark mode).
+    // PNG en fallback pour les vieux navigateurs qui ne savent pas afficher
+    // un favicon SVG (Safari iOS < 16, IE legacy).
+    icon: [
+      { url: "/pharmaplanning-logo.svg", type: "image/svg+xml" },
+      { url: "/logo.png", type: "image/png" },
+    ],
     apple: "/apple-touch-icon.png",
-    shortcut: "/logo.png",
+    shortcut: "/pharmaplanning-logo.svg",
   },
   appleWebApp: {
     capable: true,
-    // Affiché sous l'icône sur l'écran d'accueil iOS — 14 caractères, OK
-    title: "Pharma PinVert",
+    // Affiché sous l'icône sur l'écran d'accueil iOS — 14 caractères max
+    title: "PharmaPlanning",
     statusBarStyle: "default",
   },
   manifest: "/manifest.webmanifest",

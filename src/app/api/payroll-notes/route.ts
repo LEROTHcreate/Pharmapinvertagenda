@@ -29,6 +29,9 @@ export async function GET() {
       status: true,
       accountedAt: true,
       accountedById: true,
+      attachmentUrl: true,
+      attachmentName: true,
+      attachmentMime: true,
       createdAt: true,
       authorId: true,
       author: {
@@ -52,6 +55,13 @@ export async function GET() {
       status: n.status,
       accountedAt: n.accountedAt?.toISOString() ?? null,
       accountedById: n.accountedById,
+      attachment: n.attachmentUrl
+        ? {
+            url: n.attachmentUrl,
+            name: n.attachmentName ?? "image",
+            mime: n.attachmentMime ?? "image/jpeg",
+          }
+        : null,
       createdAt: n.createdAt.toISOString(),
       author: {
         id: n.author.id,
@@ -91,6 +101,9 @@ export async function POST(req: Request) {
       date: new Date(`${parsed.data.date}T00:00:00Z`),
       infos: parsed.data.infos,
       motif: parsed.data.motif?.trim() || null,
+      attachmentUrl: parsed.data.attachment?.url ?? null,
+      attachmentName: parsed.data.attachment?.name ?? null,
+      attachmentMime: parsed.data.attachment?.mime ?? null,
     },
     select: { id: true },
   });
