@@ -8,6 +8,7 @@ import {
   Link2,
   Loader2,
   Mail,
+  Pencil,
   ShieldCheck,
   Trash2,
   User as UserIcon,
@@ -80,6 +81,12 @@ export function UsersAdmin({
 
   // Confirmation de suppression définitive
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+
+  // Modification du lien collaborateur d'un membre déjà approuvé.
+  // editLinkTarget = l'utilisateur ciblé, editLinkValue = l'employeeId choisi
+  // dans le select (string vide = "Aucun / délier").
+  const [editLinkTarget, setEditLinkTarget] = useState<UserRow | null>(null);
+  const [editLinkValue, setEditLinkValue] = useState<string>("");
 
   const { pending, members, rejected } = useMemo(() => {
     const p: UserRow[] = [];
@@ -162,6 +169,45 @@ export function UsersAdmin({
     }
   }
 
+  /**
+   * Met à jour le lien collaborateur d'un membre déjà approuvé.
+   * employeeId = "" → on délie (envoie null à l'API).
+   */
+  async function updateEmployeeLink(user: UserRow, employeeId: string) {
+    setError(null);
+    setBusyId(user.id);
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: employeeId || null }),
+      });
+      if (!res.ok) {
+        const code = await readError(res);
+        if (code === "EMPLOYEE_TAKEN") {
+          throw new Error(
+            "Ce collaborateur est déjà lié à un autre compte. Délie-le d'abord."
+          );
+        }
+        if (code === "EMPLOYEE_NOT_FOUND") {
+          throw new Error("Collaborateur introuvable.");
+        }
+        if (code === "NOT_APPROVED") {
+          throw new Error(
+            "Le compte n'est pas encore approuvé — passe par la file d'attente."
+          );
+        }
+        throw new Error(code || "Erreur lors de la mise à jour du lien");
+      }
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+      setEditLinkTarget(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {error && (
@@ -220,6 +266,10 @@ export function UsersAdmin({
                 key={u.id}
                 user={u}
                 onDelete={u.isCurrentUser ? undefined : () => setDeleteTarget(u)}
+                onEditLink={() => {
+                  setEditLinkTarget(u);
+                  setEditLinkValue(u.employee?.id ?? "");
+                }}
               />
             ))}
           </ul>
@@ -266,6 +316,72 @@ export function UsersAdmin({
         }}
         onClose={() => setDeleteTarget(null)}
       />
+
+      {/* Modification du lien collaborateur d'un membre approuvé */}
+      <Dialog
+        open={!!editLinkTarget}
+        onOpenChange={(o) => !o && setEditLinkTarget(null)}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editLinkTarget?.employee
+                ? `Modifier le rattachement de ${editLinkTarget?.name}`
+                : `Rattacher ${editLinkTarget?.name ?? ""} à un collaborateur`}
+            </DialogTitle>
+            <DialogDescription>
+              Choisis la fiche planning à associer à ce compte. Tu peux aussi
+              le détacher en sélectionnant « Aucun ».
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2">
+            {/* On exclut le collaborateur déjà lié à CE user du flag "taken"
+                pour qu'il reste sélectionnable (sinon on ne pourrait plus
+                "Enregistrer" sans changement). Les fiches liées à un AUTRE
+                compte restent grisées. */}
+            <EmployeeSelect
+              employees={employees.map((e) =>
+                editLinkTarget && e.linkedUserId === editLinkTarget.id
+                  ? { ...e, linkedUserId: null }
+                  : e
+              )}
+              value={editLinkValue}
+              onChange={setEditLinkValue}
+              disabled={!!busyId}
+            />
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setEditLinkTarget(null)}
+              disabled={!!busyId}
+              className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-card px-4 text-[13px] font-medium text-foreground/85 transition-colors hover:bg-muted/40 disabled:opacity-60"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                editLinkTarget && updateEmployeeLink(editLinkTarget, editLinkValue)
+              }
+              disabled={
+                !!busyId ||
+                // Pas de changement → désactive Enregistrer (évite un appel
+                // API inutile et rassure l'utilisateur que rien ne va bouger).
+                editLinkValue === (editLinkTarget?.employee?.id ?? "")
+              }
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-violet-600 px-4 text-[13px] font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-60"
+            >
+              {busyId === editLinkTarget?.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Enregistrer
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation refus */}
       <Dialog
@@ -531,9 +647,12 @@ function ApproveButton({
 function MemberCard({
   user,
   onDelete,
+  onEditLink,
 }: {
   user: UserRow;
   onDelete?: () => void;
+  /** Ouvre la dialog de rattachement / modification du lien collaborateur. */
+  onEditLink?: () => void;
 }) {
   const isAdmin = user.role === "ADMIN";
   return (
@@ -588,23 +707,40 @@ function MemberCard({
         </div>
       </div>
 
-      {user.employee ? (
-        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          <Link2 className="h-3 w-3" />
-          Lié à&nbsp;
-          <span className="font-medium text-foreground/85">
-            {user.employee.firstName}
-            {user.employee.lastName !== "—" && ` ${user.employee.lastName}`}
-          </span>
-          <span className="text-muted-foreground/70">
-            · {STATUS_LABELS[user.employee.status]}
-          </span>
-        </div>
-      ) : (
-        <div className="text-[12px] italic text-muted-foreground/70">
-          Non rattaché au planning
-        </div>
-      )}
+      <div className="flex items-center justify-between gap-2">
+        {user.employee ? (
+          <div className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+            <Link2 className="h-3 w-3 shrink-0" />
+            <span className="shrink-0">Lié à&nbsp;</span>
+            <span className="truncate font-medium text-foreground/85">
+              {user.employee.firstName}
+              {user.employee.lastName !== "—" && ` ${user.employee.lastName}`}
+            </span>
+            <span className="shrink-0 text-muted-foreground/70">
+              · {STATUS_LABELS[user.employee.status]}
+            </span>
+          </div>
+        ) : (
+          <div className="text-[12px] italic text-muted-foreground/70">
+            Non rattaché au planning
+          </div>
+        )}
+        {onEditLink && (
+          <button
+            type="button"
+            onClick={onEditLink}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-violet-700 transition-colors hover:bg-violet-50"
+            title={
+              user.employee
+                ? "Changer ou retirer le rattachement à un collaborateur"
+                : "Rattacher ce compte à un collaborateur du planning"
+            }
+          >
+            <Pencil className="h-3 w-3" />
+            {user.employee ? "Modifier" : "Lier"}
+          </button>
+        )}
+      </div>
     </li>
   );
 }

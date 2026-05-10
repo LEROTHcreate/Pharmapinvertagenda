@@ -52,7 +52,13 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, name: true, isActive: true, status: true },
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      status: true,
+      employee: { select: { firstName: true } },
+    },
   });
 
   // Si pas de compte, ou compte non approuvé / désactivé → on retourne ok:true
@@ -84,9 +90,11 @@ export async function POST(req: Request) {
   // Email best-effort — on retourne ok même si l'envoi rate (sinon on
   // donnerait un signal pour énumérer les emails valides en mesurant les
   // temps de réponse). Le user retentera s'il n'a rien reçu.
+  // On préfère le prénom de la fiche Employee (champ dédié, fiable) plutôt
+  // que de parser User.name qui peut être un seul mot ou un nom de famille.
   await sendPasswordResetEmail({
     to: email,
-    name: user.name,
+    name: user.employee?.firstName ?? user.name,
     resetUrl,
     expiresInMinutes: TOKEN_TTL_MIN,
   });

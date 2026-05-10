@@ -72,3 +72,19 @@ export const reviewUserSchema = z.object({
 });
 
 export type ReviewUserInput = z.infer<typeof reviewUserSchema>;
+
+/**
+ * Schéma de mise à jour partielle d'un utilisateur APPROUVÉ.
+ *
+ * Aujourd'hui sert uniquement à modifier le lien User ↔ Employee post-approbation
+ * (cas où l'admin a approuvé sans lier, ou doit corriger une mauvaise liaison).
+ *
+ * `employeeId` :
+ *   - `null` → on retire la liaison (le compte reste actif mais sans fiche planning)
+ *   - `string` → on relie au collaborateur ciblé (vérifié côté API : même pharmacie + libre)
+ */
+export const updateUserSchema = z.object({
+  employeeId: z.string().min(1).nullable(),
+});
+
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;

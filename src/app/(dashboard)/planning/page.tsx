@@ -141,7 +141,7 @@ export default async function PlanningPage({
   const tips = upcomingTips(todayIso, 7);
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-2 sm:space-y-2.5">
       <WelcomeBanner
         firstName={firstName}
         hello={hello}

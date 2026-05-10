@@ -95,7 +95,7 @@ export function Sidebar({
   const textBadge = unreadTextMessages;
 
   return (
-    <aside className="hidden md:flex flex-col w-64 border-r bg-card">
+    <aside className="hidden md:flex flex-col w-64 border-r bg-card md:sticky md:top-0 md:h-screen md:overflow-y-auto md:self-start">
       <div className="flex items-center gap-3 px-5 py-5 border-b">
         <PharmacyLogo
           logoUrl={pharmacyLogoUrl}

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -14,6 +15,31 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { PageTransition } from "@/components/layout/PageTransition";
+
+/**
+ * Surcharge dynamique du favicon : sur les pages connectées, on affiche le
+ * logo de l'officine de l'utilisateur dans l'onglet du navigateur (et le
+ * nom de la pharmacie dans le titre par défaut). Les pages publiques
+ * (landing, login, signup) gardent le favicon de marque PharmaPlanning
+ * défini dans le layout racine.
+ *
+ * Si la pharmacie n'a pas de logo custom, on n'override pas → on hérite
+ * du favicon PharmaPlanning du layout racine, plutôt que d'afficher un
+ * favicon cassé.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const session = await auth();
+  if (!session?.user) return {};
+  const pharmacy = await getPharmacyHeader(session.user.pharmacyId);
+  if (!pharmacy?.logoUrl) return {};
+  return {
+    icons: {
+      icon: pharmacy.logoUrl,
+      shortcut: pharmacy.logoUrl,
+      apple: pharmacy.logoUrl,
+    },
+  };
+}
 
 export default async function DashboardLayout({
   children,

@@ -12,17 +12,24 @@
  * de comptoir, pas de faire un mode hors-ligne complet.
  */
 
-const SW_VERSION = "v1";
+// Bump cette version dès qu'on change PRECACHE_URLS ou la stratégie de cache —
+// les anciens caches sont purgés dans `activate`. Sans bump, les navigateurs
+// continueraient à servir les vieux assets (notamment les favicons).
+const SW_VERSION = "v2";
 const STATIC_CACHE = `pharma-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `pharma-runtime-${SW_VERSION}`;
 
-// Assets à pré-cacher dès l'install
+// Assets à pré-cacher dès l'install. On utilise les variantes "pharmaplanning-*"
+// (logo de marque) plutôt que /logo.png /icon-192.png etc. qui peuvent être
+// des assets custom de pharmacie cliente — le shell PWA est commun à toutes
+// les officines, donc affiche le branding plateforme.
 const PRECACHE_URLS = [
   "/manifest.webmanifest",
-  "/logo.png",
-  "/apple-touch-icon.png",
-  "/icon-192.png",
-  "/icon-512.png",
+  "/pharmaplanning-logo.svg",
+  "/pharmaplanning-logo.png",
+  "/pharmaplanning-apple-touch-icon.png",
+  "/pharmaplanning-icon-192.png",
+  "/pharmaplanning-icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {

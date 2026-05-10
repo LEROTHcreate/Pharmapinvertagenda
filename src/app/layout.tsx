@@ -25,14 +25,19 @@ export const metadata: Metadata = {
     "Le planning d'équipe pour officines de pharmacie — gestion intuitive des plannings, absences, échanges et heures supplémentaires.",
   applicationName: "PharmaPlanning",
   icons: {
-    // SVG pour les onglets (crisp à toutes les résolutions / dark mode).
-    // PNG en fallback pour les vieux navigateurs qui ne savent pas afficher
-    // un favicon SVG (Safari iOS < 16, IE legacy).
+    // Logo de marque PharmaPlanning pour les pages publiques (landing, auth).
+    // Les pages dashboard surchargent ces icônes avec le logo de la pharmacie
+    // connectée (cf. generateMetadata du layout (dashboard)).
+    //
+    // SVG pour les onglets modernes (crisp + dark mode), PNG en fallback pour
+    // les vieux navigateurs qui ne supportent pas les favicons SVG (Safari iOS
+    // < 16, IE legacy). On évite /logo.png et /apple-touch-icon.png qui sont
+    // des assets custom de pharmacie cliente — pas le logo SaaS.
     icon: [
       { url: "/pharmaplanning-logo.svg", type: "image/svg+xml" },
-      { url: "/logo.png", type: "image/png" },
+      { url: "/pharmaplanning-logo.png", type: "image/png" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: "/pharmaplanning-apple-touch-icon.png",
     shortcut: "/pharmaplanning-logo.svg",
   },
   appleWebApp: {

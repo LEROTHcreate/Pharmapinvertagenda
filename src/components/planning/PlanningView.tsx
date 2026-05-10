@@ -1451,7 +1451,7 @@ export function PlanningView({
   const effectiveCanEdit = isAdmin && !adminLocked;
 
   return (
-    <div className="p-3 md:p-6 space-y-3 md:space-y-4 relative">
+    <div className="p-3 md:px-6 md:py-3 space-y-2 md:space-y-3 relative">
       {/* En-tête : titre + navigation, design Apple épuré */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>

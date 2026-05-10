@@ -86,7 +86,11 @@ async function safeSend(params: {
 
 /* ─── Templates HTML ─────────────────────────────────────────────── */
 
-const LOGO_URL = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/logo.png`;
+// Logo de marque PharmaPlanning en PNG (et pas SVG) : Gmail/Outlook strippent
+// ou rendent mal les SVG inline. /logo.png est intentionnellement évité ici car
+// il peut être écrasé par un logo custom de pharmacie cliente — les emails
+// transactionnels parlent au nom de la plateforme, pas de l'officine.
+const LOGO_URL = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/pharmaplanning-logo.png`;
 // Coordonnées de contact affichées en footer des emails. Toutes
 // configurables via env pour qu'une pharmacie puisse afficher SES
 // coordonnées plutôt que celles du SaaS. Les défauts ci-dessous sont
