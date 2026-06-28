@@ -1,0 +1,281 @@
+"use client";
+
+import { useMemo } from "react";
+import {
+  ABSENCE_STYLES,
+  WEEK_DAYS_SHORT,
+  type EmployeeDTO,
+} from "@/types";
+import { SLOT_HOURS } from "@/types";
+import type { EmployeeDayMap } from "@/lib/planning-utils";
+import { weeklyTaskHours } from "@/lib/planning-utils";
+import { cn } from "@/lib/utils";
+
+/**
+ * Vue "Semaine" pour mobile : récap compact employés × 6 jours.
+ *
+ * Chaque case = heures comptabilisées du jour (ou une lettre d'absence
+ * colorée : C congé, M maladie, A absent, F formation). On voit toute la
+ * semaine d'un seul coup d'œil, sans scroll latéral. Taper un jour ouvre
+ * la timeline de ce jour.
+ */
+export function MobileWeekView({
+  employees,
+  weekDates,
+  dayNumbers,
+  index,
+  currentEmployeeId,
+  selectedDayIndex,
+  onPickDay,
+}: {
+  employees: EmployeeDTO[];
+  /** 6 dates ISO (Lun → Sam). */
+  weekDates: string[];
+  /** Numéros de jour (1..31) alignés sur weekDates, pour l'en-tête. */
+  dayNumbers: number[];
+  index: Map<string, EmployeeDayMap>;
+  currentEmployeeId: string | null;
+  selectedDayIndex: number;
+  /** Ouvre la vue Jour sur l'index choisi. */
+  onPickDay: (dayIndex: number) => void;
+}) {
+  // Trie : "moi" en premier, puis ordre d'affichage habituel.
+  const rows = useMemo(
+    () =>
+      [...employees].sort((a, b) => {
+        if (a.id === currentEmployeeId) return -1;
+        if (b.id === currentEmployeeId) return 1;
+        return a.displayOrder - b.displayOrder;
+      }),
+    [employees, currentEmployeeId]
+  );
+
+  // Pré-calcule heures/jour et total/semaine par employé en un seul passage.
+  // Le chiffre d'une case = heures RÉELLEMENT travaillées (TASK uniquement) :
+  // un congé ou un arrêt maladie, bien que rémunéré, doit se lire comme une
+  // absence (lettre colorée) et non comme une journée travaillée — sinon on
+  // ne distingue plus, d'un coup d'œil, qui bosse de qui est absent.
+  const data = useMemo(() => {
+    return rows.map((emp) => {
+      const daily = weekDates.map((iso) => {
+        const day = index.get(emp.id)?.get(iso);
+        let workedSlots = 0;
+        let absence: string | null = null;
+        if (day) {
+          for (const e of day.values()) {
+            if (e.type === "TASK") workedSlots++;
+            else if (e.type === "ABSENCE" && !absence) {
+              absence = e.absenceCode ?? null;
+            }
+          }
+        }
+        const h = workedSlots * SLOT_HOURS;
+        // La lettre d'absence prend le dessus seulement si aucun travail
+        // réel ce jour-là (cas d'une demi-journée travaillée : on montre
+        // les heures, plus parlantes).
+        return { h, absence: h === 0 ? absence : null };
+      });
+      // Total semaine = heures comptabilisées (TASK + absences rémunérées),
+      // cohérent avec l'en-tête de la grille desktop et le décompte contrat.
+      const weekly = weeklyTaskHours(emp.id, weekDates, index);
+      return { emp, daily, weekly, delta: weekly - emp.weeklyHours };
+    });
+  }, [rows, weekDates, index]);
+
+  const fmt = (h: number) =>
+    h === 0 ? "" : Number.isInteger(h) ? String(h) : h.toFixed(1);
+
+  // Lettre + couleur pour une absence (case sans heures).
+  const absLetter: Record<string, string> = {
+    CONGE: "C",
+    MALADIE: "M",
+    ABSENT: "A",
+    FORMATION_ABS: "F",
+  };
+
+  return (
+    <section aria-label="Récap de la semaine" className="space-y-2">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+        <table className="w-full border-collapse text-[12px]" style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: "84px" }} />
+            {weekDates.map((d) => (
+              <col key={d} />
+            ))}
+            <col style={{ width: "44px" }} />
+          </colgroup>
+
+          {/* En-tête jours — tap pour ouvrir la timeline du jour */}
+          <thead>
+            <tr className="border-b border-border bg-muted/30">
+              <th className="sticky left-0 z-10 bg-muted/30 px-2 py-2 text-left text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/70">
+                Équipe
+              </th>
+              {weekDates.map((d, i) => (
+                <th key={d} className="px-0.5 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onPickDay(i)}
+                    className={cn(
+                      "w-full flex flex-col items-center gap-0.5 rounded-md py-0.5 transition-colors",
+                      i === selectedDayIndex
+                        ? "bg-violet-100 dark:bg-violet-900/40"
+                        : "hover:bg-accent/50"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "text-[10px] uppercase tracking-[0.04em] font-medium",
+                        i === selectedDayIndex
+                          ? "text-violet-700 dark:text-violet-300"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {WEEK_DAYS_SHORT[i]}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[12px] font-semibold tabular-nums",
+                        i === selectedDayIndex
+                          ? "text-violet-700 dark:text-violet-300"
+                          : "text-foreground"
+                      )}
+                    >
+                      {String(dayNumbers[i]).padStart(2, "0")}
+                    </span>
+                  </button>
+                </th>
+              ))}
+              <th className="px-1 py-2 text-center text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/70">
+                Tot
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {data.map(({ emp, daily, weekly, delta }, rowIdx) => {
+              const isMe = emp.id === currentEmployeeId;
+              return (
+                <tr
+                  key={emp.id}
+                  className={cn(
+                    "border-b border-border/60 last:border-0",
+                    rowIdx % 2 === 1 && "bg-muted/20",
+                    isMe && "bg-amber-50/60 dark:bg-amber-950/20"
+                  )}
+                >
+                  {/* Nom employé (sticky) */}
+                  <td
+                    className={cn(
+                      "sticky left-0 z-10 px-2 py-1.5",
+                      isMe
+                        ? "bg-amber-50/90 dark:bg-amber-950/40"
+                        : rowIdx % 2 === 1
+                          ? "bg-[#f7f7f8] dark:bg-zinc-900"
+                          : "bg-card"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: emp.displayColor }}
+                        aria-hidden
+                      />
+                      <span className="truncate text-[12px] font-medium text-foreground">
+                        {emp.firstName}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Cases jours */}
+                  {daily.map((cell, i) => {
+                    if (cell.h > 0) {
+                      return (
+                        <td
+                          key={i}
+                          onClick={() => onPickDay(i)}
+                          className={cn(
+                            "text-center py-1.5 font-mono tabular-nums text-[12px] text-foreground cursor-pointer",
+                            i === selectedDayIndex && "bg-violet-50/70 dark:bg-violet-950/30"
+                          )}
+                        >
+                          {fmt(cell.h)}
+                        </td>
+                      );
+                    }
+                    if (cell.absence) {
+                      const s =
+                        ABSENCE_STYLES[cell.absence as keyof typeof ABSENCE_STYLES];
+                      return (
+                        <td
+                          key={i}
+                          onClick={() => onPickDay(i)}
+                          className={cn(
+                            "text-center py-1 cursor-pointer",
+                            i === selectedDayIndex && "bg-violet-50/70 dark:bg-violet-950/30"
+                          )}
+                        >
+                          <span
+                            className="inline-flex items-center justify-center h-5 w-5 rounded-md text-[10.5px] font-bold mx-auto"
+                            style={{ backgroundColor: s.bg, color: s.text }}
+                            title={cell.absence}
+                          >
+                            {absLetter[cell.absence] ?? "•"}
+                          </span>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td
+                        key={i}
+                        onClick={() => onPickDay(i)}
+                        className={cn(
+                          "text-center py-1.5 text-muted-foreground/30 cursor-pointer",
+                          i === selectedDayIndex && "bg-violet-50/70 dark:bg-violet-950/30"
+                        )}
+                      >
+                        ·
+                      </td>
+                    );
+                  })}
+
+                  {/* Total semaine + delta vs contrat */}
+                  <td className="px-1 py-1.5 text-center">
+                    <div className="font-mono text-[12px] font-semibold tabular-nums text-foreground leading-none">
+                      {weekly % 1 === 0 ? weekly : weekly.toFixed(1)}
+                    </div>
+                    {Math.abs(delta) >= 0.5 && (
+                      <div
+                        className={cn(
+                          "mt-0.5 text-[9px] font-medium leading-none tabular-nums",
+                          delta > 0 ? "text-rose-600" : "text-amber-600"
+                        )}
+                      >
+                        {delta > 0 ? "+" : ""}
+                        {delta % 1 === 0 ? delta : delta.toFixed(1)}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Légende compacte */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[10.5px] text-muted-foreground">
+        <span>Chiffre = heures du jour</span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-[8px] font-bold" style={{ backgroundColor: ABSENCE_STYLES.CONGE.bg, color: ABSENCE_STYLES.CONGE.text }}>C</span>
+          Congé
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-[8px] font-bold" style={{ backgroundColor: ABSENCE_STYLES.MALADIE.bg, color: ABSENCE_STYLES.MALADIE.text }}>M</span>
+          Maladie
+        </span>
+        <span>Tot = heures semaine</span>
+      </div>
+    </section>
+  );
+}

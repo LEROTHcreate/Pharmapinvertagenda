@@ -18,6 +18,8 @@ import {
 import { TIME_SLOTS } from "@/types";
 import { PlanningGrid, type CellKey, type ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
 import { MyDayView } from "@/components/planning/MyDayView";
+import { MobileTeamDay } from "@/components/planning/MobileTeamDay";
+import { MobileWeekView } from "@/components/planning/MobileWeekView";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { TASK_LABELS, STATUS_LABELS } from "@/types";
 import { TaskSelector } from "@/components/planning/TaskSelector";
@@ -218,12 +220,14 @@ export function PlanningView({
 
   // ─── Mode d'affichage mobile ─────────────────────────────────────
   // "mine" : timeline verticale du jour de l'utilisateur connecté (par
-  // défaut quand il a une fiche Employee). Beaucoup plus lisible sur
-  // téléphone qu'une grille à 20 colonnes.
-  // "team" : grille équipe complète (mode admin classique).
+  //          défaut quand il a une fiche Employee).
+  // "day"  : frise horaire de l'équipe pour le jour sélectionné — qui est
+  //          présent, sur quel poste, avec l'effectif. Remplace l'ancienne
+  //          grille 20 colonnes illisible sur téléphone.
+  // "week" : récap compact employés × 6 jours pour voir toute la semaine.
   // Sur desktop ce state est ignoré (la grille s'affiche toujours).
-  const [mobileView, setMobileView] = useState<"mine" | "team">(
-    currentEmployeeId ? "mine" : "team"
+  const [mobileView, setMobileView] = useState<"mine" | "day" | "week">(
+    currentEmployeeId ? "mine" : "day"
   );
 
   // ─── FAB "+" : création rapide d'absence depuis le planning ───
@@ -1699,17 +1703,20 @@ export function PlanningView({
         </div>
       )}
 
-      {/* ─── Toggle "Mon jour / Équipe" — mobile uniquement ─────────
-          Affiché seulement si l'utilisateur a une fiche Employee : un
-          admin "pur" sans collaborateur lié n'a pas de jour personnel
-          à afficher, on saute le toggle et on montre la grille équipe. */}
-      {currentEmployeeId && (
-        <div className="md:hidden">
-          <div
-            role="tablist"
-            aria-label="Mode d'affichage"
-            className="inline-flex w-full items-center gap-0.5 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/60 p-1"
-          >
+      {/* ─── Toggle d'affichage mobile ──────────────────────────────
+          Trois vues pensées pour le téléphone (geste pouce, zéro scroll
+          latéral) :
+            • "Moi"     — ma journée en cartes (si fiche Employee liée)
+            • "Jour"    — frise horaire de l'équipe (qui/quoi/effectif)
+            • "Semaine" — récap employés × 6 jours
+          L'onglet "Moi" n'apparaît que si l'utilisateur a une fiche. */}
+      <div className="md:hidden no-print">
+        <div
+          role="tablist"
+          aria-label="Mode d'affichage"
+          className="inline-flex w-full items-center gap-0.5 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/60 p-1"
+        >
+          {currentEmployeeId && (
             <button
               type="button"
               role="tab"
@@ -1722,27 +1729,41 @@ export function PlanningView({
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Mon jour
+              Moi
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobileView === "team"}
-              onClick={() => setMobileView("team")}
-              className={cn(
-                "flex-1 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-all",
-                mobileView === "team"
-                  ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:shadow-none dark:ring-1 dark:ring-zinc-700"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Équipe
-            </button>
-          </div>
+          )}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileView === "day"}
+            onClick={() => setMobileView("day")}
+            className={cn(
+              "flex-1 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-all",
+              mobileView === "day"
+                ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:shadow-none dark:ring-1 dark:ring-zinc-700"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Jour
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileView === "week"}
+            onClick={() => setMobileView("week")}
+            className={cn(
+              "flex-1 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-all",
+              mobileView === "week"
+                ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:shadow-none dark:ring-1 dark:ring-zinc-700"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Semaine
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* ─── Vue "Mon jour" — mobile uniquement, mode mine ──────── */}
+      {/* ─── Vue "Moi" — mobile, mode mine ──────────────────────── */}
       {currentEmployeeId && mobileView === "mine" && (() => {
         const me = employees.find((e) => e.id === currentEmployeeId);
         if (!me) return null;
@@ -1757,16 +1778,41 @@ export function PlanningView({
         );
       })()}
 
+      {/* ─── Vue "Jour" — mobile, frise horaire équipe ──────────── */}
+      {mobileView === "day" && (
+        <div className="md:hidden">
+          <MobileTeamDay
+            employees={employees}
+            date={selectedDay}
+            index={index}
+            minStaff={minStaff}
+            currentEmployeeId={currentEmployeeId ?? null}
+          />
+        </div>
+      )}
+
+      {/* ─── Vue "Semaine" — mobile, récap 6 jours ──────────────── */}
+      {mobileView === "week" && (
+        <div className="md:hidden">
+          <MobileWeekView
+            employees={employees}
+            weekDates={dayDates}
+            dayNumbers={days.map((d) => d.getDate())}
+            index={index}
+            currentEmployeeId={currentEmployeeId ?? null}
+            selectedDayIndex={dayIndex}
+            onPickDay={(i) => {
+              setDayIndex(i);
+              setMobileView("day");
+            }}
+          />
+        </div>
+      )}
+
       {/* ─── Grille équipe ─────────────────────────────────────────
-          Toujours visible sur desktop. Sur mobile, cachée si l'utilisateur
-          a choisi "Mon jour" (et qu'il a une fiche Employee). */}
-      <div
-        className={cn(
-          currentEmployeeId &&
-            mobileView === "mine" &&
-            "hidden md:block"
-        )}
-      >
+          Sur desktop : toujours affichée. Sur mobile : remplacée par les
+          vues dédiées ci-dessus (frise / semaine / moi), donc masquée. */}
+      <div className="hidden md:block">
         <PlanningGrid
           employees={visibleEmployees}
           date={selectedDay}
