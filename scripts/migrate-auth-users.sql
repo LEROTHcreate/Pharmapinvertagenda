@@ -111,11 +111,13 @@ from new_auth na;
 
 -- 3) Backfill public.users.authUserId pour TOUS les comptes (nouveaux + ceux
 --    déjà créés via le signup applicatif).
+--    NB : authUserId est de type text, auth.users.id de type uuid → cast ::text
+--    obligatoire pour la comparaison (sinon ERROR 42883 text <> uuid).
 update public.users pu
-set "authUserId" = a.id
+set "authUserId" = a.id::text
 from auth.users a
 where pu.email = a.email
-  and pu."authUserId" is distinct from a.id;
+  and pu."authUserId" is distinct from a.id::text;
 
 commit;
 
