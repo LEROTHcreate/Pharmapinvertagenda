@@ -112,6 +112,24 @@ export function MobileWeekView({
     });
   }, [rows, weekDates, index]);
 
+  // Totaux équipe par jour : heures cumulées + nb de personnes au travail.
+  const dailyTotals = useMemo(
+    () =>
+      weekDates.map((_, i) => {
+        let hours = 0;
+        let people = 0;
+        for (const r of data) {
+          const h = r.daily[i].h;
+          if (h > 0) {
+            hours += h;
+            people += 1;
+          }
+        }
+        return { hours, people };
+      }),
+    [data, weekDates]
+  );
+
   const fmt = (h: number) =>
     h === 0 ? "" : Number.isInteger(h) ? String(h) : h.toFixed(1);
 
@@ -304,11 +322,43 @@ export function MobileWeekView({
             })}
           </tbody>
 
-          {/* Pied de tableau : effectif comptoir mini par jour (heures
-              d'ouverture). Permet de repérer d'un coup les jours sous-staffés
-              sur toute la semaine. */}
+          {/* Pied de tableau : totaux équipe + effectif mini par jour. */}
           <tfoot>
-            <tr className="border-t-2 border-border bg-muted/30">
+            {/* Total équipe : heures cumulées + nb de personnes au travail. */}
+            <tr className="border-t-2 border-border bg-muted/40">
+              <td className="sticky left-0 z-10 bg-muted/40 px-2 py-1.5 text-[10px] uppercase tracking-[0.06em] font-semibold text-foreground/70">
+                Total équipe
+              </td>
+              {dailyTotals.map((t, i) => (
+                <td
+                  key={i}
+                  onClick={() => onPickDay(i)}
+                  className={cn(
+                    "text-center py-1.5 cursor-pointer leading-none",
+                    i === selectedDayIndex && "bg-violet-50/70 dark:bg-violet-950/30"
+                  )}
+                  title={`${fmt(t.hours)}h cumulées · ${t.people} personne(s)`}
+                >
+                  <div className="font-mono text-[12px] font-bold tabular-nums text-foreground">
+                    {t.hours > 0 ? `${fmt(t.hours)}` : "·"}
+                  </div>
+                  {t.people > 0 && (
+                    <div className="mt-0.5 text-[8.5px] font-medium tabular-nums text-muted-foreground">
+                      {t.people}p
+                    </div>
+                  )}
+                </td>
+              ))}
+              <td className="px-1 py-1.5 text-center align-middle">
+                <span className="font-mono text-[11px] font-bold tabular-nums text-foreground/80">
+                  {(() => {
+                    const sum = dailyTotals.reduce((s, t) => s + t.hours, 0);
+                    return sum % 1 === 0 ? sum : sum.toFixed(1);
+                  })()}
+                </span>
+              </td>
+            </tr>
+            <tr className="border-t border-border bg-muted/30">
               <td className="sticky left-0 z-10 bg-muted/30 px-2 py-1.5 text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/80">
                 Eff. mini
               </td>
