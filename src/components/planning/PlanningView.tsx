@@ -226,9 +226,10 @@ export function PlanningView({
   //          grille 20 colonnes illisible sur téléphone.
   // "week" : récap compact employés × 6 jours pour voir toute la semaine.
   // Sur desktop ce state est ignoré (la grille s'affiche toujours).
-  const [mobileView, setMobileView] = useState<"mine" | "day" | "week">(
-    currentEmployeeId ? "mine" : "day"
-  );
+  // Défaut : "day" (la frise équipe = moi + l'équipe en un coup d'œil) pour
+  // tout le monde. La dernière vue choisie est ensuite restaurée depuis
+  // localStorage si elle existe (cf. effet plus bas).
+  const [mobileView, setMobileView] = useState<"mine" | "day" | "week">("day");
 
   // Mémorise la dernière vue mobile choisie (Moi / Jour / Semaine) pour la
   // restaurer au prochain chargement — évite de toujours repartir du défaut.

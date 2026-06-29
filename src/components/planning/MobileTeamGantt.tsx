@@ -169,6 +169,12 @@ export function MobileTeamGantt({
 
   const presentCount = rows.filter((r) => r.hasTask).length;
 
+  // Employés sans aucun créneau ce jour-là (ni travail ni absence) → "au repos".
+  // Listés en bas pour une visibilité complète de l'équipe (qui est off).
+  const offToday = rows.filter(
+    (r) => r.blocks.length === 0 && r.emp.id !== currentEmployeeId
+  );
+
   // Postes présents ce jour → légende.
   const tasksToday = useMemo(() => {
     const set = new Set<string>();
@@ -296,6 +302,28 @@ export function MobileTeamGantt({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Au repos aujourd'hui */}
+      {offToday.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-dashed border-border bg-muted/20 px-3 py-2">
+          <span className="text-[10px] uppercase tracking-[0.07em] font-medium text-muted-foreground/70 mr-0.5">
+            Au repos
+          </span>
+          {offToday.map((r) => (
+            <span
+              key={r.emp.id}
+              className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground"
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full shrink-0 opacity-50"
+                style={{ backgroundColor: r.emp.displayColor }}
+                aria-hidden
+              />
+              {r.emp.firstName}
+            </span>
+          ))}
         </div>
       )}
 
