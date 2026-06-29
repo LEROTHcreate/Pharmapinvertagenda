@@ -7,8 +7,12 @@ import { TIME_SLOTS } from "@/types";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { featureGate } from "@/lib/features";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handler hoisté ci-dessous.
+export const POST = withErrorHandling(reviewSwap);
 
 /**
  * POST /api/swaps/[id]/review
@@ -20,7 +24,7 @@ export const runtime = "nodejs";
  *  - Conflit possible : si la cible avait déjà un TASK sur le même créneau → on ne touche pas
  *    et on retourne la liste des conflits (l'admin règle manuellement)
  */
-export async function POST(
+async function reviewSwap(
   req: Request,
   { params }: { params: { id: string } }
 ) {

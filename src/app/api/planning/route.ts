@@ -7,8 +7,15 @@ import { isTaskAllowed } from "@/lib/role-task-rules";
 import type { ScheduleEntryDTO } from "@/types";
 import { toIsoDate } from "@/lib/planning-utils";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global : cold-start BDD (Supabase en pause) → 503 au lieu
+// d'un 500 opaque. Les handlers (déclarations hoistées) sont définis plus bas.
+export const GET = withErrorHandling(getPlanning);
+export const POST = withErrorHandling(postPlanning);
+export const DELETE = withErrorHandling(deletePlanning);
 
 /** Lecture cached du planning d'une semaine. Invalidée sur POST/DELETE. */
 const getCachedPlanning = (pharmacyId: string, weekStart: string) =>
@@ -37,7 +44,7 @@ const getCachedPlanning = (pharmacyId: string, weekStart: string) =>
   )();
 
 /** GET /api/planning?weekStart=YYYY-MM-DD — entrées de la semaine */
-export async function GET(req: Request) {
+async function getPlanning(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -67,7 +74,7 @@ export async function GET(req: Request) {
 }
 
 /** POST /api/planning — upsert en bulk (admin) */
-export async function POST(req: Request) {
+async function postPlanning(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMIN") {
@@ -225,7 +232,7 @@ export async function POST(req: Request) {
 }
 
 /** DELETE /api/planning?employeeId=X&date=YYYY-MM-DD&timeSlot=HH:MM — efface un créneau */
-export async function DELETE(req: Request) {
+async function deletePlanning(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMIN") {

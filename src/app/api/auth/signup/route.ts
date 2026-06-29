@@ -10,6 +10,7 @@ import {
   sendNewSignupAdminNotification,
 } from "@/lib/email";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { isDbConnectivityError } from "@/lib/api-handler";
 
 /**
  * Provisionne le compte d'identité dans Supabase Auth (source de vérité du mot
@@ -94,18 +95,6 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 });
   }
-}
-
-/**
- * Détecte les erreurs de connectivité Postgres/Prisma (base en pause, timeout,
- * connexion coupée) : codes P1xxx ou échec d'initialisation du client. Permet
- * de renvoyer un 503 « réessayez » plutôt qu'un 500 indistinct d'un vrai bug.
- */
-function isDbConnectivityError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const e = err as { name?: string; code?: string };
-  if (e.name === "PrismaClientInitializationError") return true;
-  return typeof e.code === "string" && /^P1\d{3}$/.test(e.code);
 }
 
 /** Logique métier de l'inscription, encapsulée pour le try/catch global. */

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import type { AppSession } from "@/types/session";
+import { withErrorHandling } from "@/lib/api-handler";
 
 /**
  * Helpers pour les routes API : factorisent le pattern répété
@@ -35,41 +36,41 @@ type Handler<P = unknown> = (
  * Wrap un handler en exigeant une session authentifiée.
  */
 export function withAuth<P = unknown>(handler: Handler<P>) {
-  return async (
-    req: Request,
-    ctx: { params: P }
-  ): Promise<NextResponse | Response> => {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  // withErrorHandling : capture les erreurs de connectivité BDD (cold-start
+  // Supabase) levées par auth() ou le handler → 503 au lieu d'un 500 opaque.
+  return withErrorHandling(
+    async (req: Request, ctx: { params: P }): Promise<NextResponse | Response> => {
+      const session = await auth();
+      if (!session?.user) {
+        return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+      }
+      return handler(req, {
+        session: session as AuthedSession,
+        params: ctx.params,
+      });
     }
-    return handler(req, {
-      session: session as AuthedSession,
-      params: ctx.params,
-    });
-  };
+  );
 }
 
 /**
  * Wrap un handler en exigeant une session ADMIN.
  */
 export function withAdminAuth<P = unknown>(handler: Handler<P>) {
-  return async (
-    req: Request,
-    ctx: { params: P }
-  ): Promise<NextResponse | Response> => {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  return withErrorHandling(
+    async (req: Request, ctx: { params: P }): Promise<NextResponse | Response> => {
+      const session = await auth();
+      if (!session?.user) {
+        return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+      }
+      if (session.user.role !== "ADMIN") {
+        return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+      }
+      return handler(req, {
+        session: session as AuthedSession,
+        params: ctx.params,
+      });
     }
-    if (session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-    }
-    return handler(req, {
-      session: session as AuthedSession,
-      params: ctx.params,
-    });
-  };
+  );
 }
 
 /** Helper de lecture pour les checks ad-hoc dans le code applicatif. */

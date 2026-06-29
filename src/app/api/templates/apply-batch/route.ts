@@ -6,8 +6,12 @@ import { applyBatchInput } from "@/validators/template";
 import { ScheduleType, type WeekTemplate, type WeekTemplateEntry } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handler hoisté ci-dessous.
+export const POST = withErrorHandling(applyBatch);
 // Sur Netlify Pro / Vercel, autorise jusqu'à 60s d'exécution (par défaut 10s
 // sur Vercel free). L'apply-batch peut prendre jusqu'à 5-10s pour 26 semaines.
 export const maxDuration = 60;
@@ -40,7 +44,7 @@ function isoWeekNumber(d: Date): number {
  *  - Si les deux sont fournis → applique sur N semaines calendaires
  *    consécutives, en utilisant le bon gabarit pour chaque semaine.
  */
-export async function POST(req: Request) {
+async function applyBatch(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

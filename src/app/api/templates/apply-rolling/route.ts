@@ -6,10 +6,14 @@ import { prisma, prismaDirect } from "@/lib/prisma";
 import { ScheduleType, type WeekType } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
 // Bulk de 26 semaines × 1000+ entries peut prendre ~5-10s
 export const maxDuration = 60;
+
+// Filet d'erreur global (cold-start BDD → 503). Handler hoisté ci-dessous.
+export const POST = withErrorHandling(applyRolling);
 
 const inputSchema = z.object({
   /** Lundi de la 1re semaine cible (ISO YYYY-MM-DD) */
@@ -32,7 +36,7 @@ const inputSchema = z.object({
  *
  * Admin uniquement. Réutilise la logique de validation rôle/poste.
  */
-export async function POST(req: Request) {
+async function applyRolling(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMIN") {

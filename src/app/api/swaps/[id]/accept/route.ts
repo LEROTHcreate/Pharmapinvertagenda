@@ -4,14 +4,18 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { featureGate } from "@/lib/features";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handler hoisté ci-dessous.
+export const POST = withErrorHandling(acceptSwap);
 
 /**
  * POST /api/swaps/[id]/accept
  * La cible accepte la demande → passe en PENDING_ADMIN.
  */
-export async function POST(
+async function acceptSwap(
   _req: Request,
   { params }: { params: { id: string } }
 ) {

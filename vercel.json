@@ -5,5 +5,11 @@
     "src/app/api/**/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/keepalive",
+      "schedule": "0 6 * * *"
+    }
+  ]
 }

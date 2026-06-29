@@ -3,8 +3,13 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createSwapInput } from "@/validators/swap";
 import { featureGate } from "@/lib/features";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handlers hoistés ci-dessous.
+export const POST = withErrorHandling(postSwap);
+export const GET = withErrorHandling(getSwaps);
 
 /**
  * POST /api/swaps
@@ -12,7 +17,7 @@ export const runtime = "nodejs";
  * Le demandeur est l'utilisateur courant ; la cible doit être membre de la
  * même conversation. Crée aussi un Message de type SWAP_REQUEST associé.
  */
-export async function POST(req: Request) {
+async function postSwap(req: Request) {
   const gate = featureGate("shiftSwap");
   if (gate) return gate;
   const session = await auth();
@@ -98,7 +103,7 @@ export async function POST(req: Request) {
  * Liste les demandes (filtrables par statut). Admin only pour le statut admin ;
  * un collaborateur voit ses propres demandes (faites OU reçues).
  */
-export async function GET(req: Request) {
+async function getSwaps(req: Request) {
   const gate = featureGate("shiftSwap");
   if (gate) return gate;
   const session = await auth();

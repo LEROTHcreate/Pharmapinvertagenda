@@ -3,14 +3,18 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { rejectSwapInput } from "@/validators/swap";
 import { featureGate } from "@/lib/features";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handler hoisté ci-dessous.
+export const POST = withErrorHandling(rejectSwap);
 
 /**
  * POST /api/swaps/[id]/reject
  * La cible refuse la demande → REJECTED_TARGET.
  */
-export async function POST(
+async function rejectSwap(
   req: Request,
   { params }: { params: { id: string } }
 ) {

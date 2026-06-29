@@ -4,8 +4,12 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createCollectiveAbsenceInput } from "@/validators/absence";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handler hoisté ci-dessous.
+export const POST = withErrorHandling(createCollectiveAbsence);
 
 /**
  * POST /api/absences/collective — absence collective (ADMIN uniquement).
@@ -23,7 +27,7 @@ export const runtime = "nodejs";
  * Les créneaux vides ne sont pas créés : on ne marque absent que là où le
  * collaborateur était planifié (cohérent avec l'approbation classique).
  */
-export async function POST(req: Request) {
+async function createCollectiveAbsence(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

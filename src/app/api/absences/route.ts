@@ -6,15 +6,20 @@ import { createAbsenceInput } from "@/validators/absence";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { sendAbsenceRequestEmail } from "@/lib/email";
 import { ABSENCE_LABELS } from "@/types";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handlers hoistés ci-dessous.
+export const GET = withErrorHandling(getAbsences);
+export const POST = withErrorHandling(createAbsence);
 
 /**
  * GET /api/absences?status=PENDING
  * Admin → toutes les demandes de la pharmacie.
  * Employee → uniquement ses propres demandes (filtre par employeeId).
  */
-export async function GET(req: Request) {
+async function getAbsences(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -72,7 +77,7 @@ export async function GET(req: Request) {
  *     convertis en ABSENCE — même résultat qu'une approbation classique, en
  *     un seul appel.
  */
-export async function POST(req: Request) {
+async function createAbsence(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

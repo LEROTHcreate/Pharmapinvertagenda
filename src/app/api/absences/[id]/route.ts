@@ -9,8 +9,13 @@ import {
   sendAbsenceRejectedEmail,
 } from "@/lib/email";
 import { ABSENCE_LABELS } from "@/types";
+import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
+
+// Filet d'erreur global (cold-start BDD → 503). Handlers hoistés ci-dessous.
+export const PATCH = withErrorHandling(reviewAbsence);
+export const DELETE = withErrorHandling(cancelAbsence);
 
 /**
  * PATCH /api/absences/[id] — admin valide ou refuse une demande.
@@ -18,7 +23,7 @@ export const runtime = "nodejs";
  * sont convertis en ABSENCE (taskCode null, absenceCode du request). Les
  * créneaux vides ne sont pas créés (le collaborateur n'était pas planifié dessus).
  */
-export async function PATCH(
+async function reviewAbsence(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -180,7 +185,7 @@ export async function PATCH(
  *    convertis (utilise `previousTaskCode` mémorisé à l'approbation).
  *  - REJECTED : non annulable (sans intérêt, c'est juste de l'historique).
  */
-export async function DELETE(
+async function cancelAbsence(
   _req: Request,
   { params }: { params: { id: string } }
 ) {

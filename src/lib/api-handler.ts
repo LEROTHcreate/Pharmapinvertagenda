@@ -1,0 +1,64 @@
+import { NextResponse } from "next/server";
+
+/**
+ * Détecte les erreurs de connectivité Postgres/Prisma : base en pause (Supabase
+ * free tier après ~7j d'inactivité), timeout, connexion coupée, échec
+ * d'initialisation du client. Codes Prisma P1xxx ou PrismaClientInitializationError.
+ *
+ * Permet de renvoyer un 503 « réessayez » au lieu d'un 500 indistinct d'un
+ * vrai bug applicatif.
+ */
+export function isDbConnectivityError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: string };
+  if (e.name === "PrismaClientInitializationError") return true;
+  return typeof e.code === "string" && /^P1\d{3}$/.test(e.code);
+}
+
+function safePath(req: Request): string {
+  try {
+    return new URL(req.url).pathname;
+  } catch {
+    return "?";
+  }
+}
+
+/**
+ * Enrobe un handler de route API d'un filet d'erreur global.
+ *
+ *  - Erreur de connectivité BDD → 503 SERVICE_UNAVAILABLE (le client invite à
+ *    réessayer dans un instant) plutôt qu'un 500 opaque.
+ *  - Toute autre exception → 500 SERVER_ERROR, loggée avec la méthode + le
+ *    chemin pour diagnostic (logs Vercel).
+ *
+ * La signature générique `(...args)` PRÉSERVE l'arité du handler : elle marche
+ * aussi bien pour une route statique `(req)` que dynamique `(req, { params })`,
+ * sans casser le typage attendu par Next.
+ *
+ * Usage :
+ *   export const GET = withErrorHandling(async (req) => { ... });
+ *   export const PATCH = withErrorHandling(async (req, { params }) => { ... });
+ */
+export function withErrorHandling<A extends unknown[]>(
+  handler: (...args: A) => Response | Promise<Response>
+) {
+  return async (...args: A): Promise<Response> => {
+    try {
+      return await handler(...args);
+    } catch (err) {
+      const req = args[0] as Request | undefined;
+      const where =
+        req && typeof req === "object" && "url" in req
+          ? `${req.method} ${safePath(req)}`
+          : "api";
+      console.error(`[api] ${where} — exception non gérée:`, err);
+      if (isDbConnectivityError(err)) {
+        return NextResponse.json(
+          { error: "SERVICE_UNAVAILABLE" },
+          { status: 503 }
+        );
+      }
+      return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 });
+    }
+  };
+}
