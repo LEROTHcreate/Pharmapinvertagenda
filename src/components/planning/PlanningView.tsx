@@ -1503,7 +1503,13 @@ export function PlanningView({
           </p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap no-print">
-          <ViewModeSelector current="day" weekStart={weekStart} />
+          {/* Sélecteur Jour/Semaine/Mois — pointe vers des pages dédiées
+              (desktop). Masqué sur mobile : la navigation mobile passe par les
+              onglets Moi/Jour/Semaine plus bas, et les pages Semaine/Mois ne
+              sont pas pensées pour téléphone. */}
+          <div className="hidden md:block">
+            <ViewModeSelector current="day" weekStart={weekStart} />
+          </div>
           {/* Boutons "outils admin" cachés sur mobile pour libérer l'espace
               et focus sur l'agenda — accessibles depuis desktop ou via les
               pages dédiées (/gabarits pour les templates).
@@ -1654,9 +1660,12 @@ export function PlanningView({
           gèrent pas la couverture, on évite de leur afficher des alertes
           sur lesquelles ils ne peuvent pas agir). `no-print` car en
           impression on veut juste la grille, pas les alertes manquements
-          d'effectif (qui prendraient une page entière inutilement). */}
+          d'effectif (qui prendraient une page entière inutilement).
+          Masquée sur mobile (`hidden md:block`) pour alléger l'écran : l'info
+          est déjà portée par la vue Jour (bandeau absents + pastilles
+          d'effectif) et la vue Semaine (ligne "Eff. mini"). */}
       {isAdmin && (absentToday.length > 0 || visibleCoverageWarnings.length > 0) && (
-        <div className="no-print rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
+        <div className="hidden md:block no-print rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
           <div className="mb-2 flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
             <span className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-foreground/70">
