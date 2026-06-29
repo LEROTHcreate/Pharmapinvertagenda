@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Home,
   Calendar,
   CalendarOff,
   MessageCircle,
-  StickyNote,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,19 +20,18 @@ import type { UserRole } from "@prisma/client";
  * `safe-area-inset-bottom` respecté pour les iPhones avec home bar.
  *
  * Principes de choix des 5 tabs :
- *  - Planning : la raison d'être de l'app, toujours présent
+ *  - Accueil  : tableau de bord mobile (ma journée, équipe, accès rapides)
+ *  - Planning : la raison d'être de l'app
  *  - Absences : action quotidienne (poser un congé, valider)
  *  - Messages : communication équipe
- *  - Notes : régul paie, consulté souvent par admins comme employés
- *  - Profil : avatar, mot de passe, mes heures — accès rapide
+ *  - Profil   : avatar, mot de passe, mes heures — accès rapide
  *
- * Les pages secondaires (Gabarits, Équipe, Stats, Rémunération, Utilisateurs,
- * Paramètres) restent accessibles via le burger en haut à gauche — ce sont
- * des pages admin moins fréquentes qui n'ont pas leur place dans une nav
- * réduite à 5.
+ * Notes (régul paie) + pages secondaires (Gabarits, Équipe, Stats,
+ * Rémunération, Utilisateurs, Paramètres) restent accessibles via le burger
+ * en haut à gauche et/ou la page Accueil — pour garder une nav réduite à 5.
  */
 
-type TabKey = "planning" | "absences" | "messages" | "notes" | "profil";
+type TabKey = "accueil" | "planning" | "absences" | "messages" | "profil";
 type TabItem = {
   key: TabKey;
   href: string;
@@ -41,10 +40,10 @@ type TabItem = {
 };
 
 const TABS: TabItem[] = [
+  { key: "accueil", href: "/accueil", label: "Accueil", icon: Home },
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "absences", href: "/absences", label: "Absences", icon: CalendarOff },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
-  { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "profil", href: "/profil", label: "Profil", icon: User },
 ];
 

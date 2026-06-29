@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Plus } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2 } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { ABSENCE_LABELS, WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
@@ -39,7 +39,6 @@ import {
   AbsenceConflictDialog,
   type AbsenceConflict,
 } from "@/components/planning/AbsenceConflictDialog";
-import { AbsenceRequestForm } from "@/components/absences/AbsenceRequestForm";
 
 type Selection = {
   employeeId: string;
@@ -248,12 +247,6 @@ export function PlanningView({
       window.localStorage.setItem("pp_mobile_view", mobileView);
     }
   }, [mobileView]);
-
-  // ─── FAB "+" : création rapide d'absence depuis le planning ───
-  // Mobile uniquement. Permet à un collaborateur de poser une demande
-  // sans avoir à naviguer vers /absences. Pour un admin, ouvre le mode
-  // saisie directe (validation immédiate possible).
-  const [quickAbsenceOpen, setQuickAbsenceOpen] = useState(false);
 
   // Liste filtrée passée à la grille — quand le filtre est vide, tout passe.
   const visibleEmployees = useMemo(
@@ -1861,38 +1854,9 @@ export function PlanningView({
         />
       </div>
 
-      {/* FAB "+" mobile — création rapide d'absence sans navigation.
-          Visible uniquement sur mobile, position au-dessus de la tab bar
-          (72px) + safe-area iPhone. Caché en mode print et quand le
-          conflit absence est ouvert (évite la superposition). */}
-      <button
-        type="button"
-        onClick={() => setQuickAbsenceOpen(true)}
-        aria-label="Nouvelle absence"
-        className={cn(
-          "no-print md:hidden fixed right-4 z-40",
-          "bottom-[calc(72px+env(safe-area-inset-bottom,0px))]",
-          "inline-flex items-center justify-center h-14 w-14 rounded-full",
-          "bg-violet-600 text-white shadow-[0_8px_24px_-4px_rgba(124,58,237,0.45),0_3px_8px_-2px_rgba(0,0,0,0.15)]",
-          "hover:bg-violet-700 active:scale-95 transition-all",
-          "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300/60"
-        )}
-        title="Nouvelle absence"
-      >
-        <Plus className="h-6 w-6" strokeWidth={2.5} />
-      </button>
-
-      <AbsenceRequestForm
-        open={quickAbsenceOpen}
-        onClose={() => setQuickAbsenceOpen(false)}
-        onCreated={() => {
-          setQuickAbsenceOpen(false);
-          // Si admin auto-validé : le planning a été modifié côté serveur,
-          // on refetch la semaine pour voir les nouveaux blocs ABSENCE.
-          if (isAdmin) refetchWeek(weekStart);
-        }}
-        isAdmin={isAdmin}
-      />
+      {/* (Le FAB "+" de création rapide d'absence a été retiré sur mobile :
+          la barre d'onglets + la page Accueil couvrent déjà l'accès aux
+          absences, plus besoin d'un bouton flottant.) */}
 
       {/* Modal d'édition unitaire */}
       {selection && selectedEmployee && (
