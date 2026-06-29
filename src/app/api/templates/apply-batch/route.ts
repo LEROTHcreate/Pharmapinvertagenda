@@ -258,7 +258,6 @@ export async function POST(req: Request) {
     if (deleteAbsences) typesToDelete.push(ScheduleType.ABSENCE);
 
     if (typesToDelete.length > 0) {
-      console.time(`[apply-batch] deleteMany scheduleEntry`);
       await prismaDirect.scheduleEntry.deleteMany({
         where: {
           pharmacyId: session.user.pharmacyId,
@@ -267,14 +266,12 @@ export async function POST(req: Request) {
           type: { in: typesToDelete },
         },
       });
-      console.timeEnd(`[apply-batch] deleteMany scheduleEntry`);
     }
 
     // En plus, suppression des demandes AbsenceRequest qui chevauchent
     // la plage cible — sinon elles reviendraient à la prochaine
     // approbation/recompute.
     if (deleteAbsences) {
-      console.time(`[apply-batch] deleteMany absenceRequest`);
       await prismaDirect.absenceRequest.deleteMany({
         where: {
           pharmacyId: session.user.pharmacyId,
@@ -282,7 +279,6 @@ export async function POST(req: Request) {
           dateEnd: { gte: firstMonday },
         },
       });
-      console.timeEnd(`[apply-batch] deleteMany absenceRequest`);
     }
   }
 
@@ -295,12 +291,9 @@ export async function POST(req: Request) {
   //
   // Limite Postgres : 65535 params par INSERT / 7 cols → 9362 rows max.
   // On prend 8000 par sécurité.
-  console.time(`[apply-batch] insert ${data.length} rows`);
   const CHUNK = 8000;
   for (let i = 0; i < data.length; i += CHUNK) {
     const chunk = data.slice(i, i + CHUNK);
-    const label = `[apply-batch] chunk ${Math.floor(i / CHUNK) + 1} (${chunk.length} rows)`;
-    console.time(label);
     await prismaDirect.scheduleEntry.createMany({
       data: chunk,
       // Si overwrite=true, on a déjà fait deleteMany → aucun conflit possible,
@@ -308,9 +301,7 @@ export async function POST(req: Request) {
       // manuelles existantes.
       skipDuplicates: !overwrite,
     });
-    console.timeEnd(label);
   }
-  console.timeEnd(`[apply-batch] insert ${data.length} rows`);
 
   // Détail des collaborateurs touchés par une absence — sert à informer
   // l'admin "X était absent du Y au Z, ses créneaux n'ont pas été appliqués".

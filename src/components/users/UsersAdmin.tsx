@@ -75,6 +75,13 @@ export function UsersAdmin({
     Record<string, string>
   >({});
 
+  // Sélection multiple des demandes en attente pour traitement en masse
+  // (approuver comme collaborateurs / refuser plusieurs d'un coup).
+  const [selectedPending, setSelectedPending] = useState<Set<string>>(
+    new Set()
+  );
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   // Confirmation de refus avec motif optionnel.
   const [rejectTarget, setRejectTarget] = useState<UserRow | null>(null);
   const [rejectNote, setRejectNote] = useState("");
@@ -169,6 +176,64 @@ export function UsersAdmin({
     }
   }
 
+  function togglePending(userId: string) {
+    setSelectedPending((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }
+
+  /**
+   * Traite en masse les demandes sélectionnées.
+   * - "APPROVE_EMPLOYEE" : approuve chacune comme collaborateur (rôle EMPLOYEE),
+   *   en respectant le collaborateur éventuellement choisi par carte. Le lien
+   *   peut toujours être ajouté/corrigé plus tard depuis la liste des membres.
+   * - "REJECT" : refuse chacune (sans motif — le refus individuel reste possible
+   *   pour ajouter un motif).
+   * Les appels sont parallélisés ; on agrège les échecs sans bloquer le reste.
+   */
+  async function bulkProcess(action: "APPROVE_EMPLOYEE" | "REJECT") {
+    const ids = [...selectedPending];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          fetch(`/api/users/${id}/review`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              action === "APPROVE_EMPLOYEE"
+                ? {
+                    decision: "APPROVE",
+                    role: "EMPLOYEE",
+                    employeeId: selectedEmployee[id] || null,
+                  }
+                : { decision: "REJECT" }
+            ),
+          }).then(async (r) => {
+            if (!r.ok) throw new Error(await readError(r));
+          })
+        )
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        setError(
+          `${failed} demande${failed > 1 ? "s" : ""} sur ${ids.length} n'${
+            failed > 1 ? "ont" : "a"
+          } pas pu être traitée${failed > 1 ? "s" : ""}.`
+        );
+      }
+      setSelectedPending(new Set());
+      startTransition(() => router.refresh());
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   /**
    * Met à jour le lien collaborateur d'un membre déjà approuvé.
    * employeeId = "" → on délie (envoie null à l'API).
@@ -227,26 +292,88 @@ export function UsersAdmin({
         {pending.length === 0 ? (
           <EmptyState message="Aucune demande en attente." />
         ) : (
-          <ul className="space-y-3">
-            {pending.map((u) => (
-              <PendingCard
-                key={u.id}
-                user={u}
-                employees={employees}
-                selectedEmployeeId={selectedEmployee[u.id] ?? ""}
-                onSelectEmployee={(empId) =>
-                  setSelectedEmployee((prev) => ({ ...prev, [u.id]: empId }))
-                }
-                busy={busyId === u.id}
-                onApproveAdmin={() => approve(u, "ADMIN")}
-                onApproveEmployee={() => approve(u, "EMPLOYEE")}
-                onReject={() => {
-                  setRejectTarget(u);
-                  setRejectNote("");
-                }}
-              />
-            ))}
-          </ul>
+          <>
+            {/* Barre d'actions groupées — visible dès qu'une demande est cochée */}
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-muted/30 px-3 py-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-[12.5px] font-medium text-foreground/80">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-violet-600"
+                  checked={
+                    selectedPending.size === pending.length && pending.length > 0
+                  }
+                  ref={(el) => {
+                    if (el)
+                      el.indeterminate =
+                        selectedPending.size > 0 &&
+                        selectedPending.size < pending.length;
+                  }}
+                  onChange={(e) =>
+                    setSelectedPending(
+                      e.target.checked
+                        ? new Set(pending.map((u) => u.id))
+                        : new Set()
+                    )
+                  }
+                  disabled={bulkBusy}
+                />
+                {selectedPending.size > 0
+                  ? `${selectedPending.size} sélectionnée${selectedPending.size > 1 ? "s" : ""}`
+                  : "Tout sélectionner"}
+              </label>
+
+              {selectedPending.size > 0 && (
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={bulkBusy}
+                    onClick={() => bulkProcess("APPROVE_EMPLOYEE")}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-60"
+                    title="Approuver les demandes sélectionnées comme collaborateurs"
+                  >
+                    {bulkBusy ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Approuver collaborateur
+                  </button>
+                  <button
+                    type="button"
+                    disabled={bulkBusy}
+                    onClick={() => bulkProcess("REJECT")}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-[12.5px] font-medium text-foreground/85 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Refuser
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <ul className="space-y-3">
+              {pending.map((u) => (
+                <PendingCard
+                  key={u.id}
+                  user={u}
+                  employees={employees}
+                  selected={selectedPending.has(u.id)}
+                  onToggleSelect={() => togglePending(u.id)}
+                  selectedEmployeeId={selectedEmployee[u.id] ?? ""}
+                  onSelectEmployee={(empId) =>
+                    setSelectedEmployee((prev) => ({ ...prev, [u.id]: empId }))
+                  }
+                  busy={busyId === u.id || bulkBusy}
+                  onApproveAdmin={() => approve(u, "ADMIN")}
+                  onApproveEmployee={() => approve(u, "EMPLOYEE")}
+                  onReject={() => {
+                    setRejectTarget(u);
+                    setRejectNote("");
+                  }}
+                />
+              ))}
+            </ul>
+          </>
         )}
       </section>
 
@@ -470,6 +597,8 @@ function SectionHeader({
 function PendingCard({
   user,
   employees,
+  selected,
+  onToggleSelect,
   selectedEmployeeId,
   onSelectEmployee,
   busy,
@@ -479,6 +608,8 @@ function PendingCard({
 }: {
   user: UserRow;
   employees: EmployeeOption[];
+  selected: boolean;
+  onToggleSelect: () => void;
   selectedEmployeeId: string;
   onSelectEmployee: (employeeId: string) => void;
   busy: boolean;
@@ -487,10 +618,22 @@ function PendingCard({
   onReject: () => void;
 }) {
   return (
-    <li className="hover-lift rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
+    <li
+      className={cn(
+        "hover-lift rounded-2xl border bg-card p-5 shadow-sm transition-colors",
+        selected ? "border-violet-300 ring-1 ring-violet-200" : "border-border/80"
+      )}
+    >
       <div className="flex flex-col gap-5">
         {/* Identité du demandeur */}
         <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            aria-label={`Sélectionner la demande de ${user.name}`}
+            className="mt-1.5 h-4 w-4 shrink-0 accent-violet-600"
+          />
           <Avatar user={user} />
           <div className="min-w-0 flex-1">
             <p className="font-medium tracking-tight text-foreground">

@@ -36,6 +36,40 @@ export const createAbsenceInput = z
   });
 export type CreateAbsenceInput = z.infer<typeof createAbsenceInput>;
 
+/**
+ * Absence COLLECTIVE (admin only) — ex. fermeture de l'officine un jour férié /
+ * pont : marque toute l'équipe (ou une liste de collaborateurs) absente sur une
+ * plage, en une seule action. Crée une demande APPROVED par collaborateur et
+ * convertit leurs créneaux planning existants en ABSENCE.
+ *
+ * - `employeeIds` omis → toute l'équipe ACTIVE de la pharmacie.
+ * - plage bornée à 92 jours pour éviter une conversion massive accidentelle.
+ */
+export const createCollectiveAbsenceInput = z
+  .object({
+    dateStart: isoDate,
+    dateEnd: isoDate,
+    absenceCode: z.enum(ABSENCE_CODES),
+    reason: z.string().trim().max(500).optional(),
+    employeeIds: z.array(z.string().cuid()).min(1).optional(),
+  })
+  .refine((d) => d.dateStart <= d.dateEnd, {
+    message: "La date de début doit être ≤ date de fin",
+    path: ["dateEnd"],
+  })
+  .refine(
+    (d) => {
+      const start = new Date(`${d.dateStart}T00:00:00Z`).getTime();
+      const end = new Date(`${d.dateEnd}T00:00:00Z`).getTime();
+      const days = (end - start) / 86_400_000 + 1;
+      return days <= 92;
+    },
+    { message: "La plage ne peut pas dépasser 92 jours", path: ["dateEnd"] }
+  );
+export type CreateCollectiveAbsenceInput = z.infer<
+  typeof createCollectiveAbsenceInput
+>;
+
 /** Validation/refus côté admin. */
 export const reviewAbsenceInput = z.object({
   decision: z.enum(["APPROVE", "REJECT"]),

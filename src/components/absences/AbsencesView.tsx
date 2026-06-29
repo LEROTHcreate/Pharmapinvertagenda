@@ -1,16 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Loader2, Check, X, Trash2 } from "lucide-react";
+import { Plus, Loader2, Check, X, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ABSENCE_LABELS } from "@/types";
 import type { AbsenceCode, AbsenceRequestStatus } from "@prisma/client";
 import { AbsenceRequestForm } from "@/components/absences/AbsenceRequestForm";
+import { CollectiveAbsenceDialog } from "@/components/absences/CollectiveAbsenceDialog";
 import { NotePromptDialog } from "@/components/ui/note-prompt-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+
+/** Nombre de jours (inclusifs) entre deux dates ISO YYYY-MM-DD. */
+function dayCount(startIso: string, endIso: string): number {
+  const start = new Date(`${startIso}T00:00:00Z`).getTime();
+  const end = new Date(`${endIso}T00:00:00Z`).getTime();
+  return Math.round((end - start) / 86_400_000) + 1;
+}
 
 type AbsenceDTO = {
   id: string;
@@ -35,9 +44,11 @@ type Props = {
 
 export function AbsencesView({ currentUser }: Props) {
   const router = useRouter();
+  const { toast } = useToast();
   const [requests, setRequests] = useState<AbsenceDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [collectiveOpen, setCollectiveOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,12 +143,20 @@ export function AbsencesView({ currentUser }: Props) {
               : "Vos demandes d'absence et leur statut"}
           </p>
         </div>
-        {(canSubmit || isAdmin) && (
-          <Button onClick={() => setFormOpen(true)}>
-            <Plus className="h-4 w-4" />
-            {isAdmin ? "Saisir une absence" : "Nouvelle demande"}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button variant="outline" onClick={() => setCollectiveOpen(true)}>
+              <Users className="h-4 w-4" />
+              Fermeture / absence collective
+            </Button>
+          )}
+          {(canSubmit || isAdmin) && (
+            <Button onClick={() => setFormOpen(true)}>
+              <Plus className="h-4 w-4" />
+              {isAdmin ? "Saisir une absence" : "Nouvelle demande"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {!canSubmit && !isAdmin && (
@@ -207,6 +226,9 @@ export function AbsencesView({ currentUser }: Props) {
                           {new Date(r.dateEnd).toLocaleDateString("fr-FR")}
                         </>
                       )}
+                      <span className="ml-1.5 not-italic text-muted-foreground/70">
+                        ({dayCount(r.dateStart, r.dateEnd)}&nbsp;j)
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-muted-foreground text-xs max-w-[180px] truncate">
                       {r.reason ?? "—"}
@@ -313,6 +335,22 @@ export function AbsencesView({ currentUser }: Props) {
         }}
         isAdmin={isAdmin}
       />
+
+      {isAdmin && (
+        <CollectiveAbsenceDialog
+          open={collectiveOpen}
+          onClose={() => setCollectiveOpen(false)}
+          onCreated={(count) => {
+            refetch();
+            router.refresh();
+            toast({
+              title: "Absence collective appliquée",
+              description: `${count} collaborateur${count > 1 ? "s" : ""} marqué${count > 1 ? "s" : ""} absent${count > 1 ? "s" : ""} sur la période.`,
+              tone: "success",
+            });
+          }}
+        />
+      )}
 
       <NotePromptDialog
         open={rejectId !== null}

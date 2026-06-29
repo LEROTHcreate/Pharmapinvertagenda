@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Repeat, Sparkles } from "lucide-react";
+import { AlertTriangle, Calendar, Repeat, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -123,8 +123,18 @@ export function ApplyScopeSelector({
         )}
       </div>
 
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
-        {scopeDescription(value, weekKind)}
+      <p
+        className={cn(
+          "mt-1.5 flex items-start gap-1 text-[11px]",
+          value === "year-pattern" || value === "12"
+            ? "font-medium text-amber-700"
+            : "text-muted-foreground"
+        )}
+      >
+        {(value === "year-pattern" || value === "12") && (
+          <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
+        )}
+        <span>{scopeDescription(value, weekKind)}</span>
       </p>
     </div>
   );

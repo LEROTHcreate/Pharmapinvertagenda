@@ -115,9 +115,14 @@ function ToastItem({
   const styles = TONE_STYLES[tone];
   const Icon = styles.icon;
 
+  // Les erreurs interrompent (assertive) ; le reste reste poli pour ne pas
+  // couper la lecture en cours d'un utilisateur de lecteur d'écran.
+  const isUrgent = tone === "error";
+
   return (
     <div
-      role="status"
+      role={isUrgent ? "alert" : "status"}
+      aria-live={isUrgent ? "assertive" : "polite"}
       className={cn(
         "animate-toast-in pointer-events-auto flex items-start gap-3 overflow-hidden rounded-2xl px-4 py-3 shadow-[0_8px_28px_-12px_rgba(0,0,0,0.18),0_2px_4px_-2px_rgba(0,0,0,0.08)] backdrop-blur-xl ring-1 ring-inset",
         "min-w-[280px] max-w-[420px]",

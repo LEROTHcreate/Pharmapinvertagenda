@@ -649,6 +649,10 @@ export function StatsView({ period, periodLabel, employees }: Props) {
               <span className="inline-block h-px w-3 bg-pink-400 border-t border-dashed border-pink-400" />
               Repère contrat hebdo
             </span>
+            <span className="text-zinc-400">
+              <strong className="font-semibold text-zinc-500">Solde HS-Abs</strong> = heures
+              supplémentaires cumulées − heures d&apos;absence cumulées
+            </span>
           </div>
         </div>
       )}

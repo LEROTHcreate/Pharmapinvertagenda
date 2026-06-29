@@ -180,7 +180,6 @@ export async function POST(req: Request) {
     const empIds = Array.from(new Set(allRows.map((r) => r.employeeId)));
     const lastSat = new Date(lastWeekMonday);
     lastSat.setUTCDate(lastWeekMonday.getUTCDate() + 5);
-    console.time(`[apply-rolling] deleteMany`);
     await prismaDirect.scheduleEntry.deleteMany({
       where: {
         pharmacyId,
@@ -188,25 +187,19 @@ export async function POST(req: Request) {
         date: { gte: startMonday, lte: lastSat },
       },
     });
-    console.timeEnd(`[apply-rolling] deleteMany`);
   }
 
   // createMany en chunks de 8000 (limite Postgres : 65535 params / 7 cols
   // = 9362 max). Si overwrite=true, le deleteMany précédent garantit
   // qu'aucun conflit ne reste → skipDuplicates inutile (plus rapide).
-  console.time(`[apply-rolling] insert ${allRows.length} rows`);
   const CHUNK = 8000;
   for (let i = 0; i < allRows.length; i += CHUNK) {
     const chunk = allRows.slice(i, i + CHUNK);
-    const label = `[apply-rolling] chunk ${Math.floor(i / CHUNK) + 1} (${chunk.length} rows)`;
-    console.time(label);
     await prismaDirect.scheduleEntry.createMany({
       data: chunk,
       skipDuplicates: !overwrite,
     });
-    console.timeEnd(label);
   }
-  console.timeEnd(`[apply-rolling] insert ${allRows.length} rows`);
 
   revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(pharmacyId));
 

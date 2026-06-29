@@ -237,6 +237,7 @@ export function MessagesView({ currentUser, contacts }: Props) {
             currentUserId={currentUser.id}
             activeId={activeId}
             onSelect={setActiveId}
+            onNew={() => setNewOpen(true)}
             loading={loadingList}
           />
         </aside>

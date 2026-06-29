@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Users, Eye } from "lucide-react";
+import { Loader2, Users, Eye, MessageCirclePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConversationDTO, ConversationMemberDTO } from "@/types/messaging";
 import { AvatarImage } from "@/components/layout/AvatarImage";
@@ -10,6 +10,8 @@ type Props = {
   currentUserId: string;
   activeId: string | null;
   onSelect: (id: string) => void;
+  /** Ouvre le dialog de création de conversation (CTA de l'état vide). */
+  onNew?: () => void;
   loading: boolean;
 };
 
@@ -69,6 +71,7 @@ export function ConversationList({
   currentUserId,
   activeId,
   onSelect,
+  onNew,
   loading,
 }: Props) {
   if (loading && conversations.length === 0) {
@@ -81,8 +84,24 @@ export function ConversationList({
 
   if (conversations.length === 0) {
     return (
-      <div className="px-6 py-8 text-center text-sm text-muted-foreground">
-        Aucune conversation. Clique sur « Nouvelle » pour démarrer.
+      <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+        <MessageCirclePlus className="h-8 w-8 text-muted-foreground/40" />
+        <p className="mt-3 text-sm font-medium text-foreground">
+          Aucune conversation
+        </p>
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          Échangez avec votre équipe : absences, échanges de créneau, infos du jour.
+        </p>
+        {onNew && (
+          <button
+            type="button"
+            onClick={onNew}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-2 text-[13px] font-medium text-white shadow-sm transition-colors hover:bg-violet-700"
+          >
+            <MessageCirclePlus className="h-4 w-4" />
+            Nouvelle conversation
+          </button>
+        )}
       </div>
     );
   }

@@ -173,8 +173,7 @@ export function SoloPrintSheet({
                 return (
                   <td
                     key={d}
-                    className="border border-zinc-300 align-top p-1.5"
-                    style={{ height: "180mm" }}
+                    className="solo-day-cell border border-zinc-300 align-top p-1.5"
                   >
                     {blocks.length === 0 ? (
                       <p className="mt-2 text-center text-[10px] italic text-zinc-400">
@@ -250,7 +249,7 @@ export function SoloPrintSheet({
         {/* Pied : total semaine */}
         <footer className="mt-3 flex items-baseline justify-between border-t-2 border-zinc-300 pt-2 text-[11px]">
           <p className="text-zinc-500">
-            <span className="hidden sm:inline">
+            <span className="hidden sm:inline print:inline">
               Imprimé le {new Date().toLocaleDateString("fr-FR")} · planning
               indicatif, susceptible d&apos;ajustements
             </span>
@@ -274,23 +273,46 @@ export function SoloPrintSheet({
         </footer>
       </article>
 
-      {/* Styles d'impression : bascule en paysage A4 + cache la sidebar */}
+      {/* Styles d'impression : A4 paysage, 1 seule page, cache la sidebar */}
       <style jsx global>{`
+        /* Aperçu écran : cellules hautes pour ressembler à la feuille papier */
+        .solo-day-cell {
+          height: 150mm;
+        }
         @media print {
           @page {
             size: A4 landscape;
             margin: 8mm;
+          }
+          /* Anti page blanche : la hauteur du body ne doit pas forcer
+             une 2e page. On laisse la hauteur s'auto-ajuster au contenu. */
+          html,
+          body {
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
           }
           aside,
           header.md\\:hidden,
           .no-print {
             display: none !important;
           }
-          body {
-            background: white !important;
-          }
+          /* La feuille tient sur 1 page : pas de saut interne. */
           .solo-sheet {
             box-shadow: none !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .solo-sheet table {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* Hauteur des cases jour calée pour tenir dans la zone imprimable
+             d'une A4 paysage (194mm utiles) une fois l'en-tête + le pied
+             retranchés. */
+          .solo-day-cell {
+            height: 132mm !important;
           }
         }
       `}</style>

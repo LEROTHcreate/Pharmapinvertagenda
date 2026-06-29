@@ -610,7 +610,14 @@
     display: none !important;
   }
 
+  /* Anti page blanche : sans hauteur explicite, le navigateur ne réserve
+     pas une 2e page pour une hauteur de body résiduelle (cause n°1 de la
+     page vierge en fin de PDF). */
+  html,
   body {
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: white !important;
     color: black !important;
     /* Neutralise les ombres/blurs qui ralentissent le rendu print */
@@ -619,6 +626,13 @@
 
   main {
     overflow: visible !important;
+  }
+
+  /* Supprime la marge basse du dernier bloc de la page : une marge
+     résiduelle après la grille suffit à déborder sur une 2e page. */
+  main > div > *:last-child,
+  main > div:last-child {
+    margin-bottom: 0 !important;
   }
 
   /* Compresse la grille pour tenir sur A4 paysage avec ~17 collaborateurs */

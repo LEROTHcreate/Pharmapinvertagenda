@@ -59,7 +59,7 @@ export const TASK_COLORS: Record<TaskCode, CellStyle> = {
   LIVRAISON: { bg: "#d1fae5", text: "#065f46", border: "#6ee7b7" },
   MISE_EN_RAYON: { bg: "#cffafe", text: "#155e75", border: "#67e8f9" },
   VERIFICATION_STOCKS: { bg: "#fef3c7", text: "#92400e", border: "#fcd34d" },
-  ROBOT: { bg: "#f3f4f6", text: "#374151", border: "#d1d5db" },
+  ROBOT: { bg: "#e4e4e7", text: "#27272a", border: "#a1a1aa" },
   REMPLACEMENT: { bg: "#e2e8f0", text: "#1e293b", border: "#94a3b8" },
   ECHANGE: { bg: "#a7f3d0", text: "#064e3b", border: "#34d399" },
   REUNION_FOURNISSEUR: { bg: "#fdf2f8", text: "#831843", border: "#f9a8d4" },

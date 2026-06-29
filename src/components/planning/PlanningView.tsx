@@ -18,7 +18,7 @@ import {
 import { TIME_SLOTS } from "@/types";
 import { PlanningGrid, type CellKey, type ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
 import { MyDayView } from "@/components/planning/MyDayView";
-import { MobileTeamDay } from "@/components/planning/MobileTeamDay";
+import { MobileTeamGantt } from "@/components/planning/MobileTeamGantt";
 import { MobileWeekView } from "@/components/planning/MobileWeekView";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { TASK_LABELS, STATUS_LABELS } from "@/types";
@@ -229,6 +229,24 @@ export function PlanningView({
   const [mobileView, setMobileView] = useState<"mine" | "day" | "week">(
     currentEmployeeId ? "mine" : "day"
   );
+
+  // Mémorise la dernière vue mobile choisie (Moi / Jour / Semaine) pour la
+  // restaurer au prochain chargement — évite de toujours repartir du défaut.
+  // Restauration côté client uniquement (localStorage indisponible en SSR) ;
+  // "mine" n'est restauré que si l'utilisateur a bien une fiche Employee.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("pp_mobile_view");
+    if (saved === "day" || saved === "week" || (saved === "mine" && currentEmployeeId)) {
+      setMobileView(saved);
+    }
+  }, [currentEmployeeId]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("pp_mobile_view", mobileView);
+    }
+  }, [mobileView]);
 
   // ─── FAB "+" : création rapide d'absence depuis le planning ───
   // Mobile uniquement. Permet à un collaborateur de poser une demande
@@ -1787,10 +1805,10 @@ export function PlanningView({
         );
       })()}
 
-      {/* ─── Vue "Jour" — mobile, frise horaire équipe ──────────── */}
+      {/* ─── Vue "Jour" — mobile, frise Gantt équipe (moi + équipe) ── */}
       {mobileView === "day" && (
         <div className="md:hidden">
-          <MobileTeamDay
+          <MobileTeamGantt
             employees={employees}
             date={selectedDay}
             index={index}
