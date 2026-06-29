@@ -15,6 +15,29 @@ import type { EmployeeDayMap } from "@/lib/planning-utils";
 import { staffingLevel } from "@/lib/planning-utils";
 import { cn } from "@/lib/utils";
 
+type Member = { emp: EmployeeDTO; taskCode: string };
+
+/**
+ * Regroupe les présents d'une tranche par poste, pour un rendu structuré
+ * ("Comptoir (3) : Marie · Karim · Tom" plutôt qu'une liste de noms à plat).
+ * Le comptoir passe en premier (poste central), puis par effectif décroissant.
+ */
+function groupByTask(members: Member[]): Array<{ taskCode: string; members: Member[] }> {
+  const map = new Map<string, Member[]>();
+  for (const m of members) {
+    const arr = map.get(m.taskCode);
+    if (arr) arr.push(m);
+    else map.set(m.taskCode, [m]);
+  }
+  return Array.from(map.entries())
+    .map(([taskCode, mem]) => ({ taskCode, members: mem }))
+    .sort((a, b) => {
+      if (a.taskCode === "COMPTOIR") return -1;
+      if (b.taskCode === "COMPTOIR") return 1;
+      return b.members.length - a.members.length;
+    });
+}
+
 /**
  * Vue "Équipe — Jour" pour mobile : une frise horaire verticale.
  *
@@ -238,32 +261,45 @@ export function MobileTeamDay({
                 </span>
               </div>
 
-              {/* Chips des présents */}
-              <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1">
-                {b.members.map((m) => {
-                  const c = TASK_COLORS[m.taskCode as keyof typeof TASK_COLORS];
-                  const isMe = m.emp.id === currentEmployeeId;
+              {/* Présents groupés par poste : une ligne par poste, avec le
+                  libellé coloré + effectif, puis les prénoms (pastille couleur
+                  de chaque employé). Beaucoup plus lisible qu'une liste à plat
+                  quand l'équipe est nombreuse. */}
+              <div className="min-w-0 flex-1 flex flex-col gap-1 justify-center">
+                {groupByTask(b.members).map((g) => {
+                  const c = TASK_COLORS[g.taskCode as keyof typeof TASK_COLORS];
                   return (
-                    <span
-                      key={m.emp.id}
-                      className={cn(
-                        "inline-flex items-baseline gap-1 rounded-lg px-1.5 py-1 text-[11.5px] leading-none border",
-                        isMe && "ring-2 ring-violet-400/70"
-                      )}
-                      style={{
-                        backgroundColor: c.bg,
-                        color: c.text,
-                        borderColor: c.border,
-                      }}
-                      title={`${m.emp.firstName} ${m.emp.lastName} · ${STATUS_LABELS[m.emp.status]}`}
-                    >
-                      <span className="font-semibold tracking-tight">
-                        {m.emp.firstName}
+                    <div key={g.taskCode} className="flex items-start gap-1.5">
+                      <span
+                        className="shrink-0 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none border"
+                        style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                      >
+                        {TASK_LABELS[g.taskCode as keyof typeof TASK_LABELS]}
+                        <span className="opacity-70 tabular-nums">{g.members.length}</span>
                       </span>
-                      <span className="opacity-75 text-[10px] font-medium">
-                        {TASK_LABELS[m.taskCode as keyof typeof TASK_LABELS]}
+                      <span className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-px text-[11.5px] text-foreground">
+                        {g.members.map((m) => {
+                          const isMe = m.emp.id === currentEmployeeId;
+                          return (
+                            <span
+                              key={m.emp.id}
+                              className={cn(
+                                "inline-flex items-center gap-1 leading-none",
+                                isMe && "font-bold text-violet-700 dark:text-violet-300"
+                              )}
+                              title={`${m.emp.firstName} ${m.emp.lastName} · ${STATUS_LABELS[m.emp.status]}`}
+                            >
+                              <span
+                                className="h-1.5 w-1.5 rounded-full shrink-0"
+                                style={{ backgroundColor: m.emp.displayColor }}
+                                aria-hidden
+                              />
+                              {m.emp.firstName}
+                            </span>
+                          );
+                        })}
                       </span>
-                    </span>
+                    </div>
                   );
                 })}
               </div>
