@@ -220,16 +220,29 @@ export function MobileWeekView({
                   {/* Cases jours */}
                   {daily.map((cell, i) => {
                     if (cell.h > 0) {
+                      // Remplissage proportionnel aux heures (réf. 8h = plein)
+                      // → mini bar-chart : on repère d'un coup les journées
+                      // chargées / légères et le rythme de chacun.
+                      const fillPct = Math.min(100, (cell.h / 8) * 100);
                       return (
                         <td
                           key={i}
                           onClick={() => onPickDay(i)}
                           className={cn(
-                            "text-center py-1.5 font-mono tabular-nums text-[12px] text-foreground cursor-pointer",
+                            "cursor-pointer",
                             i === selectedDayIndex && "bg-violet-50/70 dark:bg-violet-950/30"
                           )}
                         >
-                          {fmt(cell.h)}
+                          <div className="relative h-7 flex items-center justify-center">
+                            <span
+                              aria-hidden
+                              className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[58%] rounded-t-sm bg-violet-400/30 dark:bg-violet-500/30"
+                              style={{ height: `${fillPct}%` }}
+                            />
+                            <span className="relative font-mono tabular-nums text-[12px] text-foreground">
+                              {fmt(cell.h)}
+                            </span>
+                          </div>
                         </td>
                       );
                     }

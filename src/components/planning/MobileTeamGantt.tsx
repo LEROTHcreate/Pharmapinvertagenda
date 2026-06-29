@@ -158,6 +158,32 @@ export function MobileTeamGantt({
     return now.getHours() * 60 + now.getMinutes();
   }, [date]);
 
+  // "En ce moment" : qui travaille au créneau courant (aujourd'hui uniquement,
+  // dans les horaires affichés). Donne le coup d'œil "qui est là, là, tout de
+  // suite" sans avoir à lire les barres.
+  const nowSnapshot = useMemo(() => {
+    if (nowMin == null || nowMin < winStart || nowMin >= winEnd) return null;
+    const label = fmtMin(Math.floor(nowMin / 30) * 30);
+    const working: Array<{ emp: EmployeeDTO; taskCode: string }> = [];
+    for (const r of rows) {
+      const b = r.blocks.find(
+        (b) => b.entry.type === "TASK" && b.fromMin <= nowMin && nowMin < b.toMin
+      );
+      if (b && b.entry.taskCode) working.push({ emp: r.emp, taskCode: b.entry.taskCode });
+    }
+    const counterEff = working.filter((w) => COUNTER.has(w.emp.status)).length;
+    // Ma situation : poste en cours + fin du bloc.
+    let mine: { taskCode: string; until: number } | null = null;
+    if (currentEmployeeId) {
+      const meRow = rows.find((r) => r.emp.id === currentEmployeeId);
+      const b = meRow?.blocks.find(
+        (b) => b.entry.type === "TASK" && b.fromMin <= nowMin && nowMin < b.toMin
+      );
+      if (b && b.entry.taskCode) mine = { taskCode: b.entry.taskCode, until: b.toMin };
+    }
+    return { label, working, counterEff, mine };
+  }, [nowMin, winStart, winEnd, rows, currentEmployeeId]);
+
   // Tri : "moi" d'abord, puis présents (par heure de début), absents à la fin.
   const me = rows.find((r) => r.emp.id === currentEmployeeId) ?? null;
   const team = rows
@@ -208,6 +234,61 @@ export function MobileTeamGantt({
           eff. min {minStaff}
         </span>
       </div>
+
+      {/* En ce moment (aujourd'hui, dans les horaires) */}
+      {nowSnapshot && (
+        <div className="rounded-xl border border-violet-200/70 bg-violet-50/50 dark:border-violet-900/40 dark:bg-violet-950/20 px-3 py-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-violet-700 dark:text-violet-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" aria-hidden />
+              En ce moment · {nowSnapshot.label}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
+                staffingLevel(nowSnapshot.counterEff, minStaff) === "ok"
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : staffingLevel(nowSnapshot.counterEff, minStaff) === "warning"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+              )}
+              title="Effectif comptoir actuel"
+            >
+              {nowSnapshot.counterEff} cptr
+            </span>
+          </div>
+          {nowSnapshot.working.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {nowSnapshot.working.map((w) => {
+                const c = TASK_COLORS[w.taskCode as keyof typeof TASK_COLORS];
+                return (
+                  <span
+                    key={w.emp.id}
+                    className="inline-flex items-baseline gap-1 rounded-md px-1.5 py-0.5 text-[11px] leading-none border"
+                    style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                  >
+                    <span className="font-semibold">{w.emp.firstName}</span>
+                    <span className="opacity-75 text-[9.5px]">
+                      {TASK_LABELS[w.taskCode as keyof typeof TASK_LABELS]}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[11.5px] text-rose-600 dark:text-rose-400 font-medium">
+              Personne en poste actuellement.
+            </p>
+          )}
+          {nowSnapshot.mine && (
+            <p className="mt-1.5 text-[11.5px] text-violet-800 dark:text-violet-200">
+              <span className="font-semibold">Toi</span> :{" "}
+              {TASK_LABELS[nowSnapshot.mine.taskCode as keyof typeof TASK_LABELS]} jusqu'à{" "}
+              <span className="font-mono tabular-nums">{fmtMin(nowSnapshot.mine.until)}</span>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Règle horaire + bande effectif (alignées sur les pistes) */}
       <div className="rounded-xl border border-border bg-card px-2 py-2">
