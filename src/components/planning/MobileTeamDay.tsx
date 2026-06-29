@@ -131,6 +131,15 @@ export function MobileTeamDay({
     return ids.size;
   }, [blocks]);
 
+  // Heure courante "HH:MM" si le jour affiché est aujourd'hui — sert à
+  // surligner le créneau en cours ("maintenant"). null sinon.
+  const nowHHMM = useMemo(() => {
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    if (todayIso !== date) return null;
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  }, [date]);
+
   if (blocks.length === 0 && absents.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-card/60 px-5 py-10 text-center">
@@ -197,13 +206,27 @@ export function MobileTeamDay({
               : level === "warning"
                 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                 : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300";
+          // Créneau en cours (aujourd'hui uniquement) : from ≤ maintenant < to.
+          const isCurrent =
+            nowHHMM !== null && b.from <= nowHHMM && nowHHMM < b.to;
           return (
             <li
               key={`${b.from}-${i}`}
-              className="flex items-stretch gap-2.5 rounded-xl border border-border bg-card px-2.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+              className={cn(
+                "flex items-stretch gap-2.5 rounded-xl border bg-card px-2.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
+                isCurrent
+                  ? "border-violet-300 ring-1 ring-violet-300/60 bg-violet-50/40 dark:bg-violet-950/20"
+                  : "border-border"
+              )}
             >
               {/* Plage horaire */}
               <div className="shrink-0 w-[44px] flex flex-col items-center justify-center font-mono tabular-nums leading-none">
+                {isCurrent && (
+                  <span className="mb-0.5 inline-flex items-center gap-0.5 text-[8.5px] font-semibold uppercase tracking-[0.04em] text-violet-600 dark:text-violet-300">
+                    <span className="h-1 w-1 rounded-full bg-violet-500 animate-pulse" aria-hidden />
+                    Live
+                  </span>
+                )}
                 <span className="text-[12.5px] font-bold text-foreground">
                   {b.from}
                 </span>

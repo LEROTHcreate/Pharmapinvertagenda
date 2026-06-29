@@ -4,12 +4,17 @@ import { useMemo } from "react";
 import {
   ABSENCE_STYLES,
   WEEK_DAYS_SHORT,
+  TIME_SLOTS,
   type EmployeeDTO,
 } from "@/types";
 import { SLOT_HOURS } from "@/types";
 import type { EmployeeDayMap } from "@/lib/planning-utils";
-import { weeklyTaskHours } from "@/lib/planning-utils";
+import { weeklyTaskHours, staffingForSlot, staffingLevel } from "@/lib/planning-utils";
 import { cn } from "@/lib/utils";
+
+// Heures d'ouverture au public — créneaux sur lesquels on évalue l'effectif
+// (cohérent avec l'analyse de couverture de PlanningView).
+const OPEN_SLOTS = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
 
 /**
  * Vue "Semaine" pour mobile : récap compact employés × 6 jours.
@@ -24,6 +29,7 @@ export function MobileWeekView({
   weekDates,
   dayNumbers,
   index,
+  minStaff,
   currentEmployeeId,
   selectedDayIndex,
   onPickDay,
@@ -34,11 +40,35 @@ export function MobileWeekView({
   /** Numéros de jour (1..31) alignés sur weekDates, pour l'en-tête. */
   dayNumbers: number[];
   index: Map<string, EmployeeDayMap>;
+  /** Seuil d'effectif comptoir mini (pour la ligne de pied de tableau). */
+  minStaff: number;
   currentEmployeeId: string | null;
   selectedDayIndex: number;
   /** Ouvre la vue Jour sur l'index choisi. */
   onPickDay: (dayIndex: number) => void;
 }) {
+  // Effectif "comptoir" mini par jour : sur les heures d'ouverture, le plus
+  // creux des effectifs (pharmaciens + préparateurs en poste). C'est le pire
+  // moment de la journée → ce qui déclenche une alerte de sous-effectif.
+  const counterStaffIds = useMemo(
+    () =>
+      employees
+        .filter((e) => e.status === "PHARMACIEN" || e.status === "PREPARATEUR")
+        .map((e) => e.id),
+    [employees]
+  );
+  const dailyMinEff = useMemo(
+    () =>
+      weekDates.map((iso) => {
+        let min = Infinity;
+        for (const slot of OPEN_SLOTS) {
+          const n = staffingForSlot(iso, slot, counterStaffIds, index);
+          if (n < min) min = n;
+        }
+        return min === Infinity ? 0 : min;
+      }),
+    [weekDates, counterStaffIds, index]
+  );
   // Trie : "moi" en premier, puis ordre d'affichage habituel.
   const rows = useMemo(
     () =>
@@ -260,6 +290,47 @@ export function MobileWeekView({
               );
             })}
           </tbody>
+
+          {/* Pied de tableau : effectif comptoir mini par jour (heures
+              d'ouverture). Permet de repérer d'un coup les jours sous-staffés
+              sur toute la semaine. */}
+          <tfoot>
+            <tr className="border-t-2 border-border bg-muted/30">
+              <td className="sticky left-0 z-10 bg-muted/30 px-2 py-1.5 text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/80">
+                Eff. mini
+              </td>
+              {dailyMinEff.map((eff, i) => {
+                const level = staffingLevel(eff, minStaff);
+                const pill =
+                  level === "ok"
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    : level === "warning"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                      : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300";
+                return (
+                  <td
+                    key={i}
+                    onClick={() => onPickDay(i)}
+                    className={cn(
+                      "text-center py-1.5 cursor-pointer",
+                      i === selectedDayIndex && "bg-violet-50/70 dark:bg-violet-950/30"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex items-center justify-center h-5 min-w-[20px] px-1 rounded-full text-[10.5px] font-bold tabular-nums",
+                        pill
+                      )}
+                      title={`Effectif comptoir minimum ${eff} (seuil ${minStaff})`}
+                    >
+                      {eff}
+                    </span>
+                  </td>
+                );
+              })}
+              <td className="px-1" />
+            </tr>
+          </tfoot>
         </table>
       </div>
 

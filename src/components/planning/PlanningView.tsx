@@ -1799,6 +1799,7 @@ export function PlanningView({
             weekDates={dayDates}
             dayNumbers={days.map((d) => d.getDate())}
             index={index}
+            minStaff={minStaff}
             currentEmployeeId={currentEmployeeId ?? null}
             selectedDayIndex={dayIndex}
             onPickDay={(i) => {
