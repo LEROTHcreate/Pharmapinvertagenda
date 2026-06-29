@@ -1,147 +1,71 @@
-import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { authConfig } from "@/auth.config";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { AppSession } from "@/types/session";
+// Side-effect : valide les env vars au démarrage (fail-fast).
+import "@/env";
 
-const isDemoMode = process.env.DEMO_MODE === "1";
+const isDemoMode =
+  process.env.DEMO_MODE === "1" && process.env.NODE_ENV !== "production";
 
-// ─── Garde-fous d'environnement ─────────────────────────────────
-// 1. Bloque DEMO_MODE en production : sinon, n'importe qui voit une session
-//    admin factice (bypass complet d'authentification).
-// 2. Refuse de démarrer en prod sans NEXTAUTH_SECRET / AUTH_SECRET réel :
-//    sans secret, les JWT sont forgeables → un attaquant peut se forger
-//    une session ADMIN pour n'importe quelle pharmacie.
-if (process.env.NODE_ENV === "production") {
-  if (isDemoMode) {
-    throw new Error(
-      "[auth] DEMO_MODE=1 est interdit en production (bypass d'authentification)."
-    );
-  }
-  const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
-  if (!secret || secret.length < 32 || secret.includes("please-change")) {
-    throw new Error(
-      "[auth] NEXTAUTH_SECRET/AUTH_SECRET manquant ou trop faible. Génère-le avec `openssl rand -base64 32` et configure-le côté Netlify."
-    );
-  }
+// Garde-fou : DEMO_MODE interdit en prod (bypass complet d'authentification).
+if (process.env.NODE_ENV === "production" && process.env.DEMO_MODE === "1") {
+  throw new Error(
+    "[auth] DEMO_MODE=1 est interdit en production (bypass d'authentification)."
+  );
 }
 
-const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
-const nextAuth = NextAuth({
-  ...authConfig,
-  // Netlify (et autres reverse proxies) modifient les headers Host/X-Forwarded.
-  // `trustHost: true` désactive la vérification stricte de l'host : utile
-  // car NextAuth, sinon, refuse les requêtes dont l'host ne matche pas
-  // exactement NEXTAUTH_URL (problème classique en serverless behind un CDN).
-  trustHost: true,
-  providers: [
-    Credentials({
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Mot de passe", type: "password" },
-      },
-      async authorize(creds) {
-        const parsed = credentialsSchema.safeParse(creds);
-        if (!parsed.success) return null;
-
-        // ─── Rate-limit anti brute-force ───
-        // 10 tentatives / 15 min par email + 30 / 15 min par IP (en best-effort,
-        // l'IP n'est pas toujours dispo dans authorize()). Bloque les attaques
-        // simples sans gêner l'utilisateur normal.
-        const { checkRateLimit } = await import("@/lib/rate-limit");
-        const emailKey = `login:email:${parsed.data.email.toLowerCase()}`;
-        const limit = checkRateLimit(emailKey, {
-          max: 10,
-          windowMs: 15 * 60 * 1000,
-        });
-        if (!limit.allowed) {
-          // Refus silencieux : on log côté serveur sans révéler à l'attaquant
-          // que l'email est rate-limited (différence comportementale = info
-          // exploitable pour énumération).
-          console.warn(`[auth] login rate-limited for ${parsed.data.email}`);
-          return null;
-        }
-
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email },
-        });
-        // Refus silencieux si compte inexistant, désactivé, ou non approuvé.
-        // (On évite l'énumération d'emails et la divulgation du statut.)
-        if (!user || !user.isActive || user.status !== "APPROVED") return null;
-
-        const ok = await bcrypt.compare(
-          parsed.data.password,
-          user.hashedPassword
-        );
-        if (!ok) return null;
-
-        // Trace la connexion pour audit (best-effort : on ne bloque pas la
-        // connexion si l'écriture échoue).
-        prisma.user
-          .update({
-            where: { id: user.id },
-            data: { lastLoginAt: new Date() },
-          })
-          .catch((e) => {
-            console.error("[auth] échec mise à jour lastLoginAt:", e);
-          });
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          pharmacyId: user.pharmacyId,
-          employeeId: user.employeeId,
-        };
-      },
-    }),
-  ],
-  callbacks: {
-    ...authConfig.callbacks,
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id as string;
-        token.role = user.role;
-        token.pharmacyId = user.pharmacyId;
-        token.employeeId = user.employeeId ?? null;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.pharmacyId = token.pharmacyId;
-        session.user.employeeId = token.employeeId;
-      }
-      return session;
-    },
-  },
-});
-
-export const handlers = nextAuth.handlers;
-export const signIn = nextAuth.signIn;
-export const signOut = nextAuth.signOut;
-
-// Session factice utilisée en mode démo
-const demoSession = {
+// Session factice utilisée en mode démo (aucune connexion réelle).
+const demoSession: AppSession = {
   user: {
     id: "user-admin",
     email: "admin@pharmacie-demo.fr",
     name: "Agnès Bertrand (démo)",
-    role: "ADMIN" as const,
+    role: "ADMIN",
     pharmacyId: "demo-pharmacy",
     employeeId: "emp-1",
   },
   expires: new Date(Date.now() + 86400000 * 30).toISOString(),
 };
 
-export const auth: typeof nextAuth.auth = (isDemoMode
-  ? (async () => demoSession)
-  : nextAuth.auth) as typeof nextAuth.auth;
+/**
+ * Récupère la session applicative.
+ *
+ * Drop-in de l'ancien `auth()` NextAuth : renvoie exactement la même forme
+ * `{ user: { id, email, name, role, pharmacyId, employeeId }, expires }` ou
+ * `null`. Tous les appelants (`await auth()`) restent inchangés.
+ *
+ * Identité : Supabase Auth (cookies de session). Données métier : table
+ * `users` (Prisma), liée par email. On applique le même gate qu'avant :
+ * compte actif ET approuvé, sinon `null` (un compte PENDING/désactivé qui
+ * aurait une session Supabase est traité comme non connecté).
+ */
+export async function auth(): Promise<AppSession | null> {
+  if (isDemoMode) return demoSession;
+
+  const supabase = createSupabaseServerClient();
+  // getUser() valide le JWT auprès de Supabase (≠ getSession qui ne fait que
+  // lire le cookie sans vérifier la signature).
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser?.email) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { email: authUser.email },
+  });
+  if (!user || !user.isActive || user.status !== "APPROVED") return null;
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      pharmacyId: user.pharmacyId,
+      employeeId: user.employeeId,
+    },
+    // Supabase gère l'expiration réelle des tokens ; on expose une valeur
+    // indicative pour conserver la forme attendue par les consommateurs.
+    expires: new Date(Date.now() + 86400000).toISOString(),
+  };
+}

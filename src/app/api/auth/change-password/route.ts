@@ -3,6 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { setSupabasePassword } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,13 +42,13 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, hashedPassword: true },
+    select: { id: true, hashedPassword: true, authUserId: true },
   });
   if (!user) {
     return NextResponse.json({ error: "USER_NOT_FOUND" }, { status: 404 });
   }
 
-  // Vérifie l'ancien mot de passe
+  // Vérifie l'ancien mot de passe (miroir bcrypt domaine)
   const ok = await bcrypt.compare(currentPassword, user.hashedPassword);
   if (!ok) {
     return NextResponse.json(
@@ -64,6 +65,10 @@ export async function POST(req: Request) {
     );
   }
 
+  // Source de vérité du login : Supabase Auth.
+  await setSupabasePassword(user.authUserId, newPassword);
+
+  // Miroir bcrypt domaine.
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({
     where: { id: user.id },

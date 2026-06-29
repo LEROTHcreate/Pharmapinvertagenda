@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { signupSchema } from "@/validators/auth";
 import {
@@ -9,6 +10,36 @@ import {
   sendNewSignupAdminNotification,
 } from "@/lib/email";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+/**
+ * Provisionne le compte d'identité dans Supabase Auth (source de vérité du mot
+ * de passe). `email_confirm: true` car notre garde d'accès est l'approbation
+ * admin, pas un double opt-in email. Renvoie l'id auth Supabase.
+ */
+async function provisionAuthUser(email: string, password: string): Promise<string> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (error || !data.user) {
+    throw new Error(
+      `[signup] création du compte Supabase échouée : ${error?.message ?? "raison inconnue"}`
+    );
+  }
+  return data.user.id;
+}
+
+/** Rollback best-effort du compte Supabase si la création domaine échoue. */
+async function rollbackAuthUser(authUserId: string): Promise<void> {
+  try {
+    const admin = createSupabaseAdminClient();
+    await admin.auth.admin.deleteUser(authUserId);
+  } catch (e) {
+    console.error("[signup] rollback deleteUser échoué:", e);
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +80,36 @@ export async function POST(req: Request) {
     );
   }
 
+  // Filet global : toute exception (cold-start BDD Supabase en pause, timeout
+  // réseau, etc.) est capturée ici pour éviter un 500 opaque côté client et
+  // logguer la cause réelle dans les logs Netlify.
+  try {
+    return await processSignup(req);
+  } catch (err) {
+    console.error("[signup] exception non gérée:", err);
+    if (isDbConnectivityError(err)) {
+      // Base injoignable / en réveil → 503 explicite : le client invite à
+      // patienter quelques secondes plutôt qu'afficher une erreur générique.
+      return NextResponse.json({ error: "SERVICE_UNAVAILABLE" }, { status: 503 });
+    }
+    return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 });
+  }
+}
+
+/**
+ * Détecte les erreurs de connectivité Postgres/Prisma (base en pause, timeout,
+ * connexion coupée) : codes P1xxx ou échec d'initialisation du client. Permet
+ * de renvoyer un 503 « réessayez » plutôt qu'un 500 indistinct d'un vrai bug.
+ */
+function isDbConnectivityError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: string };
+  if (e.name === "PrismaClientInitializationError") return true;
+  return typeof e.code === "string" && /^P1\d{3}$/.test(e.code);
+}
+
+/** Logique métier de l'inscription, encapsulée pour le try/catch global. */
+async function processSignup(req: Request): Promise<NextResponse> {
   let payload: unknown;
   try {
     payload = await req.json();
@@ -108,17 +169,26 @@ export async function POST(req: Request) {
       );
     }
 
-    await prisma.user.create({
-      data: {
-        name,
-        email,
-        hashedPassword,
-        pharmacyId: pharmacy.id,
-        role: "EMPLOYEE",
-        status: "PENDING",
-        isActive: false,
-      },
-    });
+    // Compte d'identité Supabase d'abord ; en cas d'échec de la création
+    // domaine juste après, on le supprime (rollback) pour rester cohérent.
+    const authUserId = await provisionAuthUser(email, password);
+    try {
+      await prisma.user.create({
+        data: {
+          name,
+          email,
+          hashedPassword,
+          authUserId,
+          pharmacyId: pharmacy.id,
+          role: "EMPLOYEE",
+          status: "PENDING",
+          isActive: false,
+        },
+      });
+    } catch (e) {
+      await rollbackAuthUser(authUserId);
+      throw e;
+    }
 
     revalidateTag(DASHBOARD_CACHE_TAGS.usersPending(pharmacy.id));
 
@@ -169,34 +239,44 @@ export async function POST(req: Request) {
     );
   }
 
+  // Compte d'identité Supabase d'abord (rollback si la transaction échoue).
+  const authUserId = await provisionAuthUser(email, password);
+
   // Création atomique pharmacie + premier admin
-  const created = await prisma.$transaction(async (tx) => {
-    const pharmacy = await tx.pharmacy.create({
-      data: {
-        name: data.pharmacyName,
-        siret: data.pharmacySiret,
-        address: data.pharmacyAddress?.trim() || null,
-        phone: data.pharmacyPhone?.trim() || null,
-      },
-      select: { id: true, name: true },
-    });
+  let created;
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      const pharmacy = await tx.pharmacy.create({
+        data: {
+          name: data.pharmacyName,
+          siret: data.pharmacySiret,
+          address: data.pharmacyAddress?.trim() || null,
+          phone: data.pharmacyPhone?.trim() || null,
+        },
+        select: { id: true, name: true },
+      });
 
-    const user = await tx.user.create({
-      data: {
-        name,
-        email,
-        hashedPassword,
-        pharmacyId: pharmacy.id,
-        role: "ADMIN",
-        status: "APPROVED",
-        isActive: true,
-        reviewedAt: new Date(),
-      },
-      select: { id: true },
-    });
+      const user = await tx.user.create({
+        data: {
+          name,
+          email,
+          hashedPassword,
+          authUserId,
+          pharmacyId: pharmacy.id,
+          role: "ADMIN",
+          status: "APPROVED",
+          isActive: true,
+          reviewedAt: new Date(),
+        },
+        select: { id: true },
+      });
 
-    return { pharmacy, user };
-  });
+      return { pharmacy, user };
+    });
+  } catch (e) {
+    await rollbackAuthUser(authUserId);
+    throw e;
+  }
 
   // Email de bienvenue — on réutilise le template "confirmation"
   await sendSignupConfirmation({

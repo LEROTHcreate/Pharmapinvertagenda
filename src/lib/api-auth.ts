@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import type { Session } from "next-auth";
+import type { AppSession } from "@/types/session";
 
 /**
  * Helpers pour les routes API : factorisent le pattern répété
@@ -17,8 +17,8 @@ import type { Session } from "next-auth";
  *   });
  */
 
-export type AuthedSession = Session & {
-  user: NonNullable<Session["user"]>;
+export type AuthedSession = AppSession & {
+  user: NonNullable<AppSession["user"]>;
 };
 
 type RouteContext<P = unknown> = {

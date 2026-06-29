@@ -26,11 +26,18 @@ const schema = z.object({
     .refine((u) => u.startsWith("postgres"), "DATABASE_URL doit être un postgres://"),
   DIRECT_URL: z.string().url().optional(),
 
-  // ─── NextAuth ───
-  // Au moins une des deux variables doit être définie ; en prod on impose
-  // une longueur ≥ 32 et une valeur non par défaut.
-  NEXTAUTH_SECRET: z.string().min(1).optional(),
-  AUTH_SECRET: z.string().min(1).optional(),
+  // ─── Supabase Auth ───
+  // Identité gérée par Supabase Auth. Requis en prod (validé plus bas) ;
+  // optionnel en dev/test pour ne pas bloquer les outils hors-ligne.
+  // On accepte les deux conventions : ancienne (anon/service_role) et
+  // nouvelle (publishable/secret, format sb_publishable_… / sb_secret_…).
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  SUPABASE_SECRET_KEY: z.string().min(1).optional(),
+
+  // ─── URL publique (liens emails, redirections) ───
   NEXTAUTH_URL: z.string().url().optional(),
 
   // ─── Resend (optionnel) ───
@@ -59,11 +66,20 @@ if (isProd) {
       "[env] DEMO_MODE=1 est INTERDIT en production (bypass d'authentification)."
     );
   }
-  const secret = env.NEXTAUTH_SECRET ?? env.AUTH_SECRET;
-  if (!secret || secret.length < 32 || secret.includes("please-change") || secret.includes("votre-secret")) {
+  // Supabase Auth requis en prod (identité + mots de passe). On accepte l'une
+  // ou l'autre convention de nommage pour la clé publique et la clé secrète.
+  const publicKey =
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const secretKey = env.SUPABASE_SERVICE_ROLE_KEY ?? env.SUPABASE_SECRET_KEY;
+  const missing = [
+    !env.NEXT_PUBLIC_SUPABASE_URL && "NEXT_PUBLIC_SUPABASE_URL",
+    !publicKey && "NEXT_PUBLIC_SUPABASE_ANON_KEY (ou _PUBLISHABLE_KEY)",
+    !secretKey && "SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_SECRET_KEY)",
+  ].filter(Boolean);
+  if (missing.length > 0) {
     throw new Error(
-      "[env] NEXTAUTH_SECRET/AUTH_SECRET manquant ou trop faible. " +
-        "Génère-le avec `openssl rand -base64 32` et configure-le côté hébergement."
+      `[env] Variables Supabase Auth manquantes en production : ${missing.join(", ")}. ` +
+        "Récupère-les dans Supabase → Project Settings → API."
     );
   }
 }

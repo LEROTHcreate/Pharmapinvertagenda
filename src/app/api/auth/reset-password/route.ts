@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { setSupabasePassword } from "@/lib/supabase/server";
 import { resetPasswordSchema } from "@/validators/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
       isActive: true,
       status: "APPROVED",
     },
-    select: { id: true },
+    select: { id: true, authUserId: true },
   });
   if (!user) {
     // Lien invalide ou expiré (ou compte désactivé) — on renvoie un code
@@ -61,6 +62,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
   }
 
+  // Source de vérité du login : Supabase Auth. On met à jour côté Supabase
+  // d'abord ; si ça échoue, on n'invalide pas le token (l'utilisateur peut
+  // réessayer) et l'exception remonte au filet d'erreur Next.
+  await setSupabasePassword(user.authUserId, password);
+
+  // Miroir bcrypt domaine (sert à la vérification dans change-password).
   const hashedPassword = await bcrypt.hash(password, 12);
 
   await prisma.user.update({

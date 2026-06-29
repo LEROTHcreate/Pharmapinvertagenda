@@ -342,6 +342,8 @@ function messageForError(code: string): string {
       return "Une officine avec ce SIRET existe déjà. Choisissez plutôt \"Rejoindre une officine\".";
     case "RATE_LIMITED":
       return "Trop de tentatives. Réessayez dans quelques minutes.";
+    case "SERVICE_UNAVAILABLE":
+      return "Service momentanément indisponible (réveil du serveur). Patientez quelques secondes et réessayez.";
     default:
       return "Une erreur est survenue. Réessayez dans un instant.";
   }

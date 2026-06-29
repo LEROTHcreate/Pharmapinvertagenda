@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { signIn } from "next-auth/react";
+import { loginAction } from "@/lib/auth-actions";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Check, Eye, EyeOff, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,12 +56,8 @@ export function LoginForm() {
     setError(null);
 
     startTransition(async () => {
-      const res = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-      if (!res || res.error) {
+      const res = await loginAction(email, password);
+      if (!res.ok) {
         setError("Email ou mot de passe incorrect.");
         return;
       }

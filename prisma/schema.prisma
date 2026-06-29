@@ -135,7 +135,13 @@ model Pharmacy {
 model User {
   id             String     @id @default(cuid())
   email          String     @unique
+  // Identité gérée par Supabase Auth. `hashedPassword` reste un miroir bcrypt
+  // (maintenu au signup/reset/change) pour la vérification de l'ancien mot de
+  // passe sans round-trip, mais la source de vérité du login est Supabase.
   hashedPassword String
+  // Id du compte correspondant dans auth.users (Supabase). Nullable le temps
+  // de la migration ; alimenté au signup et par le script de migration.
+  authUserId     String?    @unique
   name           String
   role           UserRole   @default(EMPLOYEE)
   status         UserStatus @default(PENDING)   // Workflow d'inscription
