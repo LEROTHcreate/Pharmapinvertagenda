@@ -72,6 +72,17 @@ function buildBlocks(
 
 const COUNTER = new Set(["PHARMACIEN", "PREPARATEUR"]);
 
+// Libellés courts pour les chips de filtre par rôle.
+const ROLE_SHORT: Record<string, string> = {
+  PHARMACIEN: "Pharma",
+  PREPARATEUR: "Prépa",
+  ETUDIANT: "Étud.",
+  TITULAIRE: "Titu.",
+  SECRETAIRE: "Secr.",
+  BACK_OFFICE: "Back-off.",
+  LIVREUR: "Livreur",
+};
+
 export function MobileTeamGantt({
   employees,
   date,
@@ -184,13 +195,43 @@ export function MobileTeamGantt({
     return { label, working, counterEff, mine };
   }, [nowMin, winStart, winEnd, rows, currentEmployeeId]);
 
+  // Filtre par rôle (vide = tout). N'affecte QUE l'affichage des lignes équipe ;
+  // l'effectif et "en ce moment" restent calculés sur l'équipe complète.
+  const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
+
   // Tri : "moi" d'abord, puis présents (par heure de début), absents à la fin.
   const me = rows.find((r) => r.emp.id === currentEmployeeId) ?? null;
   const team = rows
-    .filter((r) => r.emp.id !== currentEmployeeId && (r.blocks.length > 0))
+    .filter((r) => r.emp.id !== currentEmployeeId && r.blocks.length > 0)
     .sort((a, b) => {
       if (a.hasTask !== b.hasTask) return a.hasTask ? -1 : 1;
       return a.firstStart - b.firstStart;
+    });
+
+  // Rôles réellement présents ce jour (pour ne proposer que des filtres utiles).
+  const rolesPresent = useMemo(() => {
+    const order: string[] = [
+      "PHARMACIEN",
+      "PREPARATEUR",
+      "ETUDIANT",
+      "TITULAIRE",
+      "SECRETAIRE",
+      "BACK_OFFICE",
+      "LIVREUR",
+    ];
+    const set = new Set(team.map((r) => r.emp.status as string));
+    return order.filter((s) => set.has(s));
+  }, [team]);
+
+  const visibleTeam =
+    roleFilter.size === 0 ? team : team.filter((r) => roleFilter.has(r.emp.status));
+
+  const toggleRole = (s: string) =>
+    setRoleFilter((prev) => {
+      const n = new Set(prev);
+      if (n.has(s)) n.delete(s);
+      else n.add(s);
+      return n;
     });
 
   const presentCount = rows.filter((r) => r.hasTask).length;
@@ -234,6 +275,42 @@ export function MobileTeamGantt({
           eff. min {minStaff}
         </span>
       </div>
+
+      {/* Filtre par rôle — chips horizontales (n'affecte que l'affichage). */}
+      {rolesPresent.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin -mx-1 px-1 pb-0.5">
+          <button
+            type="button"
+            onClick={() => setRoleFilter(new Set())}
+            className={cn(
+              "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors border",
+              roleFilter.size === 0
+                ? "bg-foreground text-background border-foreground"
+                : "bg-card text-muted-foreground border-border hover:text-foreground"
+            )}
+          >
+            Tous
+          </button>
+          {rolesPresent.map((s) => {
+            const active = roleFilter.has(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggleRole(s)}
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors border",
+                  active
+                    ? "bg-violet-600 text-white border-violet-600"
+                    : "bg-card text-muted-foreground border-border hover:text-foreground"
+                )}
+              >
+                {ROLE_SHORT[s] ?? s}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* En ce moment (aujourd'hui, dans les horaires) */}
       {nowSnapshot && (
@@ -290,8 +367,10 @@ export function MobileTeamGantt({
         </div>
       )}
 
-      {/* Règle horaire + bande effectif (alignées sur les pistes) */}
-      <div className="rounded-xl border border-border bg-card px-2 py-2">
+      {/* Règle horaire + bande effectif (alignées sur les pistes).
+          `sticky top-0` : reste figée en haut quand on scrolle la liste des
+          personnes → on garde toujours le repère horaire + l'effectif. */}
+      <div className="sticky top-0 z-30 rounded-xl border border-border bg-card px-2 py-2 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.12)]">
         <div className="flex items-center">
           <div className="shrink-0" style={{ width: NAME_W }} />
           <div className="relative flex-1 h-4">
@@ -367,9 +446,19 @@ export function MobileTeamGantt({
         <div>
           <p className="px-1 pb-1 pt-1 text-[10px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70">
             Équipe
+            {roleFilter.size > 0 && (
+              <span className="ml-1 normal-case tracking-normal text-muted-foreground/50">
+                · {visibleTeam.length}/{team.length}
+              </span>
+            )}
           </p>
+          {visibleTeam.length === 0 ? (
+            <p className="px-1 py-2 text-[12px] text-muted-foreground">
+              Personne pour ce filtre.
+            </p>
+          ) : (
           <ul className="space-y-1">
-            {team.map((r) => (
+            {visibleTeam.map((r) => (
               <li key={r.emp.id}>
                 <GanttRow
                   row={r}
@@ -383,6 +472,7 @@ export function MobileTeamGantt({
               </li>
             ))}
           </ul>
+          )}
         </div>
       )}
 
