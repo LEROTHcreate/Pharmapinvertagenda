@@ -6,6 +6,7 @@ import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import { PlanningView } from "@/components/planning/PlanningView";
 import { WelcomeBanner } from "@/components/planning/WelcomeBanner";
+import { OnboardingEmptyState } from "@/components/planning/OnboardingEmptyState";
 import {
   pickRandomGreeting,
   timeBasedHello,
@@ -150,15 +151,21 @@ export default async function PlanningPage({
         avatarId={sessionUser?.avatarId ?? null}
         tips={tips}
       />
-      <PlanningView
-        initialWeekStart={weekStartIso}
-        initialDayIndex={initialDayIndex}
-        employees={employeesDTO}
-        initialEntries={initialEntries}
-        role={session.user.role}
-        minStaff={pharmacy?.minStaff ?? 4}
-        currentEmployeeId={session.user.employeeId ?? null}
-      />
+      {employeesDTO.length === 0 ? (
+        // Officine sans aucun collaborateur (juste après création) → onboarding
+        // guidé plutôt qu'une grille vide déroutante.
+        <OnboardingEmptyState isAdmin={session.user.role === "ADMIN"} />
+      ) : (
+        <PlanningView
+          initialWeekStart={weekStartIso}
+          initialDayIndex={initialDayIndex}
+          employees={employeesDTO}
+          initialEntries={initialEntries}
+          role={session.user.role}
+          minStaff={pharmacy?.minStaff ?? 4}
+          currentEmployeeId={session.user.employeeId ?? null}
+        />
+      )}
     </div>
   );
 }
