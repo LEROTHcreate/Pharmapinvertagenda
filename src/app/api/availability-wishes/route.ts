@@ -28,8 +28,32 @@ async function GET__impl(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const scope = new URL(req.url).searchParams.get("scope") ?? "mine";
+  const sp = new URL(req.url).searchParams;
+  const scope = sp.get("scope") ?? "mine";
   const from = new Date(`${todayIso()}T00:00:00Z`);
+
+  // Lookup ciblé : le souhait d'UN employé pour UNE date (admin). Utilisé par
+  // l'éditeur de cellule du planning pour avertir l'admin s'il planifie
+  // quelqu'un ayant déclaré une indisponibilité ce jour-là.
+  if (scope === "cell") {
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    const employeeId = sp.get("employeeId");
+    const date = sp.get("date");
+    if (!employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
+      return NextResponse.json({ wish: null });
+    }
+    const wish = await prisma.availabilityWish.findFirst({
+      where: {
+        employeeId,
+        pharmacyId: session.user.pharmacyId,
+        date: new Date(`${date}T00:00:00Z`),
+      },
+      select: { kind: true, note: true },
+    });
+    return NextResponse.json({ wish });
+  }
 
   if (scope === "all") {
     if (session.user.role !== "ADMIN") {
