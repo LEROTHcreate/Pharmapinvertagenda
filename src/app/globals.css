@@ -729,6 +729,17 @@
   }
 }
 
+/* ─── Densité de la grille planning ("Confort") ───────────────────────────
+   Mode "compact" = défaut (padding Tailwind py-1 des cellules). En mode
+   "comfortable", on aère les lignes du corps de grille → plus lisible pour les
+   officines à peu de collaborateurs. Desktop uniquement (le toggle est md+). */
+@media (min-width: 768px) {
+  table[data-density="comfortable"] tbody td {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+
 /* ─── Largeur de colonne employé : compact sur mobile, confort sur desktop ─── */
 :root {
   --col-w: 48px;

@@ -133,6 +133,8 @@ type Props = {
    * appel API.
    */
   onReorderColumns?: (orderedIds: string[]) => void;
+  /** Densité d'affichage desktop : "compact" (défaut) ou "comfortable". */
+  density?: "compact" | "comfortable";
 };
 
 export const PlanningGrid = memo(function PlanningGrid({
@@ -151,6 +153,7 @@ export const PlanningGrid = memo(function PlanningGrid({
   onMoveTask,
   onMoveBlock,
   onReorderColumns,
+  density = "compact",
 }: Props) {
   const dndEnabled = canEdit && !!onMoveTask;
   // Réordonnancement de colonnes : desktop uniquement (sur tactile, l'écran
@@ -533,6 +536,7 @@ export const PlanningGrid = memo(function PlanningGrid({
     <div className="select-none rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)] overflow-hidden">
       <div className="overflow-x-auto scrollbar-thin overscroll-x-contain">
         <table
+          data-density={density}
           // Variables CSS responsive : largeur de colonne employé + colonne
           // heure + colonne effectif. Sur mobile on réduit fortement pour
           // tenir tout le planning dans la largeur d'écran (vue d'ensemble),
