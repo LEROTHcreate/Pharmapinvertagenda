@@ -62,6 +62,31 @@ function loginUrl(): string {
 }
 
 /**
+ * Version texte brut à partir du HTML. Un email multipart (texte + HTML) est
+ * nettement moins filtré par Gmail qu'un email HTML seul : c'est l'un des
+ * leviers de délivrabilité les plus simples sans changer de fournisseur.
+ * On préserve les liens sous la forme « libellé (url) ».
+ */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, "$2 ($1)")
+    .replace(/<\/(p|div|h1|h2|h3|tr|li|table)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * Wrapper safe : log les erreurs mais ne throw jamais.
  * Absence de GMAIL_USER / GMAIL_APP_PASSWORD = log warn et skip (utile en
  * dev sans conf ; les emails partent une fois Netlify configuré).
@@ -123,7 +148,12 @@ async function safeSend(params: {
     const info = await t.sendMail({
       from: FROM,
       to: recipients.join(", "),
+      // Reply-To vers un humain (contact admin) plutôt que l'expéditeur
+      // technique → mieux perçu par Gmail et utile si l'utilisateur répond.
+      replyTo: process.env.ADMIN_CONTACT_EMAIL?.trim() || GMAIL_USER || undefined,
       subject: params.subject,
+      // Multipart texte + HTML : meilleure délivrabilité (moins de filtrage).
+      text: htmlToText(params.html),
       html: params.html,
     });
     if (info.rejected && info.rejected.length > 0) {
