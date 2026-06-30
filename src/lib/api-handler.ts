@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 
 /**
  * Détecte les erreurs de connectivité Postgres/Prisma : base en pause (Supabase
@@ -69,6 +70,11 @@ export function withErrorHandling<A extends unknown[]>(
           ? `${req.method} ${safePath(req)}`
           : "api";
       console.error(`[api] ${where} — exception non gérée:`, err);
+      // Remonte l'exception à Sentry (no-op si DSN non configurée). On n'envoie
+      // PAS les erreurs de connectivité BDD (cold-start attendu, bruit inutile).
+      if (!isDbConnectivityError(err)) {
+        Sentry.captureException(err, { tags: { route: where } });
+      }
       if (isDbConnectivityError(err)) {
         return NextResponse.json(
           { error: "SERVICE_UNAVAILABLE" },

@@ -62,4 +62,12 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry : enrobe la config Next. Upload de source maps désactivé (pas de
+// SENTRY_AUTH_TOKEN requis) → build identique tant que la DSN n'est pas
+// configurée. `silent` évite le bruit dans les logs de build.
+import { withSentryConfig } from "@sentry/nextjs";
+
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  sourcemaps: { disable: true },
+});

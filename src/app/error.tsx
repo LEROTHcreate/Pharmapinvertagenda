@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import * as Sentry from "@sentry/nextjs";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -17,9 +18,9 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Hook de monitoring : pour l'instant on log la console.
-    // À remplacer par Sentry/Logflare quand intégré.
     console.error("[error.tsx]", error);
+    // Remonte à Sentry (no-op si DSN non configurée).
+    Sentry.captureException(error);
   }, [error]);
 
   return (
