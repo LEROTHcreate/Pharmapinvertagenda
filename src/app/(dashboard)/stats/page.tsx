@@ -22,7 +22,7 @@ export default async function StatsPage({
     ? (requested as StatsPeriod) ?? "semester"
     : "semester";
 
-  const { employees, periodLabel } = await computeStats(
+  const { employees, periodLabel, previous } = await computeStats(
     session.user.pharmacyId,
     period
   );
@@ -32,6 +32,7 @@ export default async function StatsPage({
       period={period}
       periodLabel={periodLabel}
       employees={employees}
+      previous={previous}
     />
   );
 }

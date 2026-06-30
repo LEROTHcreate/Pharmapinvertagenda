@@ -15,14 +15,21 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/types";
-import type { EmployeeStat, StatsPeriod } from "@/lib/stats";
+import type { EmployeeStat, PeriodTotals, StatsPeriod } from "@/lib/stats";
 import type { EmployeeStatus } from "@prisma/client";
 
 type Props = {
   period: StatsPeriod;
   periodLabel: string;
   employees: EmployeeStat[];
+  /** Totaux de la période précédente (null si "tout l'historique"). */
+  previous: PeriodTotals | null;
 };
+
+// Taux brut horaire moyen SUPPOSÉ pour l'estimation du coût des heures sup.
+// Volontairement indépendant des salaires réels (module Rémunération) → c'est
+// une estimation "ordre de grandeur" affichée comme telle.
+const ASSUMED_GROSS_HOURLY = 14;
 
 const PERIOD_OPTIONS: Array<{ value: StatsPeriod; label: string }> = [
   { value: "week", label: "Semaine" },
@@ -120,6 +127,56 @@ function MiniBarChart({
   );
 }
 
+// ─── Courbe d'évolution de la charge équipe ───────────────────────
+function TeamTrendChart({
+  data,
+}: {
+  data: Array<{ weekStart: string; hours: number }>;
+}) {
+  const W = 600;
+  const H = 90;
+  const pad = 6;
+  const n = data.length;
+  const max = Math.max(1, ...data.map((d) => d.hours));
+  const x = (i: number) => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = (h: number) => H - pad - (h / max) * (H - 2 * pad);
+  const linePts = data.map((d, i) => `${x(i)},${y(d.hours)}`).join(" ");
+  const areaPts = `${x(0)},${H - pad} ${linePts} ${x(n - 1)},${H - pad}`;
+  const fmt = (iso: string) => {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+  return (
+    <div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="w-full h-24"
+        role="img"
+        aria-label="Évolution des heures planifiées de l'équipe par semaine"
+      >
+        <polygon points={areaPts} fill="rgb(124 58 237 / 0.10)" />
+        <polyline
+          points={linePts}
+          fill="none"
+          stroke="rgb(124 58 237)"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-[10px] text-zinc-400 tabular-nums">
+        <span>{fmt(data[0].weekStart)}</span>
+        <span className="text-zinc-500">
+          max {max.toFixed(0)}h · {data.length} sem.
+        </span>
+        <span>{fmt(data[n - 1].weekStart)}</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Barre de progression : avg vs contrat ────────────────────────
 function ContractProgress({
   avg,
@@ -213,7 +270,7 @@ function SortHeader({
 }
 
 // ─── Vue principale ────────────────────────────────────────────────
-export function StatsView({ period, periodLabel, employees }: Props) {
+export function StatsView({ period, periodLabel, employees, previous }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -312,6 +369,24 @@ export function StatsView({ period, periodLabel, employees }: Props) {
       ),
     [employees]
   );
+
+  // Coût indicatif des heures sup. (estimation ordre de grandeur) :
+  // heures × taux brut supposé × 1,25 (majoration légale HS).
+  const overtimeCost = Math.round(totals.overtime * ASSUMED_GROSS_HOURLY * 1.25);
+
+  // Série hebdo agrégée équipe (somme des heures planifiées par semaine) →
+  // courbe d'évolution de la charge globale.
+  const teamWeekly = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of employees) {
+      for (const w of e.weekly) {
+        map.set(w.weekStart, (map.get(w.weekStart) ?? 0) + w.taskHours);
+      }
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([weekStart, hours]) => ({ weekStart, hours }));
+  }, [employees]);
 
   // ─── Points d'attention : highlights auto pour les dirigeants ──────
   // On surface les cas extrêmes utiles à un titulaire : qui accumule le plus
@@ -428,13 +503,27 @@ export function StatsView({ period, periodLabel, employees }: Props) {
           value={`${totals.task.toFixed(0)}h`}
           hint="cumul équipe sur la période"
           tone="violet"
+          delta={
+            previous
+              ? { current: totals.task, previous: previous.task, badWhenUp: false }
+              : null
+          }
         />
         <SummaryCard
           icon={TrendingUp}
           label="Heures supplémentaires"
           value={`${totals.overtime.toFixed(0)}h`}
-          hint="au-delà du contrat hebdo"
+          hint={
+            overtimeCost > 0
+              ? `≈ ${overtimeCost.toLocaleString("fr-FR")} € estimé (≈${ASSUMED_GROSS_HOURLY} €/h × 1,25)`
+              : "au-delà du contrat hebdo"
+          }
           tone="rose"
+          delta={
+            previous
+              ? { current: totals.overtime, previous: previous.overtime, badWhenUp: true }
+              : null
+          }
         />
         <SummaryCard
           icon={CalendarOff}
@@ -442,6 +531,11 @@ export function StatsView({ period, periodLabel, employees }: Props) {
           value={`${totals.absence.toFixed(0)}h`}
           hint="congés, maladie, formations…"
           tone="amber"
+          delta={
+            previous
+              ? { current: totals.absence, previous: previous.absence, badWhenUp: true }
+              : null
+          }
         />
         <SummaryCard
           icon={Users}
@@ -449,6 +543,7 @@ export function StatsView({ period, periodLabel, employees }: Props) {
           value={`${totals.overContract} / ${totals.underContract}`}
           hint="au-dessus / sous le contrat"
           tone="emerald"
+          delta={null}
         />
       </div>
 
@@ -502,6 +597,21 @@ export function StatsView({ period, periodLabel, employees }: Props) {
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Évolution de la charge équipe (semaine par semaine) */}
+      {teamWeekly.length >= 2 && (
+        <div className="rounded-2xl border border-zinc-200/70 bg-white p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[12px] font-semibold uppercase tracking-wide text-zinc-500">
+              Évolution de la charge équipe
+            </h2>
+            <span className="text-[11px] text-zinc-400">
+              heures planifiées / semaine
+            </span>
+          </div>
+          <TeamTrendChart data={teamWeekly} />
         </div>
       )}
 
@@ -801,18 +911,53 @@ const TONE_CARD: Record<
   },
 };
 
+/** Badge d'évolution vs période précédente (↑/↓ %). */
+function DeltaBadge({
+  current,
+  previous,
+  badWhenUp,
+}: {
+  current: number;
+  previous: number;
+  badWhenUp: boolean;
+}) {
+  if (previous <= 0) return null;
+  const pct = ((current - previous) / previous) * 100;
+  if (Math.abs(pct) < 1) {
+    return (
+      <span className="text-[11px] font-medium text-zinc-400">≈ stable</span>
+    );
+  }
+  const up = pct > 0;
+  const bad = up === badWhenUp;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums",
+        bad ? "text-rose-600" : "text-emerald-600"
+      )}
+      title="vs période précédente"
+    >
+      {up ? "↑" : "↓"}
+      {Math.abs(pct).toFixed(0)}%
+    </span>
+  );
+}
+
 function SummaryCard({
   icon: Icon,
   label,
   value,
   hint,
   tone,
+  delta,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   hint: string;
   tone: "violet" | "rose" | "amber" | "emerald";
+  delta: { current: number; previous: number; badWhenUp: boolean } | null;
 }) {
   const t = TONE_CARD[tone];
   return (
@@ -831,9 +976,18 @@ function SummaryCard({
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <p className={cn("text-2xl font-bold font-mono mt-1 tabular-nums", t.value)}>
-        {value}
-      </p>
+      <div className="mt-1 flex items-baseline gap-2">
+        <p className={cn("text-2xl font-bold font-mono tabular-nums", t.value)}>
+          {value}
+        </p>
+        {delta && (
+          <DeltaBadge
+            current={delta.current}
+            previous={delta.previous}
+            badWhenUp={delta.badWhenUp}
+          />
+        )}
+      </div>
       <p className="text-[11px] text-zinc-500 mt-0.5">{hint}</p>
     </div>
   );

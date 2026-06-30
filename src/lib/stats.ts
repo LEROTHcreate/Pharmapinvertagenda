@@ -104,41 +104,30 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/**
- * Calcule les statistiques par collaborateur sur la période donnée.
- * - 1 seule requête SQL paramétrée (filtrée par pharmacyId + plage de dates)
- * - Agrégation en mémoire : OK car la plage est bornée (1 semestre = ~14k entrées max)
- */
-export async function computeStats(
-  pharmacyId: string,
-  period: StatsPeriod
-): Promise<{ employees: EmployeeStat[]; periodLabel: string }> {
-  const range = getPeriodRange(period);
+/** Profil minimal d'employé nécessaire au calcul des stats. */
+type EmployeeBase = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  status: EmployeeStatus;
+  weeklyHours: number;
+  displayColor: string;
+};
 
-  const [employees, entries] = await Promise.all([
-    prisma.employee.findMany({
-      where: { pharmacyId, isActive: true },
-      orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        status: true,
-        weeklyHours: true,
-        displayColor: true,
-      },
-    }),
-    prisma.scheduleEntry.findMany({
-      where: {
-        pharmacyId,
-        ...(period === "all"
-          ? {}
-          : { date: { gte: range.start, lt: range.end } }),
-      },
-      select: { employeeId: true, type: true, date: true },
-    }),
-  ]);
+/** Totaux agrégés équipe sur une période (sert à la comparaison). */
+export type PeriodTotals = {
+  task: number;
+  overtime: number;
+  absence: number;
+  overContract: number;
+  underContract: number;
+};
 
+/** Construit les stats par collaborateur à partir d'un lot d'entrées. (pur) */
+function buildEmployeeStats(
+  employees: EmployeeBase[],
+  entries: Array<{ employeeId: string; type: ScheduleType; date: Date }>
+): EmployeeStat[] {
   // Bucketing : { employeeId → { weekStart → { task, absence } } }
   const byEmp = new Map<
     string,
@@ -160,7 +149,7 @@ export async function computeStats(
     else if (e.type === ScheduleType.ABSENCE) bucket.absence += 1;
   }
 
-  const stats: EmployeeStat[] = employees.map((emp) => {
+  return employees.map((emp) => {
     const weeks = byEmp.get(emp.id) ?? new Map();
     const sortedKeys = Array.from(weeks.keys()).sort();
     let totalTaskHours = 0;
@@ -188,11 +177,90 @@ export async function computeStats(
       overtimeHours: totalOvertimeHours,
       hsAbsBalance: totalOvertimeHours - totalAbsenceHours,
       weekCount: weekly.length,
-      avgWeeklyHours:
-        weekly.length > 0 ? totalTaskHours / weekly.length : 0,
+      avgWeeklyHours: weekly.length > 0 ? totalTaskHours / weekly.length : 0,
       weekly,
     };
   });
+}
 
-  return { employees: stats, periodLabel: range.label };
+/** Totaux équipe à partir des stats individuelles. */
+function totalsFrom(stats: EmployeeStat[]): PeriodTotals {
+  return stats.reduce<PeriodTotals>(
+    (acc, e) => {
+      acc.task += e.taskHours;
+      acc.absence += e.absenceHours;
+      acc.overtime += e.overtimeHours;
+      if (e.weekCount > 0 && e.avgWeeklyHours > e.weeklyHours + 0.5)
+        acc.overContract += 1;
+      if (e.weekCount > 0 && e.avgWeeklyHours < e.weeklyHours - 0.5)
+        acc.underContract += 1;
+      return acc;
+    },
+    { task: 0, overtime: 0, absence: 0, overContract: 0, underContract: 0 }
+  );
+}
+
+/** Date de référence pour la période PRÉCÉDENTE (null si non pertinent). */
+function previousNow(period: StatsPeriod, now: Date): Date | null {
+  if (period === "all") return null;
+  const d = new Date(now);
+  if (period === "week") d.setUTCDate(d.getUTCDate() - 7);
+  else if (period === "month") d.setUTCMonth(d.getUTCMonth() - 1);
+  else if (period === "semester") d.setUTCMonth(d.getUTCMonth() - 6);
+  return d;
+}
+
+/**
+ * Calcule les statistiques par collaborateur sur la période donnée + les
+ * totaux de la période PRÉCÉDENTE (pour la comparaison ↑/↓).
+ * Agrégation en mémoire : OK car la plage est bornée (~14k entrées max).
+ */
+export async function computeStats(
+  pharmacyId: string,
+  period: StatsPeriod
+): Promise<{
+  employees: EmployeeStat[];
+  periodLabel: string;
+  previous: PeriodTotals | null;
+}> {
+  const range = getPeriodRange(period);
+
+  const employees = await prisma.employee.findMany({
+    where: { pharmacyId, isActive: true },
+    orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      status: true,
+      weeklyHours: true,
+      displayColor: true,
+    },
+  });
+
+  const entries = await prisma.scheduleEntry.findMany({
+    where: {
+      pharmacyId,
+      ...(period === "all" ? {} : { date: { gte: range.start, lt: range.end } }),
+    },
+    select: { employeeId: true, type: true, date: true },
+  });
+  const stats = buildEmployeeStats(employees, entries);
+
+  // ─── Période précédente (comparaison) ───
+  let previous: PeriodTotals | null = null;
+  const prevNow = previousNow(period, new Date());
+  if (prevNow) {
+    const prevRange = getPeriodRange(period, prevNow);
+    const prevEntries = await prisma.scheduleEntry.findMany({
+      where: {
+        pharmacyId,
+        date: { gte: prevRange.start, lt: prevRange.end },
+      },
+      select: { employeeId: true, type: true, date: true },
+    });
+    previous = totalsFrom(buildEmployeeStats(employees, prevEntries));
+  }
+
+  return { employees: stats, periodLabel: range.label, previous };
 }
