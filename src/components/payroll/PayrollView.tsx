@@ -93,6 +93,11 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
   const [loading, setLoading] = useState(true);
   const [lines, setLines] = useState<Line[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
+  // CA HT du mois saisi par le titulaire (pour le ratio masse salariale / CA).
+  const [revenue, setRevenue] = useState<{
+    revenueHT: number;
+    marginHT: number | null;
+  } | null>(null);
   // Région choisie pour le benchmark marché (persistée localement).
   const [region, setRegion] = useState<Region>("NATIONAL");
   useEffect(() => {
@@ -156,6 +161,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         const data = await res.json();
         setLines(data.lines);
         setTotals(data.totals);
+        setRevenue(data.revenue ?? null);
         // Région : si l'utilisateur n'a pas de préférence locale, on adopte
         // celle réglée au niveau de la pharmacie (renvoyée par l'API).
         if (
@@ -317,6 +323,16 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         </div>
       )}
 
+      {/* Ratio masse salariale / CA */}
+      {totals && (
+        <SalaryRatioCard
+          month={month}
+          revenue={revenue}
+          totalEmployerCost={totals.totalEmployerCost}
+          onSaved={() => fetchPayroll(month)}
+        />
+      )}
+
       {/* Recommandations — « comment mieux faire » */}
       {!loading && lines.length > 0 && insights.insights.length > 0 && (
         <div className="space-y-2">
@@ -441,6 +457,166 @@ function fmtDate(iso: string): string {
     month: "long",
     year: "numeric",
   });
+}
+
+/* ─── Ratio masse salariale / chiffre d'affaires ────────────────────── */
+function SalaryRatioCard({
+  month,
+  revenue,
+  totalEmployerCost,
+  onSaved,
+}: {
+  month: string;
+  revenue: { revenueHT: number; marginHT: number | null } | null;
+  totalEmployerCost: number;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(revenue === null);
+  const [ca, setCa] = useState(revenue ? String(revenue.revenueHT) : "");
+  const [marge, setMarge] = useState(
+    revenue?.marginHT != null ? String(revenue.marginHT) : ""
+  );
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setCa(revenue ? String(revenue.revenueHT) : "");
+    setMarge(revenue?.marginHT != null ? String(revenue.marginHT) : "");
+    setEditing(revenue === null);
+  }, [revenue, month]);
+
+  function parseNum(raw: string): number | null | "invalid" {
+    const t = raw.trim().replace(/\s/g, "").replace(",", ".");
+    if (t === "") return null;
+    const n = Number(t);
+    if (Number.isNaN(n) || n < 0) return "invalid";
+    return n;
+  }
+
+  async function save() {
+    const caVal = parseNum(ca);
+    const margeVal = parseNum(marge);
+    if (caVal === "invalid" || margeVal === "invalid") {
+      toast({ tone: "error", title: "Montant invalide", description: "Saisis un montant en € positif." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/payroll/revenue", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ month, revenueHT: caVal, marginHT: margeVal }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast({ tone: "error", title: "Sauvegarde impossible", description: d.error ?? "Erreur" });
+        return;
+      }
+      setEditing(false);
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const ratioCa =
+    revenue && revenue.revenueHT > 0
+      ? (totalEmployerCost / revenue.revenueHT) * 100
+      : null;
+  const ratioMarge =
+    revenue?.marginHT && revenue.marginHT > 0
+      ? (totalEmployerCost / revenue.marginHT) * 100
+      : null;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[13px] font-semibold text-zinc-800">
+          Masse salariale / Chiffre d&apos;affaires
+        </h2>
+        {!editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1 text-[12px] text-zinc-500 hover:text-violet-700"
+          >
+            <Pencil className="h-3 w-3" /> Modifier
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="space-y-1">
+            <label className="text-[11.5px] text-zinc-500">CA HT du mois (€)</label>
+            <input
+              inputMode="decimal"
+              value={ca}
+              onChange={(e) => setCa(e.target.value)}
+              placeholder="ex : 180000"
+              className="block w-40 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px] font-mono"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11.5px] text-zinc-500">Marge brute HT (€) — option</label>
+            <input
+              inputMode="decimal"
+              value={marge}
+              onChange={(e) => setMarge(e.target.value)}
+              placeholder="ex : 55000"
+              className="block w-40 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px] font-mono"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={save}
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-violet-700 disabled:opacity-60"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Enregistrer
+            </button>
+            {revenue && (
+              <button
+                onClick={() => setEditing(false)}
+                className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100"
+                title="Annuler"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      ) : revenue ? (
+        <div className="mt-3 flex flex-wrap items-end gap-x-8 gap-y-3">
+          <Metric label="CA HT du mois" value={fmt(revenue.revenueHT)} />
+          <Metric
+            label="Masse salariale / CA"
+            value={ratioCa != null ? `${ratioCa.toFixed(1)} %` : "—"}
+            strong
+          />
+          {ratioMarge != null && (
+            <Metric label="Masse salariale / marge" value={`${ratioMarge.toFixed(1)} %`} />
+          )}
+        </div>
+      ) : null}
+
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Repère officine : la masse salariale (coût total employeur) représente souvent
+        ~10 à 14 % du CA HT. Saisie manuelle, mise à jour chaque mois.
+      </p>
+    </div>
+  );
+}
+
+function Metric({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10.5px] uppercase tracking-wide font-semibold text-zinc-500">{label}</p>
+      <p className={cn("font-mono tabular-nums mt-0.5", strong ? "text-xl font-semibold text-violet-900" : "text-base text-zinc-800")}>
+        {value}
+      </p>
+    </div>
+  );
 }
 
 function TotalCard({

@@ -70,7 +70,7 @@ async function GET__impl(req: Request) {
   const monthEnd = new Date(Date.UTC(year, monthNum, 0)); // Dernier jour du mois
 
   // ─── Charge employés actifs + entrées du mois + réglages (parallèle) ─
-  const [employees, entries, pharmacy] = await Promise.all([
+  const [employees, entries, pharmacy, revenue] = await Promise.all([
     prisma.employee.findMany({
       where: { pharmacyId: session.user.pharmacyId, isActive: true },
       orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
@@ -108,6 +108,15 @@ async function GET__impl(req: Request) {
         payrollContribEmployee: true,
         payrollContribEmployer: true,
       },
+    }),
+    prisma.monthlyRevenue.findUnique({
+      where: {
+        pharmacyId_month: {
+          pharmacyId: session.user.pharmacyId,
+          month: parsed.data.month,
+        },
+      },
+      select: { revenueHT: true, marginHT: true },
     }),
   ]);
 
@@ -180,6 +189,7 @@ async function GET__impl(req: Request) {
   return NextResponse.json({
     month: parsed.data.month,
     region: pharmacy?.payrollRegion ?? "NATIONAL",
+    revenue: revenue ?? null,
     lines,
     totals: {
       grossEmployer: round2(totals.grossEmployer),

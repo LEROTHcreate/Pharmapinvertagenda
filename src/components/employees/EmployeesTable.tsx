@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { MoreHorizontal, Pencil, Plus, Power, Trash2 } from "lucide-react";
-import type { EmployeeStatus } from "@prisma/client";
+import type { ContractType, EmployeeStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,13 @@ export type EmployeeRowData = {
   displayOrder: number;
   isActive: boolean;
   hireDate: string | null;
+  // Échéances RH (toutes optionnelles, format ISO YYYY-MM-DD)
+  contractType: ContractType;
+  contractEndDate: string | null;
+  trialEndDate: string | null;
+  lastMedicalVisitDate: string | null;
+  lastProfessionalInterviewDate: string | null;
+  dpcLastDate: string | null;
 };
 
 type DialogState =

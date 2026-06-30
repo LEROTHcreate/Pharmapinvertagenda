@@ -12,6 +12,7 @@ import {
   timeBasedHello,
 } from "@/lib/daily-greeting";
 import { upcomingTips } from "@/lib/planning-tips";
+import { seasonalTips } from "@/lib/seasonal-staffing";
 
 export const dynamic = "force-dynamic";
 
@@ -139,7 +140,9 @@ export default async function PlanningPage({
   const hello = timeBasedHello();
   // Tips contextuels (ponts, veilles de fériés) sur les 7 prochains jours
   // → affichés dans le popover de l'étoile à droite du bandeau.
-  const tips = upcomingTips(todayIso, 7);
+  // Tips du bandeau : événements proches (ponts, veilles de fériés) sur 7 j
+  // + prévisions saisonnières (pics d'activité officine) sur ~3 semaines.
+  const tips = [...upcomingTips(todayIso, 7), ...seasonalTips(todayIso, 21)];
 
   return (
     <div className="space-y-2 sm:space-y-2.5">

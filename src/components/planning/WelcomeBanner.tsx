@@ -267,13 +267,13 @@ export function WelcomeBanner({
               <div className="flex items-center gap-1.5 mb-1.5">
                 <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
                 <p className="text-[11px] uppercase tracking-[0.06em] font-semibold text-amber-700 dark:text-amber-400">
-                  À prévoir cette semaine
+                  À prévoir
                 </p>
               </div>
 
               <ul className="space-y-2">
-                {tips.map((tip) => (
-                  <li key={tip.date} className="flex items-start gap-2">
+                {tips.map((tip, i) => (
+                  <li key={`${tip.date}-${i}`} className="flex items-start gap-2">
                     <span
                       aria-hidden
                       className={cn(

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { EmployeeStatus } from "@prisma/client";
+import type { ContractType, EmployeeStatus } from "@prisma/client";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { STATUS_LABELS } from "@/types";
-import { EMPLOYEE_STATUSES, employeeInput } from "@/validators/employee";
+import {
+  CONTRACT_TYPES,
+  EMPLOYEE_STATUSES,
+  employeeInput,
+} from "@/validators/employee";
 import {
   createEmployee,
   updateEmployee,
@@ -47,6 +51,20 @@ type FormState = {
   displayOrder: string;
   hireDate: string;
   isActive: boolean;
+  contractType: ContractType;
+  contractEndDate: string;
+  trialEndDate: string;
+  lastMedicalVisitDate: string;
+  lastProfessionalInterviewDate: string;
+  dpcLastDate: string;
+};
+
+const CONTRACT_LABELS: Record<ContractType, string> = {
+  CDI: "CDI",
+  CDD: "CDD",
+  APPRENTISSAGE: "Apprentissage",
+  STAGE: "Stage",
+  INTERIM: "Intérim",
 };
 
 const emptyForm: FormState = {
@@ -58,6 +76,12 @@ const emptyForm: FormState = {
   displayOrder: "0",
   hireDate: "",
   isActive: true,
+  contractType: "CDI",
+  contractEndDate: "",
+  trialEndDate: "",
+  lastMedicalVisitDate: "",
+  lastProfessionalInterviewDate: "",
+  dpcLastDate: "",
 };
 
 function fromEmployee(e: EmployeeRowData): FormState {
@@ -70,6 +94,12 @@ function fromEmployee(e: EmployeeRowData): FormState {
     displayOrder: String(e.displayOrder),
     hireDate: e.hireDate ?? "",
     isActive: e.isActive,
+    contractType: e.contractType,
+    contractEndDate: e.contractEndDate ?? "",
+    trialEndDate: e.trialEndDate ?? "",
+    lastMedicalVisitDate: e.lastMedicalVisitDate ?? "",
+    lastProfessionalInterviewDate: e.lastProfessionalInterviewDate ?? "",
+    dpcLastDate: e.dpcLastDate ?? "",
   };
 }
 
@@ -120,6 +150,12 @@ export function EmployeeFormDialog({ open, mode, employee, onClose }: Props) {
       displayOrder: Number.parseInt(form.displayOrder, 10) || 0,
       hireDate: form.hireDate || null,
       isActive: form.isActive,
+      contractType: form.contractType,
+      contractEndDate: form.contractEndDate || null,
+      trialEndDate: form.trialEndDate || null,
+      lastMedicalVisitDate: form.lastMedicalVisitDate || null,
+      lastProfessionalInterviewDate: form.lastProfessionalInterviewDate || null,
+      dpcLastDate: form.dpcLastDate || null,
     };
 
     const parsed = employeeInput.safeParse(payload);
@@ -288,6 +324,100 @@ export function EmployeeFormDialog({ open, mode, employee, onClose }: Props) {
               </label>
             </div>
           </div>
+
+          {/* ─── Contrat & échéances RH (rappels automatiques) ─── */}
+          <details className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+            <summary className="cursor-pointer text-[13px] font-medium text-foreground/80 select-none">
+              Contrat &amp; échéances RH
+              <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                · rappels automatiques (optionnel)
+              </span>
+            </summary>
+            <div className="mt-3 space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="contractType">Type de contrat</Label>
+                  <Select
+                    value={form.contractType}
+                    onValueChange={(v) => set("contractType", v as ContractType)}
+                  >
+                    <SelectTrigger id="contractType">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONTRACT_TYPES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {CONTRACT_LABELS[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="contractEndDate">Fin de contrat (CDD/stage)</Label>
+                  <Input
+                    id="contractEndDate"
+                    type="date"
+                    value={form.contractEndDate}
+                    onChange={(e) => set("contractEndDate", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="trialEndDate">Fin de période d&apos;essai</Label>
+                  <Input
+                    id="trialEndDate"
+                    type="date"
+                    value={form.trialEndDate}
+                    onChange={(e) => set("trialEndDate", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lastMedicalVisitDate">
+                    Dernière visite médicale
+                  </Label>
+                  <Input
+                    id="lastMedicalVisitDate"
+                    type="date"
+                    value={form.lastMedicalVisitDate}
+                    onChange={(e) => set("lastMedicalVisitDate", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lastProfessionalInterviewDate">
+                    Dernier entretien pro.
+                  </Label>
+                  <Input
+                    id="lastProfessionalInterviewDate"
+                    type="date"
+                    value={form.lastProfessionalInterviewDate}
+                    onChange={(e) =>
+                      set("lastProfessionalInterviewDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dpcLastDate">Dernier DPC (pharmacien)</Label>
+                  <Input
+                    id="dpcLastDate"
+                    type="date"
+                    value={form.dpcLastDate}
+                    onChange={(e) => set("dpcLastDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Les rappels (visite médicale, entretien pro tous les 2 ans, DPC
+                triennal) sont calculés à partir de ces dates et affichés en haut
+                de la page Équipe. Périodicités indicatives.
+              </p>
+            </div>
+          </details>
 
           {error && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

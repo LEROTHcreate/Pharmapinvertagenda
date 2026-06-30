@@ -10,9 +10,22 @@ export const EMPLOYEE_STATUSES = [
   "TITULAIRE",
 ] as const;
 
+export const CONTRACT_TYPES = [
+  "CDI",
+  "CDD",
+  "APPRENTISSAGE",
+  "STAGE",
+  "INTERIM",
+] as const;
+
 const hexColor = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, "Couleur attendue au format #RRGGBB");
+
+const dateStr = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date attendue YYYY-MM-DD")
+  .nullish();
 
 export const employeeInput = z.object({
   firstName: z.string().min(1, "Prénom requis").max(60),
@@ -24,11 +37,16 @@ export const employeeInput = z.object({
     .max(80, "Max 80h"),
   displayColor: hexColor.default("#6366f1"),
   displayOrder: z.number().int().min(0).default(0),
-  hireDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date attendue YYYY-MM-DD")
-    .nullish(),
+  hireDate: dateStr,
   isActive: z.boolean().default(true),
+
+  // ─── Échéances RH (optionnelles) ───
+  contractType: z.enum(CONTRACT_TYPES).default("CDI"),
+  contractEndDate: dateStr,
+  trialEndDate: dateStr,
+  lastMedicalVisitDate: dateStr,
+  lastProfessionalInterviewDate: dateStr,
+  dpcLastDate: dateStr,
 });
 
 export type EmployeeInput = z.infer<typeof employeeInput>;

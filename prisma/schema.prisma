@@ -137,6 +137,8 @@ model Pharmacy {
   conversations  Conversation[]
   swapRequests   ShiftSwapRequest[]
   payrollNotes   PayrollNote[]
+  availabilityWishes AvailabilityWish[]
+  monthlyRevenues    MonthlyRevenue[]
 
   @@map("pharmacies")
 }
@@ -152,6 +154,10 @@ model User {
   // Id du compte correspondant dans auth.users (Supabase). Nullable le temps
   // de la migration ; alimenté au signup et par le script de migration.
   authUserId     String?    @unique
+  // Jeton secret du flux calendrier privé (iCal) — permet de s'abonner au
+  // planning depuis Google/Apple Calendar via une URL non devinable. Null
+  // tant que l'utilisateur n'a pas activé la synchronisation.
+  icalToken      String?    @unique
   name           String
   role           UserRole   @default(EMPLOYEE)
   status         UserStatus @default(PENDING)   // Workflow d'inscription
@@ -240,20 +246,82 @@ model Employee {
   // Coefficient conventionnel (grille pharmacie d'officine). Si renseigné,
   // sert de base au benchmark à la place de l'estimation par ancienneté.
   coefficient        Int?
+
+  // ─── Échéances RH (rappels automatiques) ───────────────────────────
+  contractType                  ContractType @default(CDI)
+  contractEndDate               DateTime?  // Fin de CDD / stage / apprentissage
+  trialEndDate                  DateTime?  // Fin de période d'essai
+  lastMedicalVisitDate          DateTime?  // Dernière visite médicale du travail
+  lastProfessionalInterviewDate DateTime?  // Dernier entretien professionnel
+  dpcLastDate                   DateTime?  // Dernière action DPC (pharmacien)
+
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
   pharmacyId String
   pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 
-  user             User?
-  scheduleEntries  ScheduleEntry[]
-  absenceRequests  AbsenceRequest[]
-  templateEntries  WeekTemplateEntry[]
+  user               User?
+  scheduleEntries    ScheduleEntry[]
+  absenceRequests    AbsenceRequest[]
+  templateEntries    WeekTemplateEntry[]
+  availabilityWishes AvailabilityWish[]
 
   @@index([pharmacyId])
   @@index([pharmacyId, isActive])
   @@map("employees")
+}
+
+/// Type de contrat — sert aux rappels d'échéances (fin de CDD, etc.).
+enum ContractType {
+  CDI
+  CDD
+  APPRENTISSAGE
+  STAGE
+  INTERIM
+}
+
+/// Nature d'un souhait de disponibilité posé par un salarié.
+enum WishKind {
+  UNAVAILABLE // Indisponible (ne peut pas travailler)
+  PREFER_OFF  // Préfère ne pas travailler
+  PREFER_WORK // Souhaite travailler
+}
+
+/// Souhait de disponibilité posé par un salarié pour un jour donné.
+/// L'admin en tient compte (affichage) au moment de bâtir le planning.
+model AvailabilityWish {
+  id         String   @id @default(cuid())
+  pharmacyId String
+  employeeId String
+  date       DateTime @db.Date
+  kind       WishKind
+  note       String?
+  createdAt  DateTime @default(now())
+
+  pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([pharmacyId, date])
+  @@map("availability_wishes")
+}
+
+/// Chiffre d'affaires mensuel saisi par le titulaire — sert au ratio
+/// masse salariale / CA sur la page Rémunération.
+model MonthlyRevenue {
+  id         String   @id @default(cuid())
+  pharmacyId String
+  month      String // "YYYY-MM"
+  revenueHT  Float // CA HT du mois
+  marginHT   Float? // Marge brute HT (optionnelle)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@unique([pharmacyId, month])
+  @@map("monthly_revenues")
 }
 
 /// Entrée de planning — UNE cellule de la grille
