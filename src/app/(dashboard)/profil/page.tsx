@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ChangePasswordForm } from "@/components/profil/ChangePasswordForm";
 import { AvatarPicker } from "@/components/profil/AvatarPicker";
+import { CalendarSyncCard } from "@/components/profil/CalendarSyncCard";
 import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
 import { computeStats } from "@/lib/stats";
 import { ABSENCE_LABELS, STATUS_LABELS } from "@/types";
@@ -20,7 +21,7 @@ export default async function ProfilPage() {
   // ─── Avatar choisi par l'utilisateur (User.avatarId) ────────────
   const sessionUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { avatarId: true },
+    select: { avatarId: true, icalToken: true },
   });
 
   // ─── Profil métier (si lié à une fiche planning) ────────────────
@@ -335,6 +336,11 @@ export default async function ProfilPage() {
             </ul>
           )}
         </section>
+      )}
+
+      {/* ─── Synchronisation calendrier (iCal) ──────────────────────── */}
+      {employee && (
+        <CalendarSyncCard initialToken={sessionUser?.icalToken ?? null} />
       )}
 
       {/* ─── Avatar (perso médicament façon mascotte) ───────────────── */}

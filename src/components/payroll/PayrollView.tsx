@@ -114,6 +114,34 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
     }
   }, []);
   const [exporting, setExporting] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
+
+  const handleExportCsv = useCallback(async () => {
+    setExportingCsv(true);
+    try {
+      const res = await fetch(`/api/payroll/export-comptable?month=${month}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({
+          tone: "error",
+          title: "Export impossible",
+          description: data.error ?? "Erreur lors de la génération du fichier",
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `remuneration_${month}_comptable.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportingCsv(false);
+    }
+  }, [month, toast]);
 
   const handleExport = useCallback(async () => {
     setExporting(true);
@@ -295,6 +323,20 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
               <Download className="h-3.5 w-3.5" />
             )}
             Excel
+          </button>
+          {/* Export CSV comptable — détail des heures pour saisie/import paie */}
+          <button
+            onClick={handleExportCsv}
+            disabled={exportingCsv || lines.length === 0}
+            title="Télécharger le détail des heures au format CSV (comptable / import paie)"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 h-9 text-[12.5px] font-medium text-foreground/80 hover:bg-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportingCsv ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            CSV
           </button>
         </div>
       </header>
