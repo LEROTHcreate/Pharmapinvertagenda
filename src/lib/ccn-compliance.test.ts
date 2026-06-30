@@ -87,6 +87,31 @@ describe("analyzeCcnCompliance", () => {
     expect(types(v)).toContain("PAUSE");
   });
 
+  it("6 h PILE sans pause → PAUSE (seuil inclusif, ≥ et non >)", () => {
+    const e: ScheduleEntryDTO[] = [];
+    fill(e, "p1", WD[0], "08:00", "14:00"); // exactement 6h00 continu
+    const v = analyzeCcnCompliance([emp("p1")], WD, indexEntriesByEmployee(e));
+    expect(types(v)).toContain("PAUSE");
+  });
+
+  it("≥ 6h MAIS avec une coupure ≥ 20 min → pas de PAUSE", () => {
+    const e: ScheduleEntryDTO[] = [];
+    fill(e, "p1", WD[0], "08:00", "11:30"); // 3h30
+    fill(e, "p1", WD[0], "12:00", "15:00"); // + 3h, coupure 30 min entre les deux
+    const v = analyzeCcnCompliance([emp("p1")], WD, indexEntriesByEmployee(e));
+    expect(types(v)).not.toContain("PAUSE");
+  });
+
+  it("7 jours travaillés d'affilée → erreur REPOS_HEBDO (max 6 consécutifs)", () => {
+    const WD7 = [...WD, "2026-06-28"]; // + dimanche
+    const e: ScheduleEntryDTO[] = [];
+    for (const d of WD7) fill(e, "p1", d, "09:00", "12:00");
+    const v = analyzeCcnCompliance([emp("p1")], WD7, indexEntriesByEmployee(e));
+    expect(
+      v.some((x) => x.type === "REPOS_HEBDO" && x.severity === "error")
+    ).toBe(true);
+  });
+
   it("travaille les 6 jours → warning REPOS_HEBDO", () => {
     const e: ScheduleEntryDTO[] = [];
     for (const d of WD) fill(e, "p1", d, "09:00", "12:00");

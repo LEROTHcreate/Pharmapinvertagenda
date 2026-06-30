@@ -46,6 +46,7 @@
 
 import { ScheduleType, type EmployeeStatus, type PayMode } from "@prisma/client";
 import type { ScheduleEntryDTO } from "@/types";
+import { isWorkingDay } from "@/lib/planning-tips";
 
 const SLOT_HOURS = 0.5;
 
@@ -174,12 +175,17 @@ export function computePayrollLine(
   let leaveSlots = 0;
   let trainingSlots = 0;
   let unpaidAbsenceSlots = 0;
+  // Heures TASK ventilées par semaine ISO → calcul des heures sup à la
+  // semaine (et non au mois, cf. Art. L3121-28).
+  const taskSlotsByWeek = new Map<string, number>();
   // Pour la maladie on doit distinguer carence (3 premiers jours) du reste
   const sickSlotsByDate = new Map<string, number>();
 
   for (const e of monthEntries) {
     if (e.type === ScheduleType.TASK) {
       taskSlots++;
+      const wk = isoWeekKey(e.date);
+      taskSlotsByWeek.set(wk, (taskSlotsByWeek.get(wk) ?? 0) + 1);
     } else if (e.type === ScheduleType.ABSENCE) {
       switch (e.absenceCode) {
         case "CONGE":
@@ -203,21 +209,21 @@ export function computePayrollLine(
   }
 
   // ─── Maladie : appliquer la carence sur les 3 premiers jours d'arrêt
-  // Note : on suppose qu'un "arrêt" = jours consécutifs de MALADIE. Si
-  // plusieurs arrêts dans le mois, chacun a sa propre carence.
+  // Un "arrêt" = jours de MALADIE qui se suivent. ⚠️ Le planning ne contient
+  // que des jours OUVRÉS (officine fermée dimanche + fériés) : un arrêt continu
+  // à cheval sur un week-end laisse un trou samedi→lundi de 2-3 jours
+  // calendaires. On NE doit PAS le confondre avec un nouvel arrêt (sinon la
+  // carence de 3 j est ré-appliquée à chaque semaine). On considère donc qu'il
+  // y a un NOUVEL arrêt seulement si au moins un jour OUVRÉ sépare deux dates
+  // de maladie consécutives (= retour effectif au travail).
   const sickDatesSorted = Array.from(sickSlotsByDate.keys()).sort();
   let sickSlotsWaiting = 0;
   let sickSlotsAfterWaiting = 0;
   let waitingDaysUsed = 0;
-  let prevDate: Date | null = null;
+  let prevDateIso: string | null = null;
   for (const dateIso of sickDatesSorted) {
-    const d = new Date(`${dateIso}T00:00:00Z`);
-    // Reset de la carence si > 1 jour d'écart (= nouvel arrêt)
-    if (prevDate) {
-      const diffDays = Math.round(
-        (d.getTime() - prevDate.getTime()) / 86400000
-      );
-      if (diffDays > 1) waitingDaysUsed = 0;
+    if (prevDateIso && workingDaysBetween(prevDateIso, dateIso) > 0) {
+      waitingDaysUsed = 0; // retour au travail entre les deux → nouvel arrêt
     }
     const slots = sickSlotsByDate.get(dateIso) ?? 0;
     if (waitingDaysUsed < rates.sickWaitingDays) {
@@ -226,7 +232,7 @@ export function computePayrollLine(
     } else {
       sickSlotsAfterWaiting += slots;
     }
-    prevDate = d;
+    prevDateIso = dateIso;
   }
 
   // Maintien employeur après carence : nécessite ancienneté minimale.
@@ -244,18 +250,26 @@ export function computePayrollLine(
   // prendrait théoriquement en charge — mais ce n'est PAS un coût employeur.
   const sickCpamSlots = sickSlotsAfterWaiting - sickEmployerSlots;
 
-  // ─── Heures sup ────────────────────────────────────────────────────
-  // Calcul mensuel : on compare au contrat × (semaines dans le mois ≈ 4.33)
-  // En toute rigueur, les h sup se calculent par SEMAINE (pas par mois).
-  // Pour l'estimation mensuelle, on prend la base mensualisée du contrat.
-  const contractMonthlyHours = (employee.weeklyHours * 52) / 12; // Ex: 35h → 151,67h
+  // ─── Heures sup (calcul HEBDOMADAIRE — Art. L3121-28) ───────────────
+  // Les heures sup se comptent SEMAINE par SEMAINE : +25 % pour les 8
+  // premières heures au-delà du contrat, +50 % au-delà. Agréger au mois
+  // masquerait les pics intra-mois (une semaine à 46 h compensée par une
+  // semaine creuse) et sous-estimerait les majorations les plus coûteuses.
+  // On somme donc les heures sup de chaque semaine ISO présente dans le mois.
+  let overtimeHours25 = 0;
+  let overtimeHours50 = 0;
+  for (const weekSlots of taskSlotsByWeek.values()) {
+    const weekHours = weekSlots * SLOT_HOURS;
+    const weekOvertime = Math.max(0, weekHours - employee.weeklyHours);
+    overtimeHours25 += Math.min(weekOvertime, 8);
+    overtimeHours50 += Math.max(0, weekOvertime - 8);
+  }
+  const overtimeTotal = overtimeHours25 + overtimeHours50;
   const taskHours = taskSlots * SLOT_HOURS;
-  const overtimeTotal = Math.max(0, taskHours - contractMonthlyHours);
-  // Limite pour le bonus à 25% : (8h × 4,33 sem) ≈ 34,67h sup à 25% max
-  const overtime25Cap = (8 * 52) / 12;
-  const overtimeHours25 = Math.min(overtimeTotal, overtime25Cap);
-  const overtimeHours50 = Math.max(0, overtimeTotal - overtime25Cap);
   const taskHoursRegular = taskHours - overtimeTotal;
+  // Base mensuelle contractuelle (151,67 h pour 35 h) — sert au taux horaire
+  // implicite du mode mensualisé, pas au calcul des heures sup ci-dessus.
+  const contractMonthlyHours = (employee.weeklyHours * 52) / 12;
 
   // ─── Montants ──────────────────────────────────────────────────────
   // Taux horaire EFFECTIF selon le mode de rémunération :
@@ -311,7 +325,10 @@ export function computePayrollLine(
 
   const socialContributionsEmployee =
     grossEmployer * rates.socialContributionsEmployee;
-  const netEstimated = grossEmployer - socialContributionsEmployee;
+  // Net calculé à partir des montants ARRONDIS (brut, cotisations) pour que la
+  // colonne réconcilie exactement : net affiché = brut affiché − cotis affichées.
+  const netEstimated =
+    round2(grossEmployer) - round2(socialContributionsEmployee);
   const socialContributionsEmployer =
     grossEmployer * rates.socialContributionsEmployer;
   const totalEmployerCost = grossEmployer + socialContributionsEmployer;
@@ -349,7 +366,32 @@ function round2(n: number): number {
 }
 
 function monthsBetween(a: Date, b: Date): number {
-  return (
-    (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
-  );
+  let months =
+    (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+  // Le mois en cours n'est révolu que si le jour d'embauche est atteint :
+  // embauché le 30 et analysé le 1er → l'ancienneté ne compte pas ce mois.
+  if (b.getDate() < a.getDate()) months--;
+  return months;
+}
+
+/** Clé de semaine ISO (lundi, UTC) d'une date "YYYY-MM-DD". */
+function isoWeekKey(dateIso: string): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const day = d.getUTCDay(); // 0=dim, 1=lun…6=sam
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Nombre de jours OUVRÉS (lun-sam hors fériés) strictement entre deux dates ISO. */
+function workingDaysBetween(fromIso: string, toIso: string): number {
+  let count = 0;
+  const cur = new Date(`${fromIso}T00:00:00Z`);
+  const end = new Date(`${toIso}T00:00:00Z`);
+  cur.setUTCDate(cur.getUTCDate() + 1);
+  while (cur < end) {
+    if (isWorkingDay(cur.toISOString().slice(0, 10))) count++;
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return count;
 }

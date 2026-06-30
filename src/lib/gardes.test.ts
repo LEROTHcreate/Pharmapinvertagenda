@@ -81,4 +81,24 @@ describe("totalIndemnites", () => {
     expect(r.byPharmacist.a).toBe(250);
     expect(r.byPharmacist.b).toBe(120);
   });
+
+  it("cumule les majorations d'une garde (ex. NUIT un DIMANCHE = 150 + 100)", () => {
+    const gardes: Garde[] = [
+      { id: "x", pharmacistId: "a", date: "2026-06-07", type: "NUIT", extraMajorations: ["DIMANCHE"] },
+    ];
+    const r = totalIndemnites(gardes, GARDE_RATES_PLACEHOLDER);
+    expect(r.total).toBe(250);
+    expect(r.byPharmacist.a).toBe(250);
+  });
+
+  it("normalise les dates avec suffixe horaire pour le filtrage de période", () => {
+    const gardes: Garde[] = [
+      { id: "y", pharmacistId: "a", date: "2026-06-30T22:00:00Z", type: "NUIT" },
+    ];
+    const r = totalIndemnites(gardes, GARDE_RATES_PLACEHOLDER, {
+      from: "2026-06-01",
+      to: "2026-06-30",
+    });
+    expect(r.total).toBe(150); // la borne "to" inclut bien le 30 malgré l'heure
+  });
 });

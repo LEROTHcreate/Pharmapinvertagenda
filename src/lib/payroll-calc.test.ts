@@ -5,19 +5,46 @@ import type { ScheduleEntryDTO } from "@/types";
 
 const MONTH = new Date(Date.UTC(2026, 5, 1)); // juin 2026
 
-/** Génère `hours` heures de TASK (1 créneau = 0,5 h). */
+// Lundis des 4 semaines de juin 2026 (1er juin = lundi).
+const JUNE_MONDAYS = ["2026-06-01", "2026-06-08", "2026-06-15", "2026-06-22"];
+
+/**
+ * Génère `hours` heures de TASK (1 créneau = 0,5 h), RÉPARTIES uniformément
+ * sur les 4 semaines de juin (round-robin) — les heures sup se calculant à la
+ * semaine, on ne doit pas tout entasser sur une seule date.
+ */
 function taskHours(hours: number): ScheduleEntryDTO[] {
   const slots = Math.round(hours * 2);
-  return Array.from({ length: slots }, () => ({
-    id: "",
+  return Array.from({ length: slots }, (_, i) => ({
+    id: `t${i}`,
     employeeId: "e",
-    date: "2026-06-01",
+    date: JUNE_MONDAYS[i % JUNE_MONDAYS.length],
     timeSlot: "08:00",
     type: ScheduleType.TASK,
     taskCode: "COMPTOIR" as TaskCode,
     absenceCode: null,
     notes: null,
   }));
+}
+
+/** Génère des créneaux de MALADIE sur une liste de dates ISO (14 slots/jour = 7 h). */
+function sickDays(dates: string[]): ScheduleEntryDTO[] {
+  const out: ScheduleEntryDTO[] = [];
+  dates.forEach((date, di) => {
+    for (let s = 0; s < 14; s++) {
+      out.push({
+        id: `s${di}-${s}`,
+        employeeId: "e",
+        date,
+        timeSlot: "08:00",
+        type: ScheduleType.ABSENCE,
+        taskCode: null,
+        absenceCode: "MALADIE",
+        notes: null,
+      });
+    }
+  });
+  return out;
 }
 
 function emp(partial: Partial<EmployeeForPayroll>): EmployeeForPayroll {
@@ -69,6 +96,40 @@ describe("computePayrollLine — mode MENSUEL", () => {
     );
     expect(line.overtimeHours25 + line.overtimeHours50).toBeGreaterThan(0);
     expect(line.grossEmployer).toBeGreaterThan(2000);
+  });
+});
+
+describe("computePayrollLine — carence maladie (arrêt à cheval sur le week-end)", () => {
+  it("n'applique la carence qu'UNE fois quand l'arrêt continu enjambe le dimanche", () => {
+    // Arrêt continu lun→sam (S1) + lun→mar (S2) = 8 jours ouvrés ; le dimanche
+    // n'est pas saisi (officine fermée). La carence de 3 j ne doit PAS être
+    // ré-appliquée à la 2e semaine.
+    const sick = sickDays([
+      "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05",
+      "2026-06-06", "2026-06-08", "2026-06-09",
+    ]);
+    const line = computePayrollLine(
+      emp({ payMode: "HOURLY", hourlyGrossRate: 15, weeklyHours: 35 }),
+      sick,
+      MONTH
+    );
+    // 3 jours de carence × 7 h = 21 h (et surtout PAS 42 h = 6 jours)
+    expect(line.sickHoursWaitingPeriod).toBe(21);
+    // Les 5 jours restants sont post-carence (35 h)
+    expect(line.sickHoursEmployerPaid + line.sickHoursCpam).toBe(35);
+  });
+
+  it("ré-applique la carence pour un nouvel arrêt après un vrai retour au travail", () => {
+    // Arrêt 1 : lun-mar (01-02). Retour mer-jeu. Arrêt 2 : ven (05).
+    const sick = sickDays(["2026-06-01", "2026-06-02", "2026-06-05"]);
+    const line = computePayrollLine(
+      emp({ payMode: "HOURLY", hourlyGrossRate: 15, weeklyHours: 35 }),
+      sick,
+      MONTH
+    );
+    // 2 j (arrêt 1) + 1 j (arrêt 2) = 3 j de carence, aucun jour post-carence
+    expect(line.sickHoursWaitingPeriod).toBe(21);
+    expect(line.sickHoursEmployerPaid + line.sickHoursCpam).toBe(0);
   });
 });
 

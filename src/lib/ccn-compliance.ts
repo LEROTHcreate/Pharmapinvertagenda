@@ -190,7 +190,7 @@ export function analyzeCcnCompliance(
           employeeId: emp.id,
           employeeName: name,
           date: w.date,
-          message: `${name} — ${jour} : journée fractionnée en ${w.intervals.length} séquences (max 2, soit 1 coupure).`,
+          message: `${name} — ${jour} : journée fractionnée en ${w.intervals.length} séquences (max ${o.maxCoupures + 1}, soit ${o.maxCoupures} coupure${o.maxCoupures > 1 ? "s" : ""}).`,
         });
       }
       for (const c of w.coupures) {
@@ -205,17 +205,23 @@ export function analyzeCcnCompliance(
           });
         }
       }
-      for (const iv of w.intervals) {
-        if (iv.to - iv.from > o.pauseApresMin) {
-          out.push({
-            type: "PAUSE",
-            severity: "warning",
-            employeeId: emp.id,
-            employeeName: name,
-            date: w.date,
-            message: `${name} — ${jour} : ${fmtH(iv.to - iv.from)} de travail continu — pause de 20 min requise après ${fmtH(o.pauseApresMin)}.`,
-          });
-        }
+      // Pause obligatoire : dès que le temps de travail quotidien ATTEINT 6 h
+      // (≥, pas >), une pause d'au moins 20 min est due. Dans la granularité du
+      // planning (créneaux de 30 min) toute coupure vaut ≥ 30 min, donc l'absence
+      // de la moindre coupure sur une journée ≥ 6 h = pause manquante.
+      const PAUSE_MIN_MINUTES = 20;
+      if (
+        w.workedMin >= o.pauseApresMin &&
+        !w.coupures.some((c) => c.to - c.from >= PAUSE_MIN_MINUTES)
+      ) {
+        out.push({
+          type: "PAUSE",
+          severity: "warning",
+          employeeId: emp.id,
+          employeeName: name,
+          date: w.date,
+          message: `${name} — ${jour} : ${fmtH(w.workedMin)} de travail sans pause d'au moins 20 min (obligatoire dès ${fmtH(o.pauseApresMin)}).`,
+        });
       }
     }
 
@@ -261,6 +267,31 @@ export function analyzeCcnCompliance(
         employeeId: emp.id,
         employeeName: name,
         message: `${name} : aucun jour de repos sur la semaine saisie — vérifier le repos hebdomadaire de 35 h.`,
+      });
+    }
+
+    // ─── Maximum 6 jours consécutifs (le 7e doit être un repos) ───
+    // Donnée limitée à la semaine saisie (souvent Lun→Sam = 6 jours max
+    // visibles, ce qui est légal). On détecte tout de même la plus longue
+    // série de jours travaillés d'affilée : 7+ consécutifs = illégal (utile
+    // si la semaine saisie couvre le dimanche ou plus de 6 colonnes).
+    let run = 0;
+    let maxRun = 0;
+    for (const w of works) {
+      if (w) {
+        run++;
+        if (run > maxRun) maxRun = run;
+      } else {
+        run = 0;
+      }
+    }
+    if (maxRun >= 7) {
+      out.push({
+        type: "REPOS_HEBDO",
+        severity: "error",
+        employeeId: emp.id,
+        employeeName: name,
+        message: `${name} : ${maxRun} jours travaillés consécutifs (max légal 6, un repos hebdomadaire est obligatoire).`,
       });
     }
   }

@@ -28,7 +28,14 @@ export type Garde = {
   pharmacistId: string;
   /** Date de la garde (ISO YYYY-MM-DD). */
   date: string;
+  /** Type principal de la garde (sert au comptage par catégorie). */
   type: GardeType;
+  /**
+   * Majorations cumulées EN PLUS du type principal. Permet de modéliser un
+   * cumul réel : une garde de NUIT un DIMANCHE, ou un DIMANCHE qui tombe un
+   * JOUR_FERIE, etc. Vide/absent ⇒ seul `type` est indemnisé (rétro-compatible).
+   */
+  extraMajorations?: GardeType[];
 };
 
 export type GardeCount = {
@@ -58,8 +65,9 @@ export function gardeCounts(
     counts.set(id, { pharmacistId: id, total: 0, byType: emptyByType() });
   }
   for (const g of gardes) {
-    if (range?.from && g.date < range.from) continue;
-    if (range?.to && g.date > range.to) continue;
+    const date = normDate(g.date);
+    if (range?.from && date < range.from) continue;
+    if (range?.to && date > range.to) continue;
     const c = counts.get(g.pharmacistId);
     if (!c) continue; // garde d'un pharmacien hors liste → ignorée
     c.total += 1;
@@ -139,9 +147,19 @@ export const GARDE_RATES_PLACEHOLDER: GardeRates = {
   JOUR_FERIE: 120,
 };
 
-/** Indemnité d'une garde selon son type et les taux de l'officine. */
+/** Indemnité d'un type de majoration selon les taux de l'officine. */
 export function gardeIndemnite(type: GardeType, rates: GardeRates): number {
   return rates[type] ?? 0;
+}
+
+/**
+ * Indemnité TOTALE d'une garde = type principal + majorations cumulées.
+ * Ex. une garde de NUIT (150) un DIMANCHE (100) = 250.
+ */
+export function gardeAmount(g: Garde, rates: GardeRates): number {
+  let amount = gardeIndemnite(g.type, rates);
+  for (const m of g.extraMajorations ?? []) amount += gardeIndemnite(m, rates);
+  return amount;
 }
 
 /** Total des indemnités sur un ensemble de gardes (optionnellement par pharmacien). */
@@ -153,11 +171,17 @@ export function totalIndemnites(
   let total = 0;
   const byPharmacist: Record<string, number> = {};
   for (const g of gardes) {
-    if (range?.from && g.date < range.from) continue;
-    if (range?.to && g.date > range.to) continue;
-    const amount = gardeIndemnite(g.type, rates);
+    const date = normDate(g.date);
+    if (range?.from && date < range.from) continue;
+    if (range?.to && date > range.to) continue;
+    const amount = gardeAmount(g, rates);
     total += amount;
     byPharmacist[g.pharmacistId] = (byPharmacist[g.pharmacistId] ?? 0) + amount;
   }
   return { total, byPharmacist };
+}
+
+/** Normalise une date ISO en "YYYY-MM-DD" (retire un éventuel suffixe heure). */
+function normDate(iso: string): string {
+  return iso.slice(0, 10);
 }

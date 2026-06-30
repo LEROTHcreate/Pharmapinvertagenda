@@ -203,11 +203,19 @@ function totalsFrom(stats: EmployeeStat[]): PeriodTotals {
 /** Date de référence pour la période PRÉCÉDENTE (null si non pertinent). */
 function previousNow(period: StatsPeriod, now: Date): Date | null {
   if (period === "all") return null;
-  const d = new Date(now);
-  if (period === "week") d.setUTCDate(d.getUTCDate() - 7);
-  else if (period === "month") d.setUTCMonth(d.getUTCMonth() - 1);
-  else if (period === "semester") d.setUTCMonth(d.getUTCMonth() - 6);
-  return d;
+  if (period === "week") {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - 7);
+    return d;
+  }
+  // ⚠️ Pour month/semester on NE recule PAS avec setUTCMonth sur `now` : sur un
+  // 29/30/31, le mois cible déborde (ex. 31 mai − 1 mois → "31 avril" = 1er mai)
+  // et la "période précédente" chevauche la période courante. On reconstruit
+  // donc la date au 15 du mois cible (jour neutre, jamais en débordement).
+  const months = period === "month" ? 1 : 6;
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 15)
+  );
 }
 
 /**
