@@ -8,17 +8,19 @@ import {
   Users,
   BarChart3,
   LayoutTemplate,
-  Coffee,
   ChevronRight,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MyDayCard } from "@/components/accueil/MyDayCard";
+import { QuickAbsenceButton } from "@/components/accueil/QuickAbsenceButton";
 
 /**
  * Page Accueil — tableau de bord pensé pour le mobile.
  *
- * Donne en un coup d'œil : ma journée, l'état de l'équipe aujourd'hui, et des
- * accès rapides vers tout le reste (dont Notes, sortie de la barre d'onglets).
- * Volontairement simple et lisible au pouce ; on l'enrichira au fil de l'eau.
+ * En un coup d'œil : alertes (absences à valider, messages non lus), ma
+ * journée (créneau en cours surligné), l'équipe aujourd'hui, action rapide
+ * "poser une absence", et accès rapides vers tout le reste (dont Notes).
  */
 
 type DayBlock = { from: string; to: string; label: string; isAbsence: boolean };
@@ -29,12 +31,16 @@ export function AccueilView({
   isAdmin,
   myDay,
   teamPresent,
+  pendingAbsences,
+  unreadMessages,
 }: {
   firstName: string | null;
   dateLabel: string;
   isAdmin: boolean;
   myDay: { hours: number; blocks: DayBlock[] } | null;
   teamPresent: number;
+  pendingAbsences: number;
+  unreadMessages: number;
 }) {
   const tiles = [
     { href: "/planning", label: "Planning", icon: Calendar, tone: "violet" },
@@ -59,6 +65,9 @@ export function AccueilView({
     zinc: "bg-muted text-foreground/70",
   };
 
+  const showAbsAlert = isAdmin && pendingAbsences > 0;
+  const showMsgAlert = unreadMessages > 0;
+
   return (
     <div className="p-4 md:px-6 md:py-5 space-y-4 max-w-2xl mx-auto">
       {/* Salutation */}
@@ -66,56 +75,46 @@ export function AccueilView({
         <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-foreground">
           Bonjour{firstName ? ` ${firstName}` : ""} 👋
         </h1>
-        <p className="text-[13px] text-muted-foreground capitalize mt-0.5">
-          {dateLabel}
-        </p>
+        <p className="text-[13px] text-muted-foreground capitalize mt-0.5">{dateLabel}</p>
       </header>
 
-      {/* Ma journée */}
-      {myDay && (
-        <Link
-          href="/planning"
-          className="block rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] active:scale-[0.99] transition-transform"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-[13px] uppercase tracking-[0.06em] font-semibold text-muted-foreground/70">
-              Ma journée
-            </h2>
-            <span className="font-mono text-[13px] font-bold tabular-nums text-foreground">
-              {myDay.hours > 0
-                ? `${myDay.hours % 1 === 0 ? myDay.hours : myDay.hours.toFixed(1)}h`
-                : ""}
-            </span>
-          </div>
-          {myDay.blocks.length === 0 ? (
-            <div className="flex items-center gap-2 text-foreground">
-              <Coffee className="h-5 w-5 text-amber-500/80 shrink-0" />
-              <span className="text-[14px] font-medium">Repos aujourd'hui — profite !</span>
-            </div>
-          ) : (
-            <ul className="space-y-1.5">
-              {myDay.blocks.map((b, i) => (
-                <li key={i} className="flex items-center gap-3 text-[13.5px]">
-                  <span className="font-mono tabular-nums text-muted-foreground w-[92px] shrink-0">
-                    {b.from}–{b.to}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-medium",
-                      b.isAbsence ? "text-amber-600 dark:text-amber-400" : "text-foreground"
-                    )}
-                  >
-                    {b.label}
-                  </span>
-                </li>
-              ))}
-            </ul>
+      {/* Alertes actionnables */}
+      {(showAbsAlert || showMsgAlert) && (
+        <div className="space-y-2">
+          {showAbsAlert && (
+            <Link
+              href="/absences"
+              className="flex items-center gap-3 rounded-xl border border-amber-200/70 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/20 px-3.5 py-3 active:scale-[0.99] transition-transform"
+            >
+              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <p className="flex-1 text-[13.5px] font-medium text-amber-900 dark:text-amber-200">
+                <span className="tabular-nums font-bold">{pendingAbsences}</span> absence
+                {pendingAbsences > 1 ? "s" : ""} à valider
+              </p>
+              <ChevronRight className="h-4 w-4 text-amber-600/60 shrink-0" />
+            </Link>
           )}
-          <div className="mt-2.5 flex items-center gap-1 text-[12px] font-medium text-violet-600 dark:text-violet-400">
-            Voir le planning <ChevronRight className="h-3.5 w-3.5" />
-          </div>
-        </Link>
+          {showMsgAlert && (
+            <Link
+              href="/messages"
+              className="flex items-center gap-3 rounded-xl border border-blue-200/70 bg-blue-50/70 dark:border-blue-900/40 dark:bg-blue-950/20 px-3.5 py-3 active:scale-[0.99] transition-transform"
+            >
+              <MessageCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <p className="flex-1 text-[13.5px] font-medium text-blue-900 dark:text-blue-200">
+                <span className="tabular-nums font-bold">{unreadMessages}</span> message
+                {unreadMessages > 1 ? "s" : ""} non lu{unreadMessages > 1 ? "s" : ""}
+              </p>
+              <ChevronRight className="h-4 w-4 text-blue-600/60 shrink-0" />
+            </Link>
+          )}
+        </div>
       )}
+
+      {/* Ma journée (créneau en cours surligné) */}
+      {myDay && <MyDayCard hours={myDay.hours} blocks={myDay.blocks} />}
+
+      {/* Action rapide */}
+      <QuickAbsenceButton isAdmin={isAdmin} />
 
       {/* L'équipe aujourd'hui */}
       <Link

@@ -10,6 +10,7 @@ import {
 } from "@/types";
 import type { TaskCode, AbsenceCode } from "@prisma/client";
 import { toIsoDate } from "@/lib/planning-utils";
+import { getMessagesUnreadCounts } from "@/lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Accueil — PharmaPlanning" };
@@ -40,7 +41,7 @@ export default async function AccueilPage() {
   const dayStart = new Date(`${todayIso}T00:00:00Z`);
   const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
 
-  const [sessionEmployee, todayEntries] = await Promise.all([
+  const [sessionEmployee, todayEntries, pendingAbsences, unread] = await Promise.all([
     session.user.employeeId
       ? prisma.employee.findUnique({
           where: { id: session.user.employeeId },
@@ -60,7 +61,17 @@ export default async function AccueilPage() {
         absenceCode: true,
       },
     }),
+    // Absences à valider (admin uniquement).
+    isAdmin
+      ? prisma.absenceRequest.count({
+          where: { pharmacyId: session.user.pharmacyId, status: "PENDING" },
+        })
+      : Promise.resolve(0),
+    // Messages non lus (swap + texte).
+    getMessagesUnreadCounts(session.user.id),
   ]);
+
+  const unreadMessages = unread.swap + unread.text;
 
   // Présents = employés distincts avec au moins une TÂCHE aujourd'hui.
   const presentSet = new Set<string>();
@@ -125,6 +136,8 @@ export default async function AccueilPage() {
       isAdmin={isAdmin}
       myDay={myDay}
       teamPresent={teamPresent}
+      pendingAbsences={pendingAbsences}
+      unreadMessages={unreadMessages}
     />
   );
 }

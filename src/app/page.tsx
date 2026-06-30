@@ -34,7 +34,7 @@ export const metadata = {
  */
 export default async function LandingPage() {
   const session = await auth();
-  if (session?.user) redirect("/planning");
+  if (session?.user) redirect("/accueil");
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafaff] text-foreground">

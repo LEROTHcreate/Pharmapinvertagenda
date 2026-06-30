@@ -2,7 +2,7 @@
   "name": "PharmaPlanning — Planning d'officine",
   "short_name": "PharmaPlanning",
   "description": "Le planning d'équipe pour officines de pharmacie.",
-  "start_url": "/planning",
+  "start_url": "/accueil",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
