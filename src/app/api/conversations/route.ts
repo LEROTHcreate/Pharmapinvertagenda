@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createConversationInput } from "@/validators/messaging";
@@ -12,7 +13,7 @@ export const runtime = "nodejs";
  * l'admin peut accéder à TOUTES les conversations de la pharmacie pour
  * modération (paramètre ?all=1).
  */
-export async function GET(req: Request) {
+async function GET__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -119,7 +120,7 @@ export async function GET(req: Request) {
  * Pour les 1-1, on retourne la conv existante si elle existe déjà entre les
  * deux utilisateurs (pas de doublon).
  */
-export async function POST(req: Request) {
+async function POST__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -206,3 +207,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ conversationId: conv.id, existed: false });
 }
+
+export const GET = withErrorHandling(GET__impl);
+export const POST = withErrorHandling(POST__impl);

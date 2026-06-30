@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { EmployeeDTO } from "@/types";
@@ -6,7 +7,7 @@ import type { EmployeeDTO } from "@/types";
 export const runtime = "nodejs";
 
 /** GET /api/employees — collaborateurs actifs de la pharmacie de la session */
-export async function GET() {
+async function GET__impl() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -27,3 +28,5 @@ export async function GET() {
   const dto: EmployeeDTO[] = employees;
   return NextResponse.json({ employees: dto });
 }
+
+export const GET = withErrorHandling(GET__impl);

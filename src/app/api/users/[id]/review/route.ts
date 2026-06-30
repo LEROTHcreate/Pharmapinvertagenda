@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
  * Validation/refus d'une demande d'inscription par un admin.
  * Body: { decision: "APPROVE" | "REJECT", role?: "ADMIN" | "EMPLOYEE", note?: string }
  */
-export async function POST(
+async function POST__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -127,3 +128,5 @@ export async function POST(
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withErrorHandling(POST__impl);

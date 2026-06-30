@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { cleanupExpiredRateLimits } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +31,10 @@ export async function GET(req: Request) {
   const start = Date.now();
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return NextResponse.json({ ok: true, ms: Date.now() - start });
+    // Profite du réveil quotidien pour purger les compteurs de rate-limit
+    // expirés (sinon la table grossit indéfiniment).
+    const purged = await cleanupExpiredRateLimits();
+    return NextResponse.json({ ok: true, ms: Date.now() - start, purged });
   } catch (e) {
     // La base était probablement en train de se réveiller : on le signale
     // (502) pour que le monitoring le voie, mais le ping a "touché" la base,

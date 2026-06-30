@@ -36,7 +36,7 @@ export async function loginAction(
   const normalizedEmail = parsed.data.email.toLowerCase();
 
   // ─── Rate-limit par email ───
-  const limit = checkRateLimit(`login:email:${normalizedEmail}`, {
+  const limit = await checkRateLimit(`login:email:${normalizedEmail}`, {
     max: 10,
     windowMs: 15 * 60 * 1000,
   });

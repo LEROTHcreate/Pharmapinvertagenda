@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   // bloque toujours les bots / spammers automatisés sans gêner les
   // utilisateurs légitimes en multi-appareil.
   const ip = getClientIp(req);
-  const rl = checkRateLimit(`signup:${ip}`, {
+  const rl = await checkRateLimit(`signup:${ip}`, {
     max: 30,
     windowMs: 10 * 60 * 1000,
   });

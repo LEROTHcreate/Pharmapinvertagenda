@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
@@ -21,7 +22,7 @@ const inputSchema = z.object({
  * Permet à un utilisateur connecté de changer son mot de passe.
  * Vérifie l'ancien avant d'autoriser le changement.
  */
-export async function POST(req: Request) {
+async function POST__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -77,3 +78,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withErrorHandling(POST__impl);

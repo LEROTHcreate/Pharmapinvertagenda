@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -23,7 +24,7 @@ const inputSchema = z.object({
   granted: z.boolean(),
 });
 
-export async function PATCH(
+async function PATCH__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -73,3 +74,5 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withErrorHandling(PATCH__impl);

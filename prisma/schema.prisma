@@ -485,3 +485,16 @@ model PayrollNote {
   @@index([authorId])
   @@map("payroll_notes")
 }
+
+/// Compteur de rate-limit PARTAGÉ entre instances serverless (login, signup,
+/// reset). Remplace le Map en mémoire (inefficace sur Vercel : 1 Map par
+/// lambda). Une ligne par clé (ex: "login:email:x@y.fr" ou "signup:<ip>").
+/// `resetAt` = fin de la fenêtre glissante ; nettoyé périodiquement (cron).
+model RateLimitBucket {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+
+  @@index([resetAt])
+  @@map("rate_limit_buckets")
+}

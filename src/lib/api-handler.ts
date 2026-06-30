@@ -24,6 +24,21 @@ function safePath(req: Request): string {
 }
 
 /**
+ * Erreurs de "control-flow" internes à Next (à NE PAS capturer) : `redirect()`,
+ * `notFound()`, et la détection de route dynamique (`cookies()`/`headers()` au
+ * build). Next les identifie par un `digest`. Si on les avalait, on casserait
+ * la détection dynamique et les redirections.
+ */
+function isNextControlFlowError(err: unknown): boolean {
+  if (!err || typeof err !== "object" || !("digest" in err)) return false;
+  const digest = (err as { digest?: unknown }).digest;
+  return (
+    typeof digest === "string" &&
+    (digest.startsWith("NEXT_") || digest === "DYNAMIC_SERVER_USAGE")
+  );
+}
+
+/**
  * Enrobe un handler de route API d'un filet d'erreur global.
  *
  *  - Erreur de connectivité BDD → 503 SERVICE_UNAVAILABLE (le client invite à
@@ -46,6 +61,8 @@ export function withErrorHandling<A extends unknown[]>(
     try {
       return await handler(...args);
     } catch (err) {
+      // Laisse passer les signaux internes de Next (redirect/notFound/dynamic).
+      if (isNextControlFlowError(err)) throw err;
       const req = args[0] as Request | undefined;
       const where =
         req && typeof req === "object" && "url" in req

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +8,7 @@ import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 export const runtime = "nodejs";
 
 /** DELETE /api/templates/[id] — supprime un gabarit (admin) */
-export async function DELETE(
+async function DELETE__impl(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -29,3 +30,5 @@ export async function DELETE(
   revalidateTag(DASHBOARD_CACHE_TAGS.templatesList(session.user.pharmacyId));
   return NextResponse.json({ ok: true });
 }
+
+export const DELETE = withErrorHandling(DELETE__impl);

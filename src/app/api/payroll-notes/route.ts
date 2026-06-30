@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createPayrollNoteInput } from "@/validators/payroll-note";
@@ -11,7 +12,7 @@ export const runtime = "nodejs";
  * journal partagé). On trie par date d'événement desc — la plus récente
  * apparaît en haut, comme dans l'Excel d'origine.
  */
-export async function GET() {
+async function GET__impl() {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -79,7 +80,7 @@ export async function GET() {
  * Création d'une note par n'importe quel collaborateur connecté.
  * Statut initial : PENDING (à comptabiliser par l'admin).
  */
-export async function POST(req: Request) {
+async function POST__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -110,3 +111,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ id: created.id }, { status: 201 });
 }
+
+export const GET = withErrorHandling(GET__impl);
+export const POST = withErrorHandling(POST__impl);

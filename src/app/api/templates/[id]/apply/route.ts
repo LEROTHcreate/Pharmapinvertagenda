@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
@@ -11,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** POST /api/templates/[id]/apply — applique un gabarit à une semaine (admin) */
-export async function POST(
+async function POST__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -131,3 +132,5 @@ export async function POST(
     templateName: template.name,
   });
 }
+
+export const POST = withErrorHandling(POST__impl);

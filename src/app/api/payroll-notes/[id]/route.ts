@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { reviewPayrollNoteInput } from "@/validators/payroll-note";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
  * Édition admin : marque comptabilisée (ou annule), met à jour la note de
  * comptabilisation. Réservé aux admins.
  */
-export async function PATCH(
+async function PATCH__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -76,7 +77,7 @@ export async function PATCH(
  *  - Auteur → peut supprimer SA propre note tant qu'elle est PENDING.
  *    Une fois comptabilisée, seul un admin peut la retirer.
  */
-export async function DELETE(
+async function DELETE__impl(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -103,3 +104,6 @@ export async function DELETE(
   await prisma.payrollNote.delete({ where: { id: params.id } });
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withErrorHandling(PATCH__impl);
+export const DELETE = withErrorHandling(DELETE__impl);

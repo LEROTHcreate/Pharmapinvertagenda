@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -36,7 +37,7 @@ export type NotificationItem = {
  * un timestamp `lastNotifSeenAt` côté client (localStorage). Côté API on
  * retourne l'événement avec sa date — au front de comparer.
  */
-export async function GET() {
+async function GET__impl() {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -189,3 +190,5 @@ export async function GET() {
 
   return NextResponse.json({ items });
 }
+
+export const GET = withErrorHandling(GET__impl);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { forgotPasswordSchema } from "@/validators/auth";
@@ -21,11 +22,11 @@ const TOKEN_TTL_MIN = 60; // expiration du lien de reset
  * son hash SHA-256. Si la BDD fuite, les liens en circulation deviennent
  * inutilisables (tant que l'attaquant n'a pas accès à l'email).
  */
-export async function POST(req: Request) {
+async function POST__impl(req: Request) {
   // Rate limit : 5 demandes / 15 min / IP — assez pour les vrais oublis,
   // pas assez pour spammer les boîtes mail des utilisateurs.
   const ip = getClientIp(req);
-  const rl = checkRateLimit(`forgot:${ip}`, { max: 5, windowMs: 15 * 60_000 });
+  const rl = await checkRateLimit(`forgot:${ip}`, { max: 5, windowMs: 15 * 60_000 });
   if (!rl.allowed) {
     const retryAfterSec = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
     return NextResponse.json(
@@ -101,3 +102,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withErrorHandling(POST__impl);

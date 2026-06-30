@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { sendMessageInput } from "@/validators/messaging";
@@ -61,7 +62,7 @@ async function checkAccess(conversationId: string, userId: string) {
  * Liste les messages d'une conv. `since` permet le polling incrémental.
  * Marque automatiquement la conv comme lue (lastReadAt = now) pour le membre.
  */
-export async function GET(
+async function GET__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -151,7 +152,7 @@ export async function GET(
  * Envoie un message texte. Bumpe updatedAt de la conv pour le tri.
  * L'admin en shadow access ne peut PAS envoyer de message.
  */
-export async function POST(
+async function POST__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -207,3 +208,6 @@ export async function POST(
     createdAt: message.createdAt.toISOString(),
   });
 }
+
+export const GET = withErrorHandling(GET__impl);
+export const POST = withErrorHandling(POST__impl);

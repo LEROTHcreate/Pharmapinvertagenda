@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -25,7 +26,7 @@ const querySchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "Format attendu : YYYY-MM"),
 });
 
-export async function GET(req: Request) {
+async function GET__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -162,3 +163,5 @@ export async function GET(req: Request) {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+export const GET = withErrorHandling(GET__impl);

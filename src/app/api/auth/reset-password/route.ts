@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
@@ -15,11 +16,11 @@ export const dynamic = "force-dynamic";
  * Vérifie le token (en hashant celui reçu et en comparant au hash stocké),
  * met à jour le mot de passe, invalide le token (un usage unique).
  */
-export async function POST(req: Request) {
+async function POST__impl(req: Request) {
   // Rate limit : 10 tentatives / 15 min / IP — protège contre le brute-force
   // d'un token actif.
   const ip = getClientIp(req);
-  const rl = checkRateLimit(`reset:${ip}`, { max: 10, windowMs: 15 * 60_000 });
+  const rl = await checkRateLimit(`reset:${ip}`, { max: 10, windowMs: 15 * 60_000 });
   if (!rl.allowed) {
     const retryAfterSec = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
     return NextResponse.json(
@@ -82,3 +83,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withErrorHandling(POST__impl);

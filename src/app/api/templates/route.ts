@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
@@ -42,7 +43,7 @@ const getCachedTemplates = (pharmacyId: string) =>
   )();
 
 /** GET /api/templates — liste des gabarits (admin) */
-export async function GET() {
+async function GET__impl() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMIN") {
@@ -58,7 +59,7 @@ export async function GET() {
  * Si `id` est présent dans le payload → update du gabarit existant.
  * Sinon → création d'un nouveau gabarit (plusieurs gabarits S1/S2 autorisés).
  */
-export async function POST(req: Request) {
+async function POST__impl(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMIN") {
@@ -170,3 +171,6 @@ export async function POST(req: Request) {
     entryCount: rows.length,
   });
 }
+
+export const GET = withErrorHandling(GET__impl);
+export const POST = withErrorHandling(POST__impl);

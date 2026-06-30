@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isValidAvatarId } from "@/lib/avatars";
@@ -12,7 +13,7 @@ export const runtime = "nodejs";
  *  - `null` ou champ absent → retire l'avatar (retombe sur la pastille initiale)
  *  - autre valeur → doit appartenir au catalogue (cf. src/lib/avatars.ts)
  */
-export async function PATCH(req: Request) {
+async function PATCH__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -41,3 +42,5 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({ avatarId: next });
 }
+
+export const PATCH = withErrorHandling(PATCH__impl);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic";
  *  - Compte cible doit être APPROVED (les PENDING passent par /review)
  *  - Le collaborateur cible ne doit pas être déjà lié à un autre compte
  */
-export async function PATCH(
+async function PATCH__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -99,7 +100,7 @@ export async function PATCH(
  *  - Échanges validés par cet admin → conservés (champ reviewer mis à null)
  *  - Fiche Employee → conservée (juste délinkée)
  */
-export async function DELETE(
+async function DELETE__impl(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -145,3 +146,6 @@ export async function DELETE(
 
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withErrorHandling(PATCH__impl);
+export const DELETE = withErrorHandling(DELETE__impl);

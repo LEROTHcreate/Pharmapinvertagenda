@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
  * Génère un .xlsx du planning de la semaine pour la pharmacie de l'utilisateur.
  * Format réservé aux admins (l'export contient toutes les données équipe).
  */
-export async function GET(req: Request) {
+async function GET__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -99,3 +100,5 @@ export async function GET(req: Request) {
     },
   });
 }
+
+export const GET = withErrorHandling(GET__impl);

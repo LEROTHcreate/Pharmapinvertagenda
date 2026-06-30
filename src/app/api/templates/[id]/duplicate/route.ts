@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/auth";
@@ -27,7 +28,7 @@ const inputSchema = z.object({
  * l'original — l'admin clique "Dupliquer", obtient une copie modifiable,
  * et conserve l'original intact pour rollback.
  */
-export async function POST(
+async function POST__impl(
   req: Request,
   { params }: { params: { id: string } }
 ) {
@@ -102,3 +103,5 @@ export async function POST(
     entryCount: source.entries.length,
   });
 }
+
+export const POST = withErrorHandling(POST__impl);
