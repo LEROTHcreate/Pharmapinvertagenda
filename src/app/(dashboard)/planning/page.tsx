@@ -141,8 +141,12 @@ export default async function PlanningPage({
   // Tips contextuels (ponts, veilles de fériés) sur les 7 prochains jours
   // → affichés dans le popover de l'étoile à droite du bandeau.
   // Tips du bandeau : événements proches (ponts, veilles de fériés) sur 7 j
-  // + prévisions saisonnières (pics d'activité officine) sur ~3 semaines.
-  const tips = [...upcomingTips(todayIso, 7), ...seasonalTips(todayIso, 21)];
+  // + prévisions saisonnières (pics d'activité officine). On plafonne le
+  // saisonnier à 3 pour ne pas noyer les rappels du jour dans la bulle.
+  const tips = [
+    ...upcomingTips(todayIso, 7),
+    ...seasonalTips(todayIso, 14).slice(0, 3),
+  ];
 
   return (
     <div className="space-y-2 sm:space-y-2.5">
