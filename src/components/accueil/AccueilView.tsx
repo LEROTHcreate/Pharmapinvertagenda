@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MyDayCard } from "@/components/accueil/MyDayCard";
+import { MyWeekCard } from "@/components/accueil/MyWeekCard";
 import { QuickAbsenceButton } from "@/components/accueil/QuickAbsenceButton";
 
 /**
@@ -30,6 +31,8 @@ export function AccueilView({
   dateLabel,
   isAdmin,
   myDay,
+  myWeek,
+  nextSlot,
   teamPresent,
   pendingAbsences,
   unreadMessages,
@@ -38,6 +41,8 @@ export function AccueilView({
   dateLabel: string;
   isAdmin: boolean;
   myDay: { hours: number; blocks: DayBlock[] } | null;
+  myWeek: { done: number; contract: number } | null;
+  nextSlot: { when: string; from: string; label: string } | null;
   teamPresent: number;
   pendingAbsences: number;
   unreadMessages: number;
@@ -111,7 +116,12 @@ export function AccueilView({
       )}
 
       {/* Ma journée (créneau en cours surligné) */}
-      {myDay && <MyDayCard hours={myDay.hours} blocks={myDay.blocks} />}
+      {myDay && <MyDayCard hours={myDay.hours} blocks={myDay.blocks} nextSlot={nextSlot} />}
+
+      {/* Ma semaine (heures vs contrat) */}
+      {myWeek && myWeek.contract > 0 && (
+        <MyWeekCard done={myWeek.done} contract={myWeek.contract} />
+      )}
 
       {/* Action rapide */}
       <QuickAbsenceButton isAdmin={isAdmin} />

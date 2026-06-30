@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, CalendarOff } from "lucide-react";
 import {
   ABSENCE_LABELS,
   ABSENCE_STYLES,
@@ -161,13 +161,23 @@ export function MobileTeamGantt({
     return segs;
   }, [date, counterIds, index, minStaff, winStart, winEnd]);
 
-  // Heure courante (si on regarde aujourd'hui).
+  // Horloge auto-rafraîchie chaque minute. `null` jusqu'au montage côté client
+  // (évite tout décalage d'hydratation SSR) ; idéal pour une tablette de
+  // comptoir laissée allumée — "En ce moment" et la ligne "maintenant" suivent.
+  const [nowDate, setNowDate] = useState<Date | null>(null);
+  useEffect(() => {
+    setNowDate(new Date());
+    const id = setInterval(() => setNowDate(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Heure courante en minutes (si on regarde aujourd'hui), sinon null.
   const nowMin = useMemo(() => {
-    const now = new Date();
-    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    if (!nowDate) return null;
+    const todayIso = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
     if (todayIso !== date) return null;
-    return now.getHours() * 60 + now.getMinutes();
-  }, [date]);
+    return nowDate.getHours() * 60 + nowDate.getMinutes();
+  }, [date, nowDate]);
 
   // "En ce moment" : qui travaille au créneau courant (aujourd'hui uniquement,
   // dans les horaires affichés). Donne le coup d'œil "qui est là, là, tout de
@@ -261,6 +271,22 @@ export function MobileTeamGantt({
     });
 
   const NAME_W = "72px";
+
+  // État vide : aucune entrée (ni travail ni absence) pour personne ce jour.
+  const hasAnyEntry = rows.some((r) => r.blocks.length > 0);
+  if (!hasAnyEntry) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-card/60 px-5 py-10 text-center">
+        <CalendarOff className="h-8 w-8 mx-auto text-muted-foreground/50" />
+        <p className="mt-3 text-[14px] font-medium text-foreground">
+          Aucun planning ce jour
+        </p>
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          Personne n'est encore positionné sur cette journée.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <section aria-label="Planning de l'équipe — journée" className="space-y-2">

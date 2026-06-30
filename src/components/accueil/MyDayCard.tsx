@@ -19,9 +19,12 @@ const toMin = (hhmm: string) => {
 export function MyDayCard({
   hours,
   blocks,
+  nextSlot,
 }: {
   hours: number;
   blocks: DayBlock[];
+  /** Prochain créneau à venir (affiché quand on est en repos aujourd'hui). */
+  nextSlot?: { when: string; from: string; label: string } | null;
 }) {
   const { currentIdx, nextIdx } = useMemo(() => {
     const now = new Date();
@@ -52,9 +55,18 @@ export function MyDayCard({
       </div>
 
       {blocks.length === 0 ? (
-        <div className="flex items-center gap-2 text-foreground">
-          <Coffee className="h-5 w-5 text-amber-500/80 shrink-0" />
-          <span className="text-[14px] font-medium">Repos aujourd'hui — profite !</span>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-foreground">
+            <Coffee className="h-5 w-5 text-amber-500/80 shrink-0" />
+            <span className="text-[14px] font-medium">Repos aujourd'hui — profite !</span>
+          </div>
+          {nextSlot && (
+            <p className="text-[12.5px] text-muted-foreground pl-7">
+              Prochain créneau :{" "}
+              <span className="font-medium text-foreground capitalize">{nextSlot.when}</span>{" "}
+              <span className="font-mono tabular-nums">{nextSlot.from}</span> · {nextSlot.label}
+            </p>
+          )}
         </div>
       ) : (
         <ul className="space-y-1">

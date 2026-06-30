@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ABSENCE_STYLES,
   WEEK_DAYS_SHORT,
@@ -15,6 +15,26 @@ import { cn } from "@/lib/utils";
 // Heures d'ouverture au public — créneaux sur lesquels on évalue l'effectif
 // (cohérent avec l'analyse de couverture de PlanningView).
 const OPEN_SLOTS = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
+
+// Filtre par rôle — libellés courts + ordre d'affichage des chips.
+const ROLE_SHORT: Record<string, string> = {
+  PHARMACIEN: "Pharma",
+  PREPARATEUR: "Prépa",
+  ETUDIANT: "Étud.",
+  TITULAIRE: "Titu.",
+  SECRETAIRE: "Secr.",
+  BACK_OFFICE: "Back-off.",
+  LIVREUR: "Livreur",
+};
+const ROLE_ORDER = [
+  "PHARMACIEN",
+  "PREPARATEUR",
+  "ETUDIANT",
+  "TITULAIRE",
+  "SECRETAIRE",
+  "BACK_OFFICE",
+  "LIVREUR",
+];
 
 /**
  * Vue "Semaine" pour mobile : récap compact employés × 6 jours.
@@ -141,9 +161,62 @@ export function MobileWeekView({
     FORMATION_ABS: "F",
   };
 
+  // ─── Filtre par rôle (n'affecte que les lignes affichées ; les totaux et
+  // l'effectif mini restent calculés sur l'équipe complète). ───
+  const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
+  const rolesPresent = useMemo(() => {
+    const set = new Set(employees.map((e) => e.status as string));
+    return ROLE_ORDER.filter((s) => set.has(s));
+  }, [employees]);
+  const visibleData =
+    roleFilter.size === 0 ? data : data.filter((r) => roleFilter.has(r.emp.status));
+  const toggleRole = (s: string) =>
+    setRoleFilter((prev) => {
+      const n = new Set(prev);
+      if (n.has(s)) n.delete(s);
+      else n.add(s);
+      return n;
+    });
+
   return (
     <section aria-label="Récap de la semaine" className="space-y-2">
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      {/* Filtre par rôle — chips horizontales */}
+      {rolesPresent.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin -mx-1 px-1 pb-0.5">
+          <button
+            type="button"
+            onClick={() => setRoleFilter(new Set())}
+            className={cn(
+              "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors border",
+              roleFilter.size === 0
+                ? "bg-foreground text-background border-foreground"
+                : "bg-card text-muted-foreground border-border hover:text-foreground"
+            )}
+          >
+            Tous
+          </button>
+          {rolesPresent.map((s) => {
+            const active = roleFilter.has(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggleRole(s)}
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors border",
+                  active
+                    ? "bg-violet-600 text-white border-violet-600"
+                    : "bg-card text-muted-foreground border-border hover:text-foreground"
+                )}
+              >
+                {ROLE_SHORT[s] ?? s}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <table className="w-full border-collapse text-[12px]" style={{ tableLayout: "fixed" }}>
           <colgroup>
             <col style={{ width: "84px" }} />
@@ -153,14 +226,16 @@ export function MobileWeekView({
             <col style={{ width: "44px" }} />
           </colgroup>
 
-          {/* En-tête jours — tap pour ouvrir la timeline du jour */}
+          {/* En-tête jours — collant (reste visible au scroll) ; tap pour
+              ouvrir la timeline du jour. Fond opaque (bg-muted) requis pour
+              que les lignes ne défilent pas "à travers". */}
           <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="sticky left-0 z-10 bg-muted/30 px-2 py-2 text-left text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/70">
+            <tr className="border-b border-border">
+              <th className="sticky left-0 top-0 z-20 bg-muted px-2 py-2 text-left text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/70">
                 Équipe
               </th>
               {weekDates.map((d, i) => (
-                <th key={d} className="px-0.5 py-1.5">
+                <th key={d} className="sticky top-0 z-10 bg-muted px-0.5 py-1.5">
                   <button
                     type="button"
                     onClick={() => onPickDay(i)}
@@ -194,14 +269,14 @@ export function MobileWeekView({
                   </button>
                 </th>
               ))}
-              <th className="px-1 py-2 text-center text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/70">
+              <th className="sticky top-0 z-10 bg-muted px-1 py-2 text-center text-[10px] uppercase tracking-[0.06em] font-medium text-muted-foreground/70">
                 Tot
               </th>
             </tr>
           </thead>
 
           <tbody>
-            {data.map(({ emp, daily, weekly, delta }, rowIdx) => {
+            {visibleData.map(({ emp, daily, weekly, delta }, rowIdx) => {
               const isMe = emp.id === currentEmployeeId;
               return (
                 <tr
