@@ -46,6 +46,7 @@ export function AvailabilityWishesView({
   const [mine, setMine] = useState<MyWish[]>([]);
   const [team, setTeam] = useState<TeamWish[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [date, setDate] = useState("");
@@ -54,11 +55,13 @@ export function AvailabilityWishesView({
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
       const reqs: Promise<Response>[] = [];
       if (hasEmployee) reqs.push(fetch("/api/availability-wishes?scope=mine"));
       if (isAdmin) reqs.push(fetch("/api/availability-wishes?scope=all"));
       const res = await Promise.all(reqs);
+      if (res.some((r) => !r.ok)) throw new Error("HTTP");
       let idx = 0;
       if (hasEmployee) {
         const d = await res[idx++].json().catch(() => ({ wishes: [] }));
@@ -68,6 +71,10 @@ export function AvailabilityWishesView({
         const d = await res[idx++].json().catch(() => ({ wishes: [] }));
         setTeam(d.wishes ?? []);
       }
+    } catch {
+      // Réseau / serveur indisponible → on le signale plutôt que de laisser
+      // un écran vide qui ressemble à « aucun souhait ».
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -119,6 +126,21 @@ export function AvailabilityWishesView({
 
   return (
     <div className="space-y-4">
+      {error && !loading && (
+        <div className="flex items-center gap-3 rounded-xl border border-rose-200/70 bg-rose-50/70 px-4 py-3 dark:border-rose-900/40 dark:bg-rose-950/20">
+          <span className="flex-1 text-[13px] text-rose-800 dark:text-rose-200">
+            Impossible de charger les disponibilités.
+          </span>
+          <button
+            type="button"
+            onClick={() => load()}
+            className="text-[12px] font-medium text-rose-700 underline hover:no-underline dark:text-rose-300"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
+
       {/* Saisie + mes souhaits (si compte lié à une fiche) */}
       {hasEmployee ? (
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-4">
