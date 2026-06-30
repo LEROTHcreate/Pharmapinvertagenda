@@ -21,8 +21,10 @@ import type { Transporter } from "nodemailer";
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+// `||` (et trim) plutôt que `??` : une variable d'env "définie mais vide" ("")
+// doit retomber sur le défaut (le `??` ne se déclenche que sur null/undefined).
 const FROM =
-  process.env.EMAIL_FROM ??
+  process.env.EMAIL_FROM?.trim() ||
   (GMAIL_USER ? `PharmaPlanning <${GMAIL_USER}>` : "PharmaPlanning");
 
 // Singleton transporter (réutilisé entre les requêtes pour pooler la connexion).
@@ -42,9 +44,21 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
+/**
+ * URL de base des liens dans les emails. NEXTAUTH_URL en priorité (doit être
+ * l'URL publique de prod). On gère le cas "définie mais vide" : sinon le `??`
+ * laisserait passer "" → liens relatifs/cassés dans les emails. Fallback :
+ * l'URL du déploiement Vercel (toujours valide), puis localhost en dev.
+ */
+function baseUrl(): string {
+  const v = process.env.NEXTAUTH_URL?.trim();
+  if (v) return v.replace(/\/+$/, "");
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
+
 function loginUrl(): string {
-  const base = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-  return `${base}/login`;
+  return `${baseUrl()}/login`;
 }
 
 /**
@@ -90,7 +104,7 @@ async function safeSend(params: {
 // ou rendent mal les SVG inline. /logo.png est intentionnellement évité ici car
 // il peut être écrasé par un logo custom de pharmacie cliente — les emails
 // transactionnels parlent au nom de la plateforme, pas de l'officine.
-const LOGO_URL = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/pharmaplanning-logo.png`;
+const LOGO_URL = `${baseUrl()}/pharmaplanning-logo.png`;
 // Coordonnées de contact affichées en footer des emails. Toutes
 // configurables via env pour qu'une pharmacie puisse afficher SES
 // coordonnées plutôt que celles du SaaS. Les défauts ci-dessous sont
