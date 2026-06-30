@@ -1931,49 +1931,48 @@ function DatePickerButton({
   onPick: (iso: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // Au clic/tap sur l'input transparent (le vrai déclencheur), on tente
+  // showPicker() pour ouvrir le sélecteur natif sur desktop (Chrome/Edge
+  // n'ouvrent pas le calendrier sur un simple clic sans icône visible). Sur
+  // mobile, le tap natif sur l'input ouvre déjà le picker. PAS de el.click()
+  // ici : on est dans le onClick de l'input → ça bouclerait à l'infini.
   const handleClick = () => {
     const el = inputRef.current;
     if (!el) return;
-    // showPicker() est l'API moderne (Chrome 99+, Safari 16+). Sinon focus()
-    // ouvre le picker dans la majorité des navigateurs (sauf Firefox qui
-    // exige un clic direct sur l'input — d'où la position absolute ci-dessous
-    // qui rend l'input cliquable même si on clique le bouton iconique).
     if ("showPicker" in el && typeof el.showPicker === "function") {
       try {
         el.showPicker();
-        return;
       } catch {
-        /* ignore */
+        /* picker déjà ouvert / geste non autorisé — ignoré */
       }
     }
-    el.focus();
-    el.click();
   };
   return (
-    <div className="relative inline-flex">
-      <button
-        type="button"
-        onClick={handleClick}
-        className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-card text-foreground/70 hover:bg-accent/50 transition-colors"
-        title="Choisir une date précise"
-        aria-label="Choisir une date précise"
+    <div className="relative inline-flex h-8 w-8">
+      {/* Pastille visuelle (icône calendrier). Décorative : c'est l'input
+          transparent par-dessus qui capte le tap → fiable au tactile. */}
+      <span
+        aria-hidden
+        className="pointer-events-none inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-foreground/70"
       >
         <CalendarDays className="h-4 w-4" />
-      </button>
-      {/* Input natif — invisible mais cliquable, positionné sur le bouton.
-          Pas de `display:none` car certains navigateurs n'ouvrent pas le
-          picker sur un input non rendu. `opacity:0` + `pointer-events:none`
-          tant que l'utilisateur n'a pas cliqué sur le bouton. */}
+      </span>
+      {/* Input date natif transparent SUPERPOSÉ au bouton et RÉELLEMENT
+          cliquable (pas de pointer-events:none). Un tap mobile ouvre alors le
+          sélecteur natif directement — `showPicker()`/`focus()` programmatiques
+          ne sont pas fiables sur iOS/Android. Le bouton iconique tente quand
+          même showPicker() au clic desktop, en complément. */}
       <input
         ref={inputRef}
         type="date"
         value={selectedDate}
+        onClick={handleClick}
         onChange={(e) => {
           if (e.target.value) onPick(e.target.value);
         }}
-        className="absolute inset-0 opacity-0 pointer-events-none"
-        tabIndex={-1}
-        aria-hidden
+        aria-label="Choisir une date précise"
+        title="Choisir une date précise"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       />
     </div>
   );
