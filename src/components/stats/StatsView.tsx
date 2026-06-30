@@ -875,6 +875,10 @@ export function StatsView({ period, periodLabel, employees, previous }: Props) {
               Repère contrat hebdo
             </span>
             <span className="text-zinc-400">
+              <strong className="font-semibold text-zinc-500">Moy. hebdo</strong> = heures
+              effectives (travail + absences rémunérées) vs contrat
+            </span>
+            <span className="text-zinc-400">
               <strong className="font-semibold text-zinc-500">Solde HS-Abs</strong> = heures
               supplémentaires cumulées − heures d&apos;absence cumulées
             </span>

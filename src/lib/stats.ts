@@ -1,7 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { ScheduleType } from "@prisma/client";
 import { SLOT_HOURS } from "@/types";
-import type { EmployeeStatus } from "@prisma/client";
+import type { AbsenceCode, EmployeeStatus } from "@prisma/client";
+
+// Absences "rémunérées" qui comptent comme temps de contrat rempli (congé payé,
+// maladie indemnisée, formation sur le temps de travail). ABSENT (non précisé)
+// ne compte pas. Aligné sur dailyTaskHours() de planning-utils.
+const PAID_ABSENCE_CODES: ReadonlySet<AbsenceCode> = new Set([
+  "CONGE",
+  "MALADIE",
+  "FORMATION_ABS",
+]);
 
 export type StatsPeriod = "week" | "month" | "semester" | "all";
 
@@ -22,7 +31,8 @@ export type EmployeeStat = {
   hsAbsBalance: number;
   // Nombre de semaines avec activité (TASK ou ABSENCE)
   weekCount: number;
-  // Moyenne hebdo planifiée sur les semaines avec activité
+  // Moyenne hebdo EFFECTIVE (travail + absences rémunérées) sur les semaines
+  // avec activité — base de comparaison au contrat (sur/sous-effectif).
   avgWeeklyHours: number;
   // Série hebdomadaire (pour le mini-graphique) — ordre chronologique
   weekly: Array<{ weekStart: string; taskHours: number }>;
@@ -126,12 +136,18 @@ export type PeriodTotals = {
 /** Construit les stats par collaborateur à partir d'un lot d'entrées. (pur) */
 function buildEmployeeStats(
   employees: EmployeeBase[],
-  entries: Array<{ employeeId: string; type: ScheduleType; date: Date }>
+  entries: Array<{
+    employeeId: string;
+    type: ScheduleType;
+    date: Date;
+    absenceCode: AbsenceCode | null;
+  }>
 ): EmployeeStat[] {
-  // Bucketing : { employeeId → { weekStart → { task, absence } } }
+  // Bucketing : { employeeId → { weekStart → { task, absence, paidAbsence } } }
+  // paidAbsence = créneaux d'absence rémunérée (comptent vers le contrat).
   const byEmp = new Map<
     string,
-    Map<string, { task: number; absence: number }>
+    Map<string, { task: number; absence: number; paidAbsence: number }>
   >();
   for (const e of entries) {
     const weekKey = isoDate(isoWeekStartUTC(e.date));
@@ -142,11 +158,17 @@ function buildEmployeeStats(
     }
     let bucket = weeks.get(weekKey);
     if (!bucket) {
-      bucket = { task: 0, absence: 0 };
+      bucket = { task: 0, absence: 0, paidAbsence: 0 };
       weeks.set(weekKey, bucket);
     }
-    if (e.type === ScheduleType.TASK) bucket.task += 1;
-    else if (e.type === ScheduleType.ABSENCE) bucket.absence += 1;
+    if (e.type === ScheduleType.TASK) {
+      bucket.task += 1;
+    } else if (e.type === ScheduleType.ABSENCE) {
+      bucket.absence += 1;
+      if (e.absenceCode && PAID_ABSENCE_CODES.has(e.absenceCode)) {
+        bucket.paidAbsence += 1;
+      }
+    }
   }
 
   return employees.map((emp) => {
@@ -155,6 +177,9 @@ function buildEmployeeStats(
     let totalTaskHours = 0;
     let totalAbsenceHours = 0;
     let totalOvertimeHours = 0;
+    // Heures "effectives" = travail + absences rémunérées → base de comparaison
+    // au contrat (un collaborateur en congé payé n'est PAS en sous-effectif).
+    let totalEffectiveHours = 0;
     const weekly: Array<{ weekStart: string; taskHours: number }> = [];
     for (const key of sortedKeys) {
       const b = weeks.get(key)!;
@@ -162,7 +187,9 @@ function buildEmployeeStats(
       const absH = b.absence * SLOT_HOURS;
       totalTaskHours += taskH;
       totalAbsenceHours += absH;
+      // HS : uniquement sur le travail réel (les absences ne génèrent pas d'HS).
       totalOvertimeHours += Math.max(0, taskH - emp.weeklyHours);
+      totalEffectiveHours += (b.task + b.paidAbsence) * SLOT_HOURS;
       weekly.push({ weekStart: key, taskHours: taskH });
     }
     return {
@@ -177,7 +204,9 @@ function buildEmployeeStats(
       overtimeHours: totalOvertimeHours,
       hsAbsBalance: totalOvertimeHours - totalAbsenceHours,
       weekCount: weekly.length,
-      avgWeeklyHours: weekly.length > 0 ? totalTaskHours / weekly.length : 0,
+      // Moyenne hebdo EFFECTIVE (travail + absences rémunérées) — comparée au
+      // contrat pour la classification sur/sous-contrat et la tonalité.
+      avgWeeklyHours: weekly.length > 0 ? totalEffectiveHours / weekly.length : 0,
       weekly,
     };
   });
@@ -251,7 +280,7 @@ export async function computeStats(
       pharmacyId,
       ...(period === "all" ? {} : { date: { gte: range.start, lt: range.end } }),
     },
-    select: { employeeId: true, type: true, date: true },
+    select: { employeeId: true, type: true, date: true, absenceCode: true },
   });
   const stats = buildEmployeeStats(employees, entries);
 
@@ -265,7 +294,7 @@ export async function computeStats(
         pharmacyId,
         date: { gte: prevRange.start, lt: prevRange.end },
       },
-      select: { employeeId: true, type: true, date: true },
+      select: { employeeId: true, type: true, date: true, absenceCode: true },
     });
     previous = totalsFrom(buildEmployeeStats(employees, prevEntries));
   }
