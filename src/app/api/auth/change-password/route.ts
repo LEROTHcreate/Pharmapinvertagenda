@@ -7,6 +7,7 @@ import {
   setSupabasePassword,
   verifySupabasePassword,
 } from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,23 @@ async function POST__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+
+  // Rate-limit par utilisateur : `verifySupabasePassword` ci-dessous est un
+  // oracle de vérification du mot de passe actuel. Sans limite, une session
+  // détournée pourrait brute-forcer le mot de passe pour contourner le
+  // contrôle « connaître l'ancien ». 10 tentatives / 15 min suffisent
+  // largement à un usage légitime.
+  const rl = await checkRateLimit(`change-password:${session.user.id}`, {
+    max: 10,
+    windowMs: 15 * 60 * 1000,
+  });
+  if (!rl.allowed) {
+    const retryAfterSec = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+    return NextResponse.json(
+      { error: "RATE_LIMITED" },
+      { status: 429, headers: { "retry-after": String(retryAfterSec) } }
+    );
   }
 
   const body = await req.json().catch(() => null);
