@@ -544,6 +544,9 @@ export function PlanningView({
   }, [multiSelection.size]);
 
   const monday = useMemo(() => new Date(`${weekStart}T00:00:00`), [weekStart]);
+  // Vrai quand la semaine affichée est la semaine calendaire en cours — sert au
+  // repère visuel « Cette semaine » dans la navigation.
+  const isCurrentWeek = useMemo(() => weekStart === startOfTodayWeek(), [weekStart]);
   const days = useMemo(() => weekDays(monday), [monday]);
   const dayDates = useMemo(() => days.map(toIsoDate), [days]);
   // Sync vers le ref pour que handleUndo (défini plus haut) ait toujours la
@@ -1562,9 +1565,19 @@ export function PlanningView({
             </button>
             <button
               onClick={goToCurrentWeek}
-              className="h-7 px-3 rounded-full text-[12px] font-medium text-foreground/80 hover:bg-accent/60 transition-colors"
+              className={cn(
+                "h-7 px-3 rounded-full text-[12px] font-medium transition-colors",
+                isCurrentWeek
+                  ? "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
+                  : "text-foreground/80 hover:bg-accent/60"
+              )}
+              aria-label={
+                isCurrentWeek
+                  ? "Vous consultez la semaine en cours"
+                  : "Aller à la semaine en cours"
+              }
             >
-              Aujourd&apos;hui
+              {isCurrentWeek ? "Cette semaine" : "Aujourd'hui"}
             </button>
             <button
               onClick={() => navigateWeek(1)}
