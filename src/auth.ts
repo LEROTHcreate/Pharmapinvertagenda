@@ -42,23 +42,25 @@ const demoSession: AppSession = {
  *
  * Mémoïsé par requête via `cache()` de React : sur une même navigation,
  * `auth()` est appelé plusieurs fois (generateMetadata + layout + page).
- * Sans cache, chaque appel refait un round-trip réseau `getUser()` vers
- * Supabase Auth + une requête DB → latence inutile. `cache()` garantit
- * un seul appel réel par requête serveur, partagé entre tous les appelants.
+ * Sans cache, chaque appel referait la vérification du JWT + une requête DB
+ * → latence inutile. `cache()` garantit un seul appel réel par requête
+ * serveur, partagé entre tous les appelants.
  */
 export const auth = cache(async (): Promise<AppSession | null> => {
   if (isDemoMode) return demoSession;
 
   const supabase = createSupabaseServerClient();
-  // getUser() valide le JWT auprès de Supabase (≠ getSession qui ne fait que
-  // lire le cookie sans vérifier la signature).
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser?.email) return null;
+  // getClaims() vérifie le JWT LOCALEMENT (clés asymétriques) quand c'est
+  // possible, et ne retombe sur un appel distant que si nécessaire → jamais
+  // moins sûr que getUser(), mais sans round-trip réseau dans le cas nominal.
+  // La signature + l'expiration du token restent validées ; le gate métier
+  // (actif + approuvé) ci-dessous reste un contrôle frais en BDD.
+  const { data, error } = await supabase.auth.getClaims();
+  const email = data?.claims.email;
+  if (error || !email) return null;
 
   const user = await prisma.user.findUnique({
-    where: { email: authUser.email },
+    where: { email },
   });
   if (!user || !user.isActive || user.status !== "APPROVED") return null;
 
