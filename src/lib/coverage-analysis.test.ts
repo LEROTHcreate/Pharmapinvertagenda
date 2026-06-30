@@ -161,4 +161,37 @@ describe("analyzeCoverage", () => {
       expect(noPharm.slots).toEqual(["09:00-10:30"]);
     }
   });
+
+  describe("grosse journée + sous-effectif", () => {
+    const MON = "2026-09-07"; // lundi banal
+    const TUE = "2026-09-08"; // mardi banal
+
+    it("signale heavy-day-understaffed un lundi sous le seuil minStaff", () => {
+      // Seul le pharmacien travaille → effectif 1, seuil 4.
+      const index = indexEntriesByEmployee(SLOTS.map((s) => task(PHARMACIST.id, MON, s)));
+      const warnings = analyzeCoverage([PHARMACIST], [MON], index, SLOTS, 4);
+      const heavy = warnings.find((w) => w.kind === "heavy-day-understaffed");
+      expect(heavy).toMatchObject({ reason: "lundi", minCount: 1, threshold: 4 });
+    });
+
+    it("ne signale pas si l'effectif atteint le seuil", () => {
+      const emps = [PHARMACIST, PREPARER_A, PREPARER_B, LIVREUR];
+      const entries: ScheduleEntryDTO[] = [];
+      SLOTS.forEach((s) => emps.forEach((e) => entries.push(task(e.id, MON, s))));
+      const warnings = analyzeCoverage(emps, [MON], indexEntriesByEmployee(entries), SLOTS, 4);
+      expect(warnings.some((w) => w.kind === "heavy-day-understaffed")).toBe(false);
+    });
+
+    it("ne signale pas un mardi banal même sous le seuil", () => {
+      const index = indexEntriesByEmployee(SLOTS.map((s) => task(PHARMACIST.id, TUE, s)));
+      const warnings = analyzeCoverage([PHARMACIST], [TUE], index, SLOTS, 4);
+      expect(warnings.some((w) => w.kind === "heavy-day-understaffed")).toBe(false);
+    });
+
+    it("sans minStaff (rétro-compat), aucune alerte heavy-day", () => {
+      const index = indexEntriesByEmployee(SLOTS.map((s) => task(PHARMACIST.id, MON, s)));
+      const warnings = analyzeCoverage([PHARMACIST], [MON], index, SLOTS);
+      expect(warnings.some((w) => w.kind === "heavy-day-understaffed")).toBe(false);
+    });
+  });
 });

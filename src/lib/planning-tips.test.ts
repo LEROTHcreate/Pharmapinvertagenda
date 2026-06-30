@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isWorkingDay,
   consecutiveNonWorkingBefore,
+  isHeavyDay,
   tipFor,
   upcomingTips,
 } from "./planning-tips";
@@ -73,6 +74,44 @@ describe("planning-tips", () => {
       expect(tipFor("2026-05-03")).toBeNull(); // dimanche
       expect(tipFor("2026-05-01")).toBeNull(); // 1er mai férié (lui-même)
     });
+
+    it("flagge le lundi comme grosse journée", () => {
+      const tip = tipFor("2026-09-07"); // lundi banal
+      expect(tip?.title).toMatch(/Lundi/i);
+      expect(tip?.level).toBe("info");
+    });
+
+    it("flagge le samedi comme grosse journée", () => {
+      const tip = tipFor("2026-09-12"); // samedi banal
+      expect(tip?.title).toMatch(/Samedi/i);
+    });
+
+    it("flagge le lendemain d'un férié isolé", () => {
+      // Sam 02/05/2026 — la veille (ven 01/05) est la Fête du travail.
+      const tip = tipFor("2026-05-02");
+      expect(tip?.title).toMatch(/Lendemain de/i);
+    });
+  });
+
+  describe("isHeavyDay", () => {
+    it("lundi et samedi sont des grosses journées", () => {
+      expect(isHeavyDay("2026-09-07")?.reason).toBe("lundi"); // lun
+      expect(isHeavyDay("2026-09-12")?.reason).toBe("samedi"); // sam
+    });
+
+    it("le lendemain d'un férié est une grosse journée", () => {
+      expect(isHeavyDay("2026-05-02")?.reason).toMatch(/lendemain/i);
+    });
+
+    it("la reprise après un pont est une grosse journée", () => {
+      // Mardi 07/04/2026 = reprise après lundi de Pâques + dimanche.
+      expect(isHeavyDay("2026-04-07")?.reason).toMatch(/reprise/i);
+    });
+
+    it("un mardi banal et un dimanche ne sont pas des grosses journées", () => {
+      expect(isHeavyDay("2026-09-08")).toBeNull(); // mar banal
+      expect(isHeavyDay("2026-05-03")).toBeNull(); // dim (non ouvré)
+    });
   });
 
   describe("upcomingTips", () => {
@@ -82,12 +121,15 @@ describe("planning-tips", () => {
       //  29/04 mer — banal
       //  30/04 jeu — VEILLE 1er mai → tip
       //  01/05 ven — férié, lui-même non ouvré
-      //  02/05 sam — ouvré, précédent ven est férié (1 jour non ouvré seul) → pas de tip
+      //  02/05 sam — LENDEMAIN du 1er mai → tip
       //  03/05 dim — non ouvré
-      //  04/05 lun — précédent dim (1 jour non ouvré) → pas de tip
+      //  04/05 lun — LUNDI grosse journée → tip
       const tips = upcomingTips("2026-04-28", 7);
-      expect(tips.length).toBeGreaterThanOrEqual(1);
       expect(tips.some((t) => t.title.includes("Veille de"))).toBe(true);
+      expect(tips.some((t) => t.title.includes("Lendemain de"))).toBe(true);
+      expect(tips.some((t) => t.title.includes("Lundi"))).toBe(true);
+      // Pas de tip sur les jours banals/non ouvrés (mar, mer, dim).
+      expect(tips.every((t) => isWorkingDay(t.date))).toBe(true);
     });
   });
 });

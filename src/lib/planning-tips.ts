@@ -76,9 +76,35 @@ export function consecutiveNonWorkingBefore(iso: string): number {
   return count;
 }
 
+/**
+ * Indique si `iso` est une "grosse journée" (affluence comptoir élevée),
+ * indépendamment de l'effectif planifié. Utilisé par l'analyse de couverture
+ * pour escalader une alerte si l'effectif est faible ce jour-là.
+ *
+ * Sont considérés comme grosses journées (officine ouverte) :
+ *  - **Lendemain de férié** (rattrapage du jour fermé), même isolé.
+ *  - **Reprise après un pont** (≥2 jours fermés d'affilée avant).
+ *  - **Lundi** (reprise post-weekend, classique en pharmacie).
+ *  - **Samedi** (clients en repos).
+ */
+export function isHeavyDay(iso: string): { reason: string } | null {
+  if (!isWorkingDay(iso)) return null;
+  const before = consecutiveNonWorkingBefore(iso);
+  const yesterday = isoUtc(addDaysUtc(parseUtc(iso), -1));
+  const yHoliday = holidayForDate(yesterday);
+
+  if (before >= 2) return { reason: "reprise après plusieurs jours fermés" };
+  if (yHoliday) return { reason: `lendemain de ${yHoliday.name}` };
+
+  const dow = parseUtc(iso).getUTCDay();
+  if (dow === 1) return { reason: "lundi" };
+  if (dow === 6) return { reason: "samedi" };
+  return null;
+}
+
 /** Renvoie le tip pour ce jour-là, ou null si rien à signaler. */
 export function tipFor(iso: string): PlanningTip | null {
-  // 1. Veille d'un férié → flux ordonnances en avance
+  // 1. Veille d'un férié → flux ordonnances en avance (soir chargé)
   const tomorrow = isoUtc(addDaysUtc(parseUtc(iso), 1));
   const tomorrowHoliday = holidayForDate(tomorrow);
   if (tomorrowHoliday && isWorkingDay(iso)) {
@@ -90,10 +116,10 @@ export function tipFor(iso: string): PlanningTip | null {
     };
   }
 
-  // 2. Reprise après ≥2 jours non travaillés (= au moins un week-end +
-  //    un férié, ou un pont de plusieurs jours)
   if (!isWorkingDay(iso)) return null;
   const before = consecutiveNonWorkingBefore(iso);
+
+  // 2. Reprise après ≥2 jours non travaillés (week-end + férié, ou pont)
   if (before >= 2) {
     const label =
       before === 2
@@ -106,6 +132,37 @@ export function tipFor(iso: string): PlanningTip | null {
       level: "info",
       title: `Reprise après ${label}`,
       description: `${formatDateFR(iso)} — affluence probable au comptoir. Prévoyez du staffing.`,
+    };
+  }
+
+  // 3. Lendemain de férié ISOLÉ (hier = férié, mais pas un pont ≥2)
+  const yesterday = isoUtc(addDaysUtc(parseUtc(iso), -1));
+  const yHoliday = holidayForDate(yesterday);
+  if (yHoliday) {
+    return {
+      date: iso,
+      level: "info",
+      title: `Lendemain de ${yHoliday.name}`,
+      description: `${formatDateFR(iso)} — affluence (rattrapage du jour fermé). Prévoyez du staffing.`,
+    };
+  }
+
+  // 4. Lundi / Samedi — grosses journées récurrentes
+  const dow = parseUtc(iso).getUTCDay();
+  if (dow === 1) {
+    return {
+      date: iso,
+      level: "info",
+      title: "Lundi — grosse journée",
+      description: `${formatDateFR(iso)} — comptoir chargé (reprise post-weekend). Attention à l'effectif : un absent se ressent vite.`,
+    };
+  }
+  if (dow === 6) {
+    return {
+      date: iso,
+      level: "info",
+      title: "Samedi — grosse journée",
+      description: `${formatDateFR(iso)} — affluence (clients en repos). Attention à l'effectif.`,
     };
   }
 

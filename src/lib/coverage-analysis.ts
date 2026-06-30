@@ -1,5 +1,6 @@
 import type { EmployeeDTO } from "@/types";
 import type { EmployeeDayMap } from "@/lib/planning-utils";
+import { isHeavyDay } from "@/lib/planning-tips";
 
 export type CoverageWarning =
   | {
@@ -17,6 +18,13 @@ export type CoverageWarning =
       kind: "livreur-absent";
       date: string;
       employeeName: string; // ex: "Patrick"
+    }
+  | {
+      kind: "heavy-day-understaffed";
+      date: string;
+      reason: string; // ex: "lundi", "lendemain de Fête du Travail"
+      minCount: number; // effectif minimal constaté sur la journée
+      threshold: number; // seuil minStaff de l'officine
     };
 
 /**
@@ -30,7 +38,13 @@ export function analyzeCoverage(
   dates: string[],
   index: Map<string, EmployeeDayMap>,
   /** Créneaux à considérer comme "ouverts" — typiquement 08:30 → 19:00 */
-  workingSlots: string[]
+  workingSlots: string[],
+  /**
+   * Seuil d'effectif minimum de l'officine (param pharmacie). Si fourni (>0),
+   * on signale les "grosses journées" (lundi, samedi, lendemain de férié,
+   * reprise de pont) dont l'effectif minimal tombe sous ce seuil.
+   */
+  minStaff = 0
 ): CoverageWarning[] {
   const warnings: CoverageWarning[] = [];
 
@@ -97,6 +111,34 @@ export function analyzeCoverage(
         slots: compactSlotRanges(fewPrepSlots),
         minCount: isFinite(dayMin) ? dayMin : 0,
       });
+    }
+
+    // ─── Grosse journée + sous-effectif ───
+    // Sur une grosse journée (lundi, samedi, lendemain de férié, reprise de
+    // pont), si l'effectif minimal de la journée (nb de personnes en TÂCHE sur
+    // le créneau le plus creux) tombe sous le seuil de l'officine → alerte.
+    if (minStaff > 0) {
+      const heavy = isHeavyDay(date);
+      if (heavy) {
+        let trough = Infinity;
+        for (const slot of workingSlots) {
+          let active = 0;
+          for (const emp of employees) {
+            const e = index.get(emp.id)?.get(date)?.get(slot);
+            if (e && e.type === "TASK") active++;
+          }
+          if (active < trough) trough = active;
+        }
+        if (isFinite(trough) && trough < minStaff) {
+          warnings.push({
+            kind: "heavy-day-understaffed",
+            date,
+            reason: heavy.reason,
+            minCount: trough,
+            threshold: minStaff,
+          });
+        }
+      }
     }
   }
 

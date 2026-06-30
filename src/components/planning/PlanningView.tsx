@@ -597,8 +597,8 @@ export function PlanningView({
     // Créneaux d'ouverture standard (08:30 → 21:00) — exclut tôt matin
     // Horaires d'ouverture au public : 08:30 → 20:00
     const openSlots = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
-    return analyzeCoverage(employees, dayDates, index, openSlots);
-  }, [employees, dayDates, index]);
+    return analyzeCoverage(employees, dayDates, index, openSlots, minStaff);
+  }, [employees, dayDates, index, minStaff]);
 
   // Filtre selon le jour sélectionné : le lundi on garde la vue d'ensemble
   // de la semaine (utile en début de semaine pour repérer les trous), les

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Truck } from "lucide-react";
+import { AlertTriangle, Truck, Flame } from "lucide-react";
 import type { CoverageWarning } from "@/lib/coverage-analysis";
 
 /**
@@ -20,11 +20,16 @@ export function CoverageWarnings({
     "no-pharmacist": [] as Extract<CoverageWarning, { kind: "no-pharmacist" }>[],
     "few-preparers": [] as Extract<CoverageWarning, { kind: "few-preparers" }>[],
     "livreur-absent": [] as Extract<CoverageWarning, { kind: "livreur-absent" }>[],
+    "heavy-day-understaffed": [] as Extract<
+      CoverageWarning,
+      { kind: "heavy-day-understaffed" }
+    >[],
   };
   warnings.forEach((w) => {
     if (w.kind === "no-pharmacist") byKind["no-pharmacist"].push(w);
     else if (w.kind === "few-preparers") byKind["few-preparers"].push(w);
-    else byKind["livreur-absent"].push(w);
+    else if (w.kind === "livreur-absent") byKind["livreur-absent"].push(w);
+    else byKind["heavy-day-understaffed"].push(w);
   });
 
   return (
@@ -56,6 +61,15 @@ export function CoverageWarnings({
         <Pill key={`la-${i}`} tone="indigo" icon={<Truck className="h-3 w-3" />}>
           {w.employeeName} absent {formatDayShort(w.date)} —{" "}
           <span className="opacity-80">titulaires sur livraisons</span>
+        </Pill>
+      ))}
+
+      {byKind["heavy-day-understaffed"].map((w, i) => (
+        <Pill key={`hd-${i}`} tone="red" icon={<Flame className="h-3 w-3" />}>
+          Grosse journée {formatDayShort(w.date)} ({w.reason}) —{" "}
+          <span className="opacity-80">
+            effectif {w.minCount}/{w.threshold}, renforcez
+          </span>
         </Pill>
       ))}
     </div>
