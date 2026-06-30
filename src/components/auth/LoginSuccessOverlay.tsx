@@ -1,6 +1,7 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Overlay de succès — affiché ~1100 ms entre une connexion réussie et la
@@ -61,12 +62,24 @@ const SPARKLES = Array.from({ length: 8 }, (_, i) => {
 });
 
 export function LoginSuccessOverlay() {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="success-card-veil absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden rounded-[28px]"
-    >
+  // Sur mobile, la card de login ne remplit pas l'écran : un overlay confiné à
+  // la card laisse voir le fond animé tout autour (pas propre). On le fait donc
+  // passer en PLEIN ÉCRAN via un portal sur body — un simple `fixed` ne
+  // suffirait pas car le `backdrop-blur-2xl` de la card crée un containing
+  // block dont l'overlay ne pourrait pas sortir. Sur desktop, on garde
+  // l'overlay confiné à la card (design voulu, la card y est large et centrée).
+  //
+  // Lazy init : ce composant ne monte QUE côté client (rendu après le clic de
+  // connexion), donc `window` est défini → pas de flash SSR ni de mauvaise
+  // détection au 1er rendu.
+  const [isMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches
+  );
+
+  const content = (
+    <>
       {/* Confettis qui retombent à l'intérieur de la card */}
       {CONFETTIS.map((c, i) => (
         <span
@@ -143,6 +156,31 @@ export function LoginSuccessOverlay() {
           </p>
         </div>
       </div>
+    </>
+  );
+
+  // Mobile → plein écran (portal sur body, hors de la card)
+  if (isMobile) {
+    return createPortal(
+      <div
+        role="status"
+        aria-live="polite"
+        className="success-card-veil fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden"
+      >
+        {content}
+      </div>,
+      document.body
+    );
+  }
+
+  // Desktop → confiné à la card (coins arrondis comme la card)
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="success-card-veil absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden rounded-[28px]"
+    >
+      {content}
     </div>
   );
 }
