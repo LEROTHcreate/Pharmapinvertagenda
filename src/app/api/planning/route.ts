@@ -27,6 +27,18 @@ const getCachedPlanning = (pharmacyId: string, weekStart: string) =>
       return prisma.scheduleEntry.findMany({
         where: { pharmacyId, date: { gte: start, lte: end } },
         orderBy: [{ date: "asc" }, { timeSlot: "asc" }],
+        // Ne récupère que les champs du DTO (pas pharmacyId/previousTaskCode/
+        // createdAt/updatedAt inutiles) → payload + entrée de cache plus légers.
+        select: {
+          id: true,
+          employeeId: true,
+          date: true,
+          timeSlot: true,
+          type: true,
+          taskCode: true,
+          absenceCode: true,
+          notes: true,
+        },
       });
     },
     ["planning-week", pharmacyId, weekStart],
