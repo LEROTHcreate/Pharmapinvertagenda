@@ -2,6 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  CalendarOff,
+  Clock,
+  Download,
+  Scale,
+  Search,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/types";
 import type { EmployeeStat, StatsPeriod } from "@/lib/stats";
@@ -302,6 +313,39 @@ export function StatsView({ period, periodLabel, employees }: Props) {
     [employees]
   );
 
+  // ─── Points d'attention : highlights auto pour les dirigeants ──────
+  // On surface les cas extrêmes utiles à un titulaire : qui accumule le plus
+  // d'HS (coût + fatigue), qui est le plus sous-employé (optimisation), qui a
+  // le plus d'absences, et le plus gros solde HS-Abs à régulariser.
+  const insights = useMemo(() => {
+    const withData = employees.filter((e) => e.weekCount > 0);
+    const maxBy = (
+      list: EmployeeStat[],
+      fn: (e: EmployeeStat) => number
+    ): EmployeeStat | null =>
+      list.length === 0
+        ? null
+        : list.reduce((best, e) => (fn(e) > fn(best) ? e : best));
+
+    const topOvertime = maxBy(
+      employees.filter((e) => e.overtimeHours > 0.5),
+      (e) => e.overtimeHours
+    );
+    const mostUnderused = maxBy(
+      withData.filter((e) => e.weeklyHours - e.avgWeeklyHours > 0.5),
+      (e) => e.weeklyHours - e.avgWeeklyHours
+    );
+    const mostAbsence = maxBy(
+      employees.filter((e) => e.absenceHours > 0.5),
+      (e) => e.absenceHours
+    );
+    const topBalance = maxBy(
+      employees.filter((e) => Math.abs(e.hsAbsBalance) > 0.5),
+      (e) => Math.abs(e.hsAbsBalance)
+    );
+    return { topOvertime, mostUnderused, mostAbsence, topBalance };
+  }, [employees]);
+
   function exportCSV() {
     const header = [
       "Prénom",
@@ -379,30 +423,87 @@ export function StatsView({ period, periodLabel, employees }: Props) {
       {/* Cards résumé équipe */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <SummaryCard
+          icon={Clock}
           label="Heures planifiées"
           value={`${totals.task.toFixed(0)}h`}
           hint="cumul équipe sur la période"
           tone="violet"
         />
         <SummaryCard
+          icon={TrendingUp}
           label="Heures supplémentaires"
           value={`${totals.overtime.toFixed(0)}h`}
           hint="au-delà du contrat hebdo"
           tone="rose"
         />
         <SummaryCard
+          icon={CalendarOff}
           label="Heures d'absence"
           value={`${totals.absence.toFixed(0)}h`}
           hint="congés, maladie, formations…"
           tone="amber"
         />
         <SummaryCard
+          icon={Users}
           label="Charge équipe"
           value={`${totals.overContract} / ${totals.underContract}`}
           hint="au-dessus / sous le contrat"
           tone="emerald"
         />
       </div>
+
+      {/* Points d'attention — highlights dirigeants */}
+      {(insights.topOvertime ||
+        insights.mostUnderused ||
+        insights.mostAbsence ||
+        insights.topBalance) && (
+        <div>
+          <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-500">
+            Points d&apos;attention
+          </h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {insights.topOvertime && (
+              <InsightCard
+                icon={TrendingUp}
+                tone="rose"
+                label="Plus d'heures sup."
+                emp={insights.topOvertime}
+                value={`+${insights.topOvertime.overtimeHours.toFixed(0)}h`}
+              />
+            )}
+            {insights.mostUnderused && (
+              <InsightCard
+                icon={TrendingDown}
+                tone="amber"
+                label="Plus sous-employé"
+                emp={insights.mostUnderused}
+                value={`−${(
+                  insights.mostUnderused.weeklyHours -
+                  insights.mostUnderused.avgWeeklyHours
+                ).toFixed(1)}h/sem`}
+              />
+            )}
+            {insights.mostAbsence && (
+              <InsightCard
+                icon={CalendarOff}
+                tone="amber"
+                label="Plus d'absences"
+                emp={insights.mostAbsence}
+                value={`${insights.mostAbsence.absenceHours.toFixed(0)}h`}
+              />
+            )}
+            {insights.topBalance && (
+              <InsightCard
+                icon={Scale}
+                tone="violet"
+                label="Plus gros solde HS-Abs"
+                emp={insights.topBalance}
+                value={`${insights.topBalance.hsAbsBalance > 0 ? "+" : ""}${insights.topBalance.hsAbsBalance.toFixed(0)}h`}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Détail par collaborateur */}
       {employees.length === 0 ? (
@@ -413,13 +514,20 @@ export function StatsView({ period, periodLabel, employees }: Props) {
         <div className="rounded-2xl border border-zinc-200/70 bg-white overflow-hidden">
           {/* Barre d'outils : recherche + filtre statut + export */}
           <div className="border-b bg-zinc-50/50 px-3 py-2 flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un prénom…"
-              className="h-8 rounded-md border border-zinc-200 bg-white px-2.5 text-[12.5px] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-200 w-44"
-            />
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+                aria-hidden
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Rechercher un prénom…"
+                aria-label="Rechercher un collaborateur"
+                className="h-8 rounded-md border border-zinc-200 bg-white pl-8 pr-2.5 text-[12.5px] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-200 w-44"
+              />
+            </div>
             <div className="flex flex-wrap items-center gap-1">
               {availableStatuses.map((s) => {
                 const active = statusFilter.has(s);
@@ -453,15 +561,19 @@ export function StatsView({ period, periodLabel, employees }: Props) {
               </span>
               <button
                 onClick={exportCSV}
-                className="h-8 px-3 rounded-md border border-zinc-200 bg-white text-[12.5px] font-medium text-zinc-700 hover:bg-zinc-100"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-zinc-200 bg-white text-[12.5px] font-medium text-zinc-700 hover:bg-zinc-100"
               >
+                <Download className="h-3.5 w-3.5" />
                 Export CSV
               </button>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table
+              className="w-full text-sm"
+              aria-label="Statistiques par collaborateur"
+            >
               <thead className="bg-zinc-50/70 text-[11px] uppercase tracking-wide text-zinc-500">
                 <tr>
                   <SortHeader
@@ -547,7 +659,10 @@ export function StatsView({ period, periodLabel, employees }: Props) {
                         ? "text-rose-600"
                         : "text-emerald-700";
                   return (
-                    <tr key={s.id} className="border-t hover:bg-zinc-50/40">
+                    <tr
+                      key={s.id}
+                      className="border-t border-zinc-100 even:bg-zinc-50/40 hover:bg-violet-50/40 transition-colors"
+                    >
                       <td className="px-4 py-2 font-medium">
                         <span className="inline-flex items-center gap-2">
                           <span
@@ -660,43 +775,116 @@ export function StatsView({ period, periodLabel, employees }: Props) {
   );
 }
 
+const TONE_CARD: Record<
+  "violet" | "rose" | "amber" | "emerald",
+  { card: string; value: string; chip: string }
+> = {
+  violet: {
+    card: "border-violet-200/70 bg-violet-50/40",
+    value: "text-violet-700",
+    chip: "bg-violet-100 text-violet-700",
+  },
+  rose: {
+    card: "border-rose-200/70 bg-rose-50/40",
+    value: "text-rose-700",
+    chip: "bg-rose-100 text-rose-700",
+  },
+  amber: {
+    card: "border-amber-200/70 bg-amber-50/40",
+    value: "text-amber-700",
+    chip: "bg-amber-100 text-amber-700",
+  },
+  emerald: {
+    card: "border-emerald-200/70 bg-emerald-50/40",
+    value: "text-emerald-700",
+    chip: "bg-emerald-100 text-emerald-700",
+  },
+};
+
 function SummaryCard({
+  icon: Icon,
   label,
   value,
   hint,
   tone,
 }: {
+  icon: LucideIcon;
   label: string;
   value: string;
   hint: string;
   tone: "violet" | "rose" | "amber" | "emerald";
 }) {
-  const toneClasses = {
-    violet: "border-violet-200/70 bg-violet-50/40",
-    rose: "border-rose-200/70 bg-rose-50/40",
-    amber: "border-amber-200/70 bg-amber-50/40",
-    emerald: "border-emerald-200/70 bg-emerald-50/40",
-  }[tone];
-  const valueClasses = {
-    violet: "text-violet-700",
-    rose: "text-rose-700",
-    amber: "text-amber-700",
-    emerald: "text-emerald-700",
-  }[tone];
+  const t = TONE_CARD[tone];
   return (
-    <div className={cn("rounded-2xl border p-4", toneClasses)}>
-      <p className="text-[11px] uppercase tracking-wide font-medium text-zinc-500">
-        {label}
-      </p>
-      <p
-        className={cn(
-          "text-2xl font-bold font-mono mt-1 tabular-nums",
-          valueClasses
-        )}
-      >
+    <div className={cn("rounded-2xl border p-4", t.card)}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] uppercase tracking-wide font-medium text-zinc-500">
+          {label}
+        </p>
+        <span
+          className={cn(
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+            t.chip
+          )}
+          aria-hidden
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <p className={cn("text-2xl font-bold font-mono mt-1 tabular-nums", t.value)}>
         {value}
       </p>
       <p className="text-[11px] text-zinc-500 mt-0.5">{hint}</p>
+    </div>
+  );
+}
+
+/** Carte « point d'attention » : met en avant un collaborateur extrême. */
+function InsightCard({
+  icon: Icon,
+  tone,
+  label,
+  emp,
+  value,
+}: {
+  icon: LucideIcon;
+  tone: "violet" | "rose" | "amber" | "emerald";
+  label: string;
+  emp: EmployeeStat;
+  value: string;
+}) {
+  const t = TONE_CARD[tone];
+  return (
+    <div className="rounded-xl border border-zinc-200/70 bg-white p-3.5">
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg",
+            t.chip
+          )}
+          aria-hidden
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          {label}
+        </p>
+      </div>
+      <div className="mt-2 flex items-baseline justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 min-w-0">
+          <span
+            aria-hidden
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ background: emp.displayColor }}
+          />
+          <span className="truncate text-[14px] font-semibold tracking-tight text-zinc-900">
+            {emp.firstName}
+          </span>
+        </span>
+        <span className={cn("font-mono text-[15px] font-bold tabular-nums", t.value)}>
+          {value}
+        </span>
+      </div>
     </div>
   );
 }
