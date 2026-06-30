@@ -90,14 +90,22 @@ async function reviewAbsence(
   });
 
   if (decision === "REJECT") {
-    await prisma.absenceRequest.update({
-      where: { id: params.id },
+    // Transition ATOMIQUE : on ne rejette que si la demande est TOUJOURS
+    // PENDING → empêche le double-traitement concurrent (2 admins simultanés).
+    const claimed = await prisma.absenceRequest.updateMany({
+      where: { id: params.id, status: "PENDING" },
       data: {
         status: "REJECTED",
         adminNote: adminNote || null,
         reviewedAt: new Date(),
       },
     });
+    if (claimed.count === 0) {
+      return NextResponse.json(
+        { error: "Cette demande a déjà été traitée" },
+        { status: 409 }
+      );
+    }
     revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
 
     // Email à le collaborateur (best-effort)
@@ -120,42 +128,55 @@ async function reviewAbsence(
   // taskCode d'origine dans `previousTaskCode` → permet de restaurer le
   // planning si l'admin annule l'absence après coup.
   let convertedCount = 0;
-  await prisma.$transaction(async (tx) => {
-    // Récupère taskCode + type pour pouvoir mémoriser le previous
-    const existing = await tx.scheduleEntry.findMany({
-      where: {
-        employeeId: request.employeeId,
-        date: { gte: request.dateStart, lte: request.dateEnd },
-      },
-      select: { id: true, type: true, taskCode: true },
-    });
-    // 1 update par entrée — on ne peut pas faire un updateMany ici car
-    // chaque cellule a son propre previousTaskCode. Pour une plage typique
-    // (1 sem × 14 créneaux/jour = 84 cellules max), ça reste raisonnable.
-    for (const e of existing) {
-      await tx.scheduleEntry.update({
-        where: { id: e.id },
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Claim ATOMIQUE en premier : passe APPROVED seulement si encore PENDING.
+      // Si count===0 → déjà traitée par un autre admin → on annule la transaction.
+      const claimed = await tx.absenceRequest.updateMany({
+        where: { id: params.id, status: "PENDING" },
         data: {
-          type: "ABSENCE",
-          taskCode: null,
-          absenceCode: request.absenceCode,
-          // Sauvegarde du poste d'origine uniquement s'il y avait un TASK
-          // (pas pour une absence remplacée par une autre absence).
-          previousTaskCode: e.type === "TASK" ? e.taskCode : null,
+          status: "APPROVED",
+          adminNote: adminNote || null,
+          reviewedAt: new Date(),
         },
       });
-    }
-    convertedCount = existing.length;
+      if (claimed.count === 0) throw new Error("ALREADY_HANDLED");
 
-    await tx.absenceRequest.update({
-      where: { id: params.id },
-      data: {
-        status: "APPROVED",
-        adminNote: adminNote || null,
-        reviewedAt: new Date(),
-      },
+      // Récupère taskCode + type pour pouvoir mémoriser le previous
+      const existing = await tx.scheduleEntry.findMany({
+        where: {
+          employeeId: request.employeeId,
+          date: { gte: request.dateStart, lte: request.dateEnd },
+        },
+        select: { id: true, type: true, taskCode: true },
+      });
+      // 1 update par entrée — on ne peut pas faire un updateMany ici car
+      // chaque cellule a son propre previousTaskCode. Pour une plage typique
+      // (1 sem × 14 créneaux/jour = 84 cellules max), ça reste raisonnable.
+      for (const e of existing) {
+        await tx.scheduleEntry.update({
+          where: { id: e.id },
+          data: {
+            type: "ABSENCE",
+            taskCode: null,
+            absenceCode: request.absenceCode,
+            // Sauvegarde du poste d'origine uniquement s'il y avait un TASK
+            // (pas pour une absence remplacée par une autre absence).
+            previousTaskCode: e.type === "TASK" ? e.taskCode : null,
+          },
+        });
+      }
+      convertedCount = existing.length;
     });
-  });
+  } catch (e) {
+    if (e instanceof Error && e.message === "ALREADY_HANDLED") {
+      return NextResponse.json(
+        { error: "Cette demande a déjà été traitée" },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
   revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
 
   // Email à le collaborateur (best-effort)

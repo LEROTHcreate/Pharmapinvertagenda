@@ -7,7 +7,12 @@ const { mockAuth, prismaMock, revalidateTagMock, emailMock } = vi.hoisted(() => 
   mockAuth: vi.fn(),
   prismaMock: {
     employee: { findUnique: vi.fn() },
-    absenceRequest: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    absenceRequest: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
   revalidateTagMock: vi.fn(),
@@ -69,6 +74,8 @@ beforeEach(() => {
   });
   prismaMock.absenceRequest.findUnique.mockResolvedValue(pendingRequest());
   prismaMock.absenceRequest.update.mockResolvedValue({});
+  // Transition atomique : updateMany renvoie count=1 (demande claimée).
+  prismaMock.absenceRequest.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.absenceRequest.delete.mockResolvedValue({});
   // $transaction(cb) → exécute le callback avec un tx mocké
   prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
@@ -81,7 +88,9 @@ beforeEach(() => {
         update: vi.fn().mockResolvedValue({}),
         delete: vi.fn().mockResolvedValue({}),
       },
-      absenceRequest: { update: vi.fn().mockResolvedValue({}) },
+      absenceRequest: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
     })
   );
 });
@@ -145,8 +154,9 @@ describe("PATCH /api/absences/[id] — validation/refus", () => {
     const json = await res.json();
     expect(res.status).toBe(200);
     expect(json.status).toBe("REJECTED");
-    expect(prismaMock.absenceRequest.update).toHaveBeenCalledWith(
+    expect(prismaMock.absenceRequest.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: expect.objectContaining({ status: "PENDING" }),
         data: expect.objectContaining({ status: "REJECTED" }),
       })
     );
