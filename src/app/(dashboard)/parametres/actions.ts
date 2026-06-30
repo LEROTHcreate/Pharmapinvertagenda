@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { updatePharmacyInput, type UpdatePharmacyInput } from "@/validators/pharmacy";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { isSuperAdmin } from "@/lib/payroll-permissions";
+import { uploadImageIfDataUrl } from "@/lib/storage";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -121,9 +122,13 @@ export async function setPharmacyLogo(
     }
   }
 
+  // Data URL base64 → upload vers Storage, on stocke l'URL (plus de base64 en
+  // BDD). Idempotent : une URL http déjà présente reste inchangée.
+  const logoUrl = await uploadImageIfDataUrl(dataUrl, "logos");
+
   await prisma.pharmacy.update({
     where: { id: session.user.pharmacyId },
-    data: { logoUrl: dataUrl },
+    data: { logoUrl },
   });
 
   revalidateTag(DASHBOARD_CACHE_TAGS.pharmacy(session.user.pharmacyId));

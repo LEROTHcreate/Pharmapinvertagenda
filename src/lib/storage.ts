@@ -22,7 +22,14 @@ function parseDataUrl(
   const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(input);
   if (!m) return null;
   const mime = m[1].toLowerCase();
-  const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  const ext =
+    mime === "image/png"
+      ? "png"
+      : mime === "image/webp"
+        ? "webp"
+        : mime === "image/svg+xml"
+          ? "svg"
+          : "jpg";
   return { buffer: Buffer.from(m[2], "base64"), mime, ext };
 }
 
