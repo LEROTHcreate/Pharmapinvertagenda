@@ -64,6 +64,24 @@ export function createSupabaseAdminClient() {
 }
 
 /**
+ * Vérifie qu'un couple email/mot de passe est valide côté Supabase Auth, SANS
+ * toucher à la session courante (client éphémère, ni cookies ni persistance).
+ * Utilisé par change-password pour valider l'ancien mot de passe → on n'a plus
+ * besoin du miroir bcrypt en BDD pour ça. Renvoie true si le mot de passe est
+ * correct.
+ */
+export async function verifySupabasePassword(
+  email: string,
+  password: string
+): Promise<boolean> {
+  const client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  return !error;
+}
+
+/**
  * Met à jour le mot de passe d'un compte Supabase (via service role).
  * Utilisé par les flux reset / change password. `authUserId` peut être null
  * pour les comptes pas encore migrés vers auth.users → on log et on n'échoue
