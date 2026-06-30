@@ -632,12 +632,17 @@ export const PlanningGrid = memo(function PlanningGrid({
               return (
                 <tr
                   key={slot}
-                  className={cn("group/row transition-colors", zebraClass)}
-                  style={
-                    isCurrent
-                      ? { boxShadow: "inset 0 1.5px 0 0 rgb(244 63 94 / 0.85)" }
-                      : undefined
-                  }
+                  className={cn(
+                    "group/row transition-colors",
+                    zebraClass,
+                    // Ligne "heure actuelle" : bordure haute de 3px posée sur
+                    // CHAQUE <td> (et non un box-shadow sur le <tr>) → elle se
+                    // dessine AU-DESSUS du fond des cellules de rôle colorées,
+                    // au lieu de passer derrière. `!` pour battre la bordure
+                    // d'heure pleine quand le créneau courant tombe pile à l'heure.
+                    isCurrent &&
+                      "[&>td]:!border-t-[3px] [&>td]:!border-t-rose-500"
+                  )}
                 >
                   <td
                     className={cn(
