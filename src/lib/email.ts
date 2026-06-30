@@ -73,17 +73,56 @@ async function safeSend(params: {
   /** Tag interne pour les logs */
   tag: string;
 }): Promise<void> {
+  const recipients = Array.isArray(params.to) ? params.to : [params.to];
+
+  // ─── Fournisseur prioritaire : Resend (si configuré) ───
+  // Bien meilleure délivrabilité que Gmail SMTP (domaine vérifié SPF/DKIM) —
+  // indispensable pour les emails de reset que Gmail filtre comme phishing.
+  // `RESEND_FROM` doit être une adresse d'un domaine vérifié dans Resend ;
+  // par défaut on utilise le domaine de test "onboarding@resend.dev" (qui ne
+  // peut envoyer que vers l'adresse du compte Resend → parfait pour tester).
+  const resendKey = process.env.RESEND_API_KEY?.trim();
+  if (resendKey) {
+    try {
+      const from =
+        process.env.RESEND_FROM?.trim() || "PharmaPlanning <onboarding@resend.dev>";
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          from,
+          to: recipients,
+          subject: params.subject,
+          html: params.html,
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        console.error(
+          `[email:${params.tag}] Resend a refusé (${res.status}) : ${detail}`
+        );
+      }
+    } catch (e) {
+      console.error(`[email:${params.tag}] Resend exception :`, e);
+    }
+    return;
+  }
+
+  // ─── Fallback : Gmail SMTP ───
   const t = getTransporter();
   if (!t) {
     console.warn(
-      `[email] GMAIL_USER/GMAIL_APP_PASSWORD non définis — email "${params.tag}" ignoré.`
+      `[email] aucun fournisseur configuré (ni RESEND_API_KEY ni GMAIL_*) — email "${params.tag}" ignoré.`
     );
     return;
   }
   try {
     const info = await t.sendMail({
       from: FROM,
-      to: Array.isArray(params.to) ? params.to.join(", ") : params.to,
+      to: recipients.join(", "),
       subject: params.subject,
       html: params.html,
     });
