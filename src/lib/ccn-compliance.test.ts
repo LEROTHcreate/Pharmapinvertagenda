@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   analyzeCcnCompliance,
+  buildCcnContext,
   weeklyOvertimeBreakdown,
 } from "./ccn-compliance";
 import { indexEntriesByEmployee } from "./planning-utils";
@@ -112,12 +113,98 @@ describe("analyzeCcnCompliance", () => {
     ).toBe(true);
   });
 
-  it("travaille les 6 jours → warning REPOS_HEBDO", () => {
+  it("6 jours travaillés mais finissant tôt le samedi → PAS de REPOS_HEBDO (dimanche suffit)", () => {
+    // Sam fini à 12:00 : 12:00 → dimanche → ≥ 36 h de repos garanti.
     const e: ScheduleEntryDTO[] = [];
     for (const d of WD) fill(e, "p1", d, "09:00", "12:00");
     const v = analyzeCcnCompliance([emp("p1")], WD, indexEntriesByEmployee(e));
-    expect(types(v)).toContain("REPOS_HEBDO");
+    expect(types(v)).not.toContain("REPOS_HEBDO");
+  });
+
+  it("6 jours finissant tard le samedi, sans contexte → warning REPOS_HEBDO", () => {
+    // 14:00-19:30 tous les jours : samedi finit à 19:30 → repos jusqu'à dimanche
+    // soir = 28,5 h < 35 h, et on ignore l'ouverture du lundi → à vérifier.
+    const e: ScheduleEntryDTO[] = [];
+    for (const d of WD) fill(e, "p1", d, "14:00", "19:30");
+    const v = analyzeCcnCompliance([emp("p1")], WD, indexEntriesByEmployee(e));
     expect(v.find((x) => x.type === "REPOS_HEBDO")?.severity).toBe("warning");
+  });
+
+  it("6 jours finissant tard + contexte ouverture lundi tôt → erreur REPOS_HEBDO", () => {
+    const e: ScheduleEntryDTO[] = [];
+    for (const d of WD) fill(e, "p1", d, "14:00", "19:30");
+    const ctx = new Map([["p1", { nextWeekFirstStart: 6 * 60 }]]); // lundi 06:00
+    const v = analyzeCcnCompliance(
+      [emp("p1")],
+      WD,
+      indexEntriesByEmployee(e),
+      {},
+      ctx
+    );
+    // fenêtre = (24h-19:30) + dimanche + 06:00 = 34,5 h < 35 h → illégal
+    expect(
+      v.some((x) => x.type === "REPOS_HEBDO" && x.severity === "error")
+    ).toBe(true);
+  });
+
+  it("6 jours finissant tard mais lundi ouvre tard → aucun REPOS_HEBDO", () => {
+    const e: ScheduleEntryDTO[] = [];
+    for (const d of WD) fill(e, "p1", d, "14:00", "19:30");
+    const ctx = new Map([["p1", { nextWeekFirstStart: 10 * 60 }]]); // lundi 10:00
+    const v = analyzeCcnCompliance(
+      [emp("p1")],
+      WD,
+      indexEntriesByEmployee(e),
+      {},
+      ctx
+    );
+    expect(types(v)).not.toContain("REPOS_HEBDO");
+  });
+
+  it("série de jours à cheval sur 2 semaines (contexte) → erreur 7 jours consécutifs", () => {
+    // 6 jours cette semaine + 3 jours déjà enchaînés la semaine précédente.
+    const e: ScheduleEntryDTO[] = [];
+    for (const d of WD) fill(e, "p1", d, "09:00", "12:00");
+    const ctx = new Map([["p1", { prevConsecutiveDays: 3 }]]);
+    const v = analyzeCcnCompliance(
+      [emp("p1")],
+      WD,
+      indexEntriesByEmployee(e),
+      {},
+      ctx
+    );
+    expect(
+      v.some(
+        (x) =>
+          x.type === "REPOS_HEBDO" &&
+          x.severity === "error" &&
+          /consécutif/.test(x.message)
+      )
+    ).toBe(true);
+  });
+});
+
+describe("buildCcnContext", () => {
+  it("calcule les jours consécutifs précédents et l'ouverture de la semaine suivante", () => {
+    const e: ScheduleEntryDTO[] = [];
+    // Semaine précédente : ven 19, sam 20, dim 21 travaillés (3 jours d'affilée
+    // se terminant la veille du lundi 22).
+    fill(e, "p1", "2026-06-19", "09:00", "12:00");
+    fill(e, "p1", "2026-06-20", "09:00", "12:00");
+    fill(e, "p1", "2026-06-21", "09:00", "12:00");
+    // Semaine suivante : lundi 29 ouvre à 08:00.
+    fill(e, "p1", "2026-06-29", "08:00", "12:00");
+    const ctx = buildCcnContext(["p1"], WD, indexEntriesByEmployee(e));
+    expect(ctx.get("p1")?.prevConsecutiveDays).toBe(3);
+    expect(ctx.get("p1")?.nextWeekFirstStart).toBe(8 * 60);
+  });
+
+  it("renvoie 0 / null quand aucun jour adjacent n'est travaillé", () => {
+    const e: ScheduleEntryDTO[] = [];
+    fill(e, "p1", WD[0], "09:00", "12:00");
+    const ctx = buildCcnContext(["p1"], WD, indexEntriesByEmployee(e));
+    expect(ctx.get("p1")?.prevConsecutiveDays).toBe(0);
+    expect(ctx.get("p1")?.nextWeekFirstStart).toBeNull();
   });
 });
 

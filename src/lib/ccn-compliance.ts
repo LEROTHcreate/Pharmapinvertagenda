@@ -80,6 +80,13 @@ function slotToMin(slot: string): number {
   return h * 60 + m;
 }
 
+/** Décale une date ISO "YYYY-MM-DD" de `days` jours (UTC, déterministe). */
+function shiftIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 const fmtH = (min: number): string => {
   const h = Math.floor(min / 60);
   const m = min % 60;
@@ -139,20 +146,47 @@ function buildDayWork(
 const dayLabel = (i: number): string => (WEEK_DAYS[i] ?? `J${i + 1}`).toLowerCase();
 
 /**
+ * Contexte inter-semaines pour un employé : permet de calculer correctement le
+ * repos hebdomadaire (qui s'étend sur le dimanche → lundi suivant) et la règle
+ * des 6 jours consécutifs (qui peut chevaucher deux semaines). Tout est
+ * optionnel : sans contexte, le moteur reste prudent ("à vérifier") sur ces
+ * deux règles qui dépendent de jours hors de la semaine saisie.
+ */
+export type CcnEmployeeContext = {
+  /**
+   * Nombre de jours travaillés consécutifs se terminant la veille de
+   * weekDates[0] (issus de la semaine précédente). Sert à détecter > 6 jours
+   * d'affilée à cheval sur deux semaines.
+   */
+  prevConsecutiveDays?: number;
+  /**
+   * Heure de début (minutes depuis minuit) de la 1re journée travaillée de la
+   * semaine SUIVANTE (typiquement l'ouverture du lundi). Permet de calculer la
+   * fenêtre exacte de repos hebdomadaire qui passe par le dimanche.
+   */
+  nextWeekFirstStart?: number | null;
+};
+
+/**
  * Analyse la conformité du planning de la semaine pour la liste d'employés.
  * Renvoie la liste des manquements (vide = planning conforme).
+ *
+ * `context` (optionnel, par employeeId) fournit les infos des semaines
+ * adjacentes pour fiabiliser le repos hebdo et les jours consécutifs.
  */
 export function analyzeCcnCompliance(
   employees: Array<{ id: string; firstName: string }>,
   weekDates: string[],
   index: Map<string, EmployeeDayMap>,
-  thresholds: Partial<CcnThresholds> = {}
+  thresholds: Partial<CcnThresholds> = {},
+  context?: Map<string, CcnEmployeeContext>
 ): CcnViolation[] {
   const o = { ...CCN_DEFAULTS, ...thresholds };
   const out: CcnViolation[] = [];
 
   for (const emp of employees) {
     const name = emp.firstName;
+    const ctx = context?.get(emp.id);
     const works = weekDates.map((d, i) => buildDayWork(emp.id, d, i, index));
     const workedDays = works.filter((w): w is DayWork => w !== null);
 
@@ -255,27 +289,48 @@ export function analyzeCcnCompliance(
       });
     }
 
-    // ─── Repos hebdomadaire ───
-    // Au moins un jour de repos dans la semaine garantit > 35 h de repos
-    // (jour off + nuits adjacentes). Sinon (travaille tous les jours saisis),
-    // on alerte pour vérifier le repos hebdomadaire (souvent le dimanche, non
-    // saisi dans le planning Lun→Sam).
-    if (workedDays.length >= weekDates.length && weekDates.length >= 6) {
-      out.push({
-        type: "REPOS_HEBDO",
-        severity: "warning",
-        employeeId: emp.id,
-        employeeName: name,
-        message: `${name} : aucun jour de repos sur la semaine saisie — vérifier le repos hebdomadaire de 35 h.`,
-      });
+    // ─── Repos hebdomadaire (35 h consécutives) ───
+    // Un seul jour OFF dans la semaine saisie suffit (jour off + dimanche/nuits
+    // adjacents ⇒ bien plus de 35 h) : aucune alerte. Si l'employé travaille
+    // TOUS les jours saisis (Lun→Sam), le repos repose sur le dimanche (officine
+    // fermée, non saisi) : on calcule la fenêtre fin du dernier jour → dimanche
+    // → ouverture du lundi suivant.
+    if (weekDates.length >= 6 && workedDays.length >= weekDates.length) {
+      const lastEnd = workedDays[workedDays.length - 1].lastEnd;
+      // Borne basse : reste du samedi (1440 − lastEnd) + dimanche complet (1440).
+      const restThroughSunday = 2 * 1440 - lastEnd;
+      const nextStart = ctx?.nextWeekFirstStart ?? null;
+      const fullRest = nextStart != null ? restThroughSunday + nextStart : null;
+      if (fullRest != null) {
+        // Fenêtre exacte connue (ouverture lundi fournie) → erreur ferme si < 35 h.
+        if (fullRest < o.reposHebdoMin) {
+          out.push({
+            type: "REPOS_HEBDO",
+            severity: "error",
+            employeeId: emp.id,
+            employeeName: name,
+            message: `${name} : repos hebdomadaire de ${fmtH(fullRest)} (dimanche compris) — min légal ${fmtH(o.reposHebdoMin)}.`,
+          });
+        }
+      } else if (restThroughSunday < o.reposHebdoMin) {
+        // Sans l'heure d'ouverture du lundi suivant, on ne peut pas conclure :
+        // le samedi finit tard → repos limite → alerte de vérification.
+        out.push({
+          type: "REPOS_HEBDO",
+          severity: "warning",
+          employeeId: emp.id,
+          employeeName: name,
+          message: `${name} : travaille les ${workedDays.length} jours saisis et finit tard le samedi — repos hebdomadaire de 35 h à vérifier (dépend de l'ouverture du lundi).`,
+        });
+      }
+      // sinon restThroughSunday ≥ 35 h → garanti par le dimanche, pas d'alerte.
     }
 
     // ─── Maximum 6 jours consécutifs (le 7e doit être un repos) ───
-    // Donnée limitée à la semaine saisie (souvent Lun→Sam = 6 jours max
-    // visibles, ce qui est légal). On détecte tout de même la plus longue
-    // série de jours travaillés d'affilée : 7+ consécutifs = illégal (utile
-    // si la semaine saisie couvre le dimanche ou plus de 6 colonnes).
-    let run = 0;
+    // On chaîne avec les jours travaillés en fin de semaine précédente (ctx)
+    // pour détecter une série > 6 à cheval sur deux semaines. Sans contexte, on
+    // détecte au moins les séries ≥ 7 visibles dans la semaine saisie.
+    let run = ctx?.prevConsecutiveDays ?? 0;
     let maxRun = 0;
     for (const w of works) {
       if (w) {
@@ -297,6 +352,53 @@ export function analyzeCcnCompliance(
   }
 
   return out;
+}
+
+/**
+ * Construit le contexte inter-semaines à passer à `analyzeCcnCompliance`.
+ * `index` doit couvrir, en plus de la semaine analysée, AU MOINS les ~7 jours
+ * qui précèdent weekDates[0] et les ~7 jours qui suivent weekDates[dernier]
+ * (sinon le contexte est partiel mais sans danger : on reste prudent).
+ *
+ *  - `prevConsecutiveDays` : nombre de jours travaillés d'affilée juste avant
+ *    la semaine (pour la règle des 6 jours consécutifs à cheval).
+ *  - `nextWeekFirstStart` : heure de début de la 1re journée travaillée après
+ *    la semaine (pour la fenêtre exacte de repos hebdomadaire via le dimanche).
+ */
+export function buildCcnContext(
+  employeeIds: string[],
+  weekDates: string[],
+  index: Map<string, EmployeeDayMap>,
+  lookAround = 7
+): Map<string, CcnEmployeeContext> {
+  const ctx = new Map<string, CcnEmployeeContext>();
+  if (weekDates.length === 0) return ctx;
+  const firstDay = weekDates[0];
+  const lastDay = weekDates[weekDates.length - 1];
+
+  for (const empId of employeeIds) {
+    // Jours travaillés consécutifs se terminant la veille de la semaine.
+    let prevConsecutiveDays = 0;
+    for (let k = 1; k <= lookAround; k++) {
+      const day = shiftIso(firstDay, -k);
+      if (buildDayWork(empId, day, 0, index)) prevConsecutiveDays++;
+      else break;
+    }
+
+    // 1re journée travaillée après la semaine → son heure de début.
+    let nextWeekFirstStart: number | null = null;
+    for (let k = 1; k <= lookAround; k++) {
+      const day = shiftIso(lastDay, k);
+      const work = buildDayWork(empId, day, 0, index);
+      if (work) {
+        nextWeekFirstStart = work.firstStart;
+        break;
+      }
+    }
+
+    ctx.set(empId, { prevConsecutiveDays, nextWeekFirstStart });
+  }
+  return ctx;
 }
 
 /* ─── Heures supplémentaires majorées (25 % / 50 %) ──────────────────── */
