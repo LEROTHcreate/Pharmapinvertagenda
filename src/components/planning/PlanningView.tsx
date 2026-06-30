@@ -39,6 +39,7 @@ import {
   AbsenceConflictDialog,
   type AbsenceConflict,
 } from "@/components/planning/AbsenceConflictDialog";
+import { usePlanningStore } from "@/store/planning-store";
 
 type Selection = {
   employeeId: string;
@@ -125,8 +126,6 @@ type UndoAction = {
   snapshots: CellSnapshot[];
 };
 
-const UNDO_HISTORY_MAX = 50;
-
 /** Pendant optimiste : suppression locale d'entrées. */
 function applyEntriesDelete(
   prev: ScheduleEntryDTO[],
@@ -163,16 +162,33 @@ export function PlanningView({
   const router = useRouter();
   const { toast } = useToast();
   const [weekStart, setWeekStart] = useState(initialWeekStart);
-  const [entries, setEntries] = useState<ScheduleEntryDTO[]>(initialEntries);
-  // Ref miroir : permet aux helpers de capturer l'état courant sans
-  // dépendance React (évite de recréer les callbacks à chaque modif).
-  const entriesRef = useRef<ScheduleEntryDTO[]>(initialEntries);
-  useEffect(() => {
-    entriesRef.current = entries;
-  }, [entries]);
-  // Idem pour les dates visibles — utilisé par handleUndo. On l'initialise
-  // côté ref ; la valeur est mise à jour plus bas via useEffect une fois
-  // que `dayDates` est calculé.
+  // ─── État du planning (store Zustand) ──────────────────────────────
+  // Seed du store AVANT la 1re lecture de `entries` (le store est un singleton
+  // module, initialement vide → sans ça, flash de planning vide au 1er rendu).
+  useState(() => {
+    usePlanningStore.getState().resetForWeek(initialEntries);
+    return null;
+  });
+  const entries = usePlanningStore((s) => s.entries);
+  const pushUndo = usePlanningStore((s) => s.pushUndo);
+  // Shim : conserve l'ancienne signature de setEntries (valeur OU updater) pour
+  // ne pas toucher les ~20 call-sites des handlers de mutation. Lit/écrit le
+  // store (toujours frais → plus besoin du ref miroir entriesRef).
+  const setEntries = useCallback(
+    (
+      next:
+        | ScheduleEntryDTO[]
+        | ((prev: ScheduleEntryDTO[]) => ScheduleEntryDTO[])
+    ) => {
+      const cur = usePlanningStore.getState().entries;
+      usePlanningStore
+        .getState()
+        .setEntries(typeof next === "function" ? next(cur) : next);
+    },
+    []
+  );
+  // Dates visibles — lues via ref par applySnapshots (hors deps). Mises à jour
+  // via useEffect une fois `dayDates` calculé.
   const dayDatesRef = useRef<string[]>([]);
   // Liste de collaborateurs locale — mirror du prop, mais éditable quand
   // l'admin réordonne les colonnes via drag & drop. Resync sur l'initial
@@ -200,20 +216,9 @@ export function PlanningView({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [recentlySaved, setRecentlySaved] = useState<Set<CellKey>>(new Set());
-  // Pile d'undo (Ctrl+Z) et pile de redo (Ctrl+Y / Ctrl+Shift+Z). On garde
-  // un useState pour permettre une éventuelle UI "n actions à annuler" plus
-  // tard, mais on lit aussi via ref pour éviter de re-créer les handlers à
-  // chaque push.
-  const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
-  const undoStackRef = useRef<UndoAction[]>([]);
-  useEffect(() => {
-    undoStackRef.current = undoStack;
-  }, [undoStack]);
-  const [redoStack, setRedoStack] = useState<UndoAction[]>([]);
-  const redoStackRef = useRef<UndoAction[]>([]);
-  useEffect(() => {
-    redoStackRef.current = redoStack;
-  }, [redoStack]);
+  // Piles undo/redo (Ctrl+Z / Ctrl+Y) : gérées dans le store Zustand. Lues via
+  // getState() dans les handlers ; aucun rendu ne dépend de leur contenu
+  // (undo/redo sont clavier-seul) → pas de souscription, pas de re-render.
   // Filtre par statut : Set vide = aucun filtre (tous les collaborateurs visibles)
   const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
 
@@ -308,68 +313,9 @@ export function PlanningView({
     }
   }
 
-  /**
-   * Capture l'état actuel des cellules listées sous forme de snapshots
-   * (dédupliqués). Utilisé par pushUndo (snapshot AVANT mutation) ET par
-   * handleUndo/handleRedo (snapshot inverse pour rotation entre piles).
-   */
-  const captureSnapshots = useCallback(
-    (
-      cellRefs: Array<{ employeeId: string; date: string; timeSlot: string }>
-    ): CellSnapshot[] => {
-      const cur = entriesRef.current;
-      const seen = new Set<string>();
-      const snapshots: CellSnapshot[] = [];
-      for (const ref of cellRefs) {
-        const k = entryKey(ref);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        const e = cur.find(
-          (en) =>
-            en.employeeId === ref.employeeId &&
-            en.date === ref.date &&
-            en.timeSlot === ref.timeSlot
-        );
-        snapshots.push({
-          employeeId: ref.employeeId,
-          date: ref.date,
-          timeSlot: ref.timeSlot,
-          before: e
-            ? {
-                type: e.type,
-                taskCode: e.taskCode ?? null,
-                absenceCode: e.absenceCode ?? null,
-              }
-            : null,
-        });
-      }
-      return snapshots;
-    },
-    []
-  );
-
-  /**
-   * Capture l'état actuel des cellules listées et l'empile dans la pile
-   * d'undo. À appeler AVANT d'appliquer la mutation (sinon on capture
-   * l'état d'après — inutile pour Ctrl+Z).
-   * Toute nouvelle action invalide la pile redo : on ne peut pas refaire
-   * une action contredite par un nouvel état.
-   */
-  const pushUndo = useCallback(
-    (
-      label: string,
-      cellRefs: Array<{ employeeId: string; date: string; timeSlot: string }>
-    ) => {
-      if (cellRefs.length === 0) return;
-      const snapshots = captureSnapshots(cellRefs);
-      setUndoStack((prev) => [
-        ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
-        { label, snapshots },
-      ]);
-      setRedoStack([]);
-    },
-    [captureSnapshots]
-  );
+  // `pushUndo` (capture l'état AVANT mutation + empile, vide le redo) est
+  // fourni par le store : `const pushUndo = usePlanningStore(s => s.pushUndo)`
+  // plus haut. La capture de snapshots est interne au store.
 
   /**
    * Restaure l'état décrit par une UndoAction (utilisé par undo ET redo) :
@@ -382,7 +328,7 @@ export function PlanningView({
     async (action: UndoAction): Promise<boolean> => {
       const toRestore = action.snapshots.filter((s) => s.before !== null);
       const toDelete = action.snapshots.filter((s) => s.before === null);
-      const previousEntries = entriesRef.current;
+      const previousEntries = usePlanningStore.getState().entries;
       const visibleDates = new Set(dayDatesRef.current);
 
       setEntries((prev) => {
@@ -455,23 +401,13 @@ export function PlanningView({
    * cellules concernées AVANT la restauration, pour permettre Ctrl+Y.
    */
   const handleUndo = useCallback(async () => {
-    const stack = undoStackRef.current;
-    if (stack.length === 0) {
+    // popUndo dépile l'action, capture sa contrepartie redo (état courant) et
+    // la renvoie — ou null si la pile est vide.
+    const action = usePlanningStore.getState().popUndo();
+    if (!action) {
       toast({ tone: "info", title: "Rien à annuler", duration: 1500 });
       return;
     }
-    const action = stack[stack.length - 1];
-    // Avant d'écraser l'état courant, on capture les cellules ciblées :
-    // c'est exactement le snapshot qui permettra de "refaire" l'action.
-    const redoAction: UndoAction = {
-      label: action.label,
-      snapshots: captureSnapshots(action.snapshots),
-    };
-    setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [
-      ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
-      redoAction,
-    ]);
     const ok = await applySnapshots(action);
     if (ok) {
       toast({
@@ -487,28 +423,18 @@ export function PlanningView({
         description: "Erreur réseau.",
       });
     }
-  }, [toast, captureSnapshots, applySnapshots]);
+  }, [toast, applySnapshots]);
 
   /**
    * Refait la dernière action annulée. Symétrique de handleUndo : la pile
    * undo récupère l'état courant avant la restauration.
    */
   const handleRedo = useCallback(async () => {
-    const stack = redoStackRef.current;
-    if (stack.length === 0) {
+    const action = usePlanningStore.getState().popRedo();
+    if (!action) {
       toast({ tone: "info", title: "Rien à refaire", duration: 1500 });
       return;
     }
-    const action = stack[stack.length - 1];
-    const undoAction: UndoAction = {
-      label: action.label,
-      snapshots: captureSnapshots(action.snapshots),
-    };
-    setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [
-      ...prev.slice(-(UNDO_HISTORY_MAX - 1)),
-      undoAction,
-    ]);
     const ok = await applySnapshots(action);
     if (ok) {
       toast({
@@ -524,7 +450,7 @@ export function PlanningView({
         description: "Erreur réseau.",
       });
     }
-  }, [toast, captureSnapshots, applySnapshots]);
+  }, [toast, applySnapshots]);
 
   // Raccourci clavier : Ctrl+Z (undo), Ctrl+Y ou Ctrl+Shift+Z (redo).
   // Cmd+… sur Mac. On évite de capturer la frappe quand l'utilisateur est
@@ -575,8 +501,7 @@ export function PlanningView({
     // Changer de semaine vide les piles d'undo/redo : un Ctrl+Z (ou Ctrl+Y)
     // dans la nouvelle semaine ne doit pas modifier silencieusement des
     // cellules d'une autre.
-    setUndoStack([]);
-    setRedoStack([]);
+    usePlanningStore.setState({ undoStack: [], redoStack: [] });
   }, [initialWeekStart]);
 
   // Si l'URL change avec un `?day=N` (ex. clic depuis la vue semaine),
