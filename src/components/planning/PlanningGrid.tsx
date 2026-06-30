@@ -32,27 +32,17 @@ import {
 } from "@/lib/planning-utils";
 import { ScheduleType, type TaskCode } from "@prisma/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  makeCellKey,
+  parseCellKey,
+  type CellKey,
+  type ParsedCell,
+} from "@/lib/cell-keys";
 
-export type CellKey = string; // "employeeId|date|timeSlot"
-
-export type ParsedCell = {
-  employeeId: string;
-  date: string;
-  timeSlot: string;
-};
-
-function parseCellKey(k: CellKey): ParsedCell {
-  const [employeeId, date, timeSlot] = k.split("|");
-  return { employeeId, date, timeSlot };
-}
-
-export function makeCellKey(
-  employeeId: string,
-  date: string,
-  timeSlot: string
-): CellKey {
-  return `${employeeId}|${date}|${timeSlot}`;
-}
+// Clés de cellule centralisées dans lib/cell-keys — re-exportées ici pour
+// compat avec les importateurs existants (TemplateView, PlanningView).
+export { makeCellKey };
+export type { CellKey, ParsedCell };
 
 /** Préfixe d'ID pour les drags de colonne (réordonnancement des collaborateurs).
  *  Évite toute collision avec les CellKey (qui contiennent des `|`). */

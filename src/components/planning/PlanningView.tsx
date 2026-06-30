@@ -40,6 +40,7 @@ import {
   type AbsenceConflict,
 } from "@/components/planning/AbsenceConflictDialog";
 import { usePlanningStore } from "@/store/planning-store";
+import { entryKey, parseCellKey } from "@/lib/cell-keys";
 
 type Selection = {
   employeeId: string;
@@ -47,17 +48,7 @@ type Selection = {
   timeSlot: string;
 } | null;
 
-type ParsedCell = { employeeId: string; date: string; timeSlot: string };
-
-function parseCellKey(k: CellKey): ParsedCell {
-  const [employeeId, date, timeSlot] = k.split("|");
-  return { employeeId, date, timeSlot };
-}
-
-/** Clé canonique d'une cellule (utilisée pour le diff optimiste). */
-function entryKey(e: { employeeId: string; date: string; timeSlot: string }): string {
-  return `${e.employeeId}|${e.date}|${e.timeSlot}`;
-}
+// parseCellKey / entryKey sont centralisés dans @/lib/cell-keys (importés ci-dessus).
 
 /**
  * Applique en local (optimistic) un upsert d'entrées. Seules les entrées

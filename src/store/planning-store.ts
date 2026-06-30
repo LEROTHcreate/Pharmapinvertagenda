@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AbsenceCode, TaskCode } from "@prisma/client";
 import type { ScheduleEntryDTO } from "@/types";
+import { entryKey } from "@/lib/cell-keys";
 
 /**
  * Store Zustand du planning : centralise l'état des cellules (`entries`) et
@@ -41,10 +42,8 @@ const UNDO_HISTORY_MAX = 50;
 
 /* ─── Helpers purs (exportés pour réutilisation + tests) ─────────────────── */
 
-/** Clé canonique d'une cellule (diff optimiste). */
-export function entryKey(e: CellRef): string {
-  return `${e.employeeId}|${e.date}|${e.timeSlot}`;
-}
+/** Clé canonique d'une cellule (diff optimiste) — centralisée dans @/lib/cell-keys. */
+export { entryKey };
 
 /**
  * Applique en local (optimistic) un upsert d'entrées. Seules les entrées dont
