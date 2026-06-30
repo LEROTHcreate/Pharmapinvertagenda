@@ -3,6 +3,7 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { sendMessageInput } from "@/validators/messaging";
+import { uploadImageIfDataUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -181,13 +182,19 @@ async function POST__impl(
     );
   }
 
+  // Pièce jointe : si data URL base64 → upload vers Storage, on stocke l'URL.
+  const attachmentUrl = await uploadImageIfDataUrl(
+    parsed.data.attachment?.url ?? null,
+    "messages"
+  );
+
   const message = await prisma.message.create({
     data: {
       conversationId: params.id,
       authorId: session.user.id,
       body: parsed.data.body,
       type: "TEXT",
-      attachmentUrl: parsed.data.attachment?.url ?? null,
+      attachmentUrl,
       attachmentName: parsed.data.attachment?.name ?? null,
       attachmentMime: parsed.data.attachment?.mime ?? null,
     },

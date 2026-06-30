@@ -3,6 +3,7 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createPayrollNoteInput } from "@/validators/payroll-note";
+import { uploadImageIfDataUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -95,6 +96,12 @@ async function POST__impl(req: Request) {
     );
   }
 
+  // Pièce jointe : si data URL base64 → upload vers Storage, on stocke l'URL.
+  const attachmentUrl = await uploadImageIfDataUrl(
+    parsed.data.attachment?.url ?? null,
+    "payroll"
+  );
+
   const created = await prisma.payrollNote.create({
     data: {
       pharmacyId: session.user.pharmacyId,
@@ -102,7 +109,7 @@ async function POST__impl(req: Request) {
       date: new Date(`${parsed.data.date}T00:00:00Z`),
       infos: parsed.data.infos,
       motif: parsed.data.motif?.trim() || null,
-      attachmentUrl: parsed.data.attachment?.url ?? null,
+      attachmentUrl,
       attachmentName: parsed.data.attachment?.name ?? null,
       attachmentMime: parsed.data.attachment?.mime ?? null,
     },
