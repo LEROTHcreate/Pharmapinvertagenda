@@ -509,7 +509,7 @@ export function PlanningView({
 
   useEffect(() => {
     setEntries(initialEntries);
-  }, [initialEntries]);
+  }, [initialEntries, setEntries]);
 
   useEffect(() => {
     setWeekStart(initialWeekStart);

@@ -51,15 +51,23 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isOnApi = path.startsWith("/api");
-  const isOnHome = path === "/";
+  // Contenu public accessible à TOUS (connecté ou non) : landing + pages
+  // légales. ⚠ Les pages légales DOIVENT rester publiques : elles sont liées
+  // depuis le formulaire d'inscription (« J'accepte les CGU ») → un visiteur
+  // non connecté doit pouvoir les consulter avant de créer son compte.
+  const isPublicContent =
+    path === "/" ||
+    path.startsWith("/cgu") ||
+    path.startsWith("/confidentialite") ||
+    path.startsWith("/mentions-legales");
   const isOnPublicAuth =
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
     path.startsWith("/forgot-password") ||
     path.startsWith("/reset-password");
 
-  // Les routes API gèrent leur propre auth ; la landing est publique.
-  if (isOnApi || isOnHome) return response;
+  // Les routes API gèrent leur propre auth ; landing + pages légales publiques.
+  if (isOnApi || isPublicContent) return response;
 
   // Pages publiques d'auth : si déjà connecté → vers le planning.
   if (isOnPublicAuth) {
