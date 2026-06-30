@@ -59,7 +59,12 @@ export async function middleware(request: NextRequest) {
     path === "/" ||
     path.startsWith("/cgu") ||
     path.startsWith("/confidentialite") ||
-    path.startsWith("/mentions-legales");
+    path.startsWith("/mentions-legales") ||
+    // Fichiers statiques publics (logo des emails, icônes + manifest PWA…) :
+    // ne JAMAIS les mettre derrière l'auth, sinon le logo casse dans les
+    // emails et l'installation PWA échoue. Le matcher exclut déjà /_next ;
+    // on couvre ici les assets de /public servis à la racine.
+    /\.(png|svg|jpe?g|webp|ico|webmanifest)$/.test(path);
   const isOnPublicAuth =
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
