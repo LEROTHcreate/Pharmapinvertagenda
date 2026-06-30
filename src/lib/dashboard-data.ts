@@ -105,9 +105,31 @@ export async function getMessagesUnreadCounts(
   return { swap, text };
 }
 
+/**
+ * Contexte d'accès paie de l'utilisateur (flag + statut Employee), pour décider
+ * l'affichage de l'item Rémunération dans la sidebar. Mis en cache (revalidate
+ * 60 s) : ces valeurs changent rarement → évite une requête à chaque navigation.
+ * Invalidable via le tag `user:<id>`.
+ */
+export const getPayrollUserContext = (userId: string) =>
+  unstable_cache(
+    async () => {
+      return prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          canAccessPayroll: true,
+          employee: { select: { status: true } },
+        },
+      });
+    },
+    ["payroll-user-ctx", userId],
+    { tags: [`user:${userId}`], revalidate: 60 }
+  )();
+
 /** Tags exposés aux APIs pour invalidation après mutation. */
 export const DASHBOARD_CACHE_TAGS = {
   pharmacy: (id: string) => `pharmacy:${id}`,
+  user: (id: string) => `user:${id}`,
   usersPending: (id: string) => `users-pending:${id}`,
   swapsPending: (id: string) => `swaps-pending:${id}`,
   absencesPending: (id: string) => `absences-pending:${id}`,

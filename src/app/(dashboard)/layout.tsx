@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import {
   getMessagesUnreadCounts,
+  getPayrollUserContext,
   getPendingAbsencesCount,
   getPendingSwapsCount,
   getPendingUsersCount,
@@ -87,13 +87,7 @@ export default async function DashboardLayout({
     // Récupère le flag canAccessPayroll + status Employee pour décider
     // si l'item Rémunération doit apparaître dans la sidebar.
     isAdmin
-      ? prisma.user.findUnique({
-          where: { id: session.user.id },
-          select: {
-            canAccessPayroll: true,
-            employee: { select: { status: true } },
-          },
-        })
+      ? getPayrollUserContext(session.user.id)
       : Promise.resolve(null),
   ]);
 

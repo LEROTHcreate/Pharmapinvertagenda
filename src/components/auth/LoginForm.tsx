@@ -70,14 +70,14 @@ export function LoginForm({
       }
       // Connexion réussie → on signale au navigateur d'enregistrer l'identifiant.
       await storeCredential(email, password);
-      // Moment "WOW" : on affiche l'overlay ~1100 ms avant la redirection
-      // pour laisser le flash + confettis + check pop s'animer en entier.
+      // Overlay de succès bref (~650 ms : le check a le temps de "pop") puis
+      // redirection. Compromis perçu vitesse / feedback (était 1100 ms).
       onSuccess();
       const next = params.get("callbackUrl") ?? "/planning";
       setTimeout(() => {
         router.push(next);
         router.refresh();
-      }, 1100);
+      }, 650);
     });
   }
 
