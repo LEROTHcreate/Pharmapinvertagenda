@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Trash2, CalendarX, ThumbsDown, ThumbsUp } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +71,36 @@ export function TaskSelector({
   );
   const [scope, setScope] = useState<ApplyScope>("1"); // défaut : modification ponctuelle
 
+  // Souhait de disponibilité déclaré par l'employé pour CE jour — on avertit
+  // l'admin s'il planifie quelqu'un qui a posé une indisponibilité/préférence.
+  // Best-effort : si le fetch échoue, on n'affiche rien (bonus, pas bloquant).
+  const [wish, setWish] = useState<{
+    kind: "UNAVAILABLE" | "PREFER_OFF" | "PREFER_WORK";
+    note: string | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setWish(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/availability-wishes?scope=cell&employeeId=${encodeURIComponent(employee.id)}&date=${date}`
+        );
+        if (!res.ok) return;
+        const d = await res.json().catch(() => ({}));
+        if (!cancelled) setWish(d.wish ?? null);
+      } catch {
+        /* silencieux */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, employee.id, date]);
+
   // Fire-and-forget : le parent gère l'optimistic update + revert en cas d'erreur,
   // pas besoin d'attendre la réponse réseau ici. Le modal se ferme dès que
   // le parent met `selection=null` (synchrone, dans la même tick que l'appel).
@@ -120,6 +150,40 @@ export function TaskSelector({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Avertissement disponibilité déclarée par l'employé pour ce jour */}
+          {wish && (() => {
+            const cfg = {
+              UNAVAILABLE: {
+                Icon: CalendarX,
+                cls: "border-rose-200/70 bg-rose-50/70 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200",
+                iconCls: "text-rose-600 dark:text-rose-400",
+                label: `${employee.firstName} a déclaré une indisponibilité ce jour`,
+              },
+              PREFER_OFF: {
+                Icon: ThumbsDown,
+                cls: "border-amber-200/70 bg-amber-50/70 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200",
+                iconCls: "text-amber-600 dark:text-amber-400",
+                label: `${employee.firstName} préfère ne pas travailler ce jour`,
+              },
+              PREFER_WORK: {
+                Icon: ThumbsUp,
+                cls: "border-emerald-200/70 bg-emerald-50/70 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200",
+                iconCls: "text-emerald-600 dark:text-emerald-400",
+                label: `${employee.firstName} préfère travailler ce jour`,
+              },
+            }[wish.kind];
+            const Icon = cfg.Icon;
+            return (
+              <div className={cn("flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5", cfg.cls)}>
+                <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", cfg.iconCls)} />
+                <div className="min-w-0 text-[12.5px] leading-snug">
+                  <span className="font-medium">{cfg.label}</span>
+                  {wish.note && <span className="opacity-80"> — « {wish.note} »</span>}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Scope d'application : cette semaine ou répliquer sur N semaines */}
           <ApplyScopeSelector
             value={scope}
