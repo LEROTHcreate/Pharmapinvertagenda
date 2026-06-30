@@ -151,21 +151,27 @@ async function createAbsence(req: Request) {
           reviewedAt: new Date(),
         },
       });
-      // Convertit tous les TASK existants en ABSENCE sur la plage
+      // Convertit tous les créneaux existants en ABSENCE sur la plage.
+      // On SAUVEGARDE la tâche d'origine dans `previousTaskCode` (pour les
+      // TASK uniquement) afin de pouvoir la restaurer si l'absence est annulée
+      // — sinon l'annulation supprimerait les créneaux et perdrait le planning.
+      // (Boucle par ligne car `previousTaskCode` diffère d'un créneau à l'autre,
+      // ce que `updateMany` ne permet pas — cohérent avec le chemin d'approbation.)
       const existing = await tx.scheduleEntry.findMany({
         where: {
           employeeId: targetEmployee.id,
           date: { gte: dateStart, lte: dateEnd },
         },
-        select: { id: true },
+        select: { id: true, type: true, taskCode: true },
       });
-      if (existing.length > 0) {
-        await tx.scheduleEntry.updateMany({
-          where: { id: { in: existing.map((e) => e.id) } },
+      for (const e of existing) {
+        await tx.scheduleEntry.update({
+          where: { id: e.id },
           data: {
             type: "ABSENCE",
             taskCode: null,
             absenceCode: parsed.data.absenceCode,
+            ...(e.type === "TASK" ? { previousTaskCode: e.taskCode } : {}),
           },
         });
       }
