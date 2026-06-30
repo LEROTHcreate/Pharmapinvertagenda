@@ -31,14 +31,28 @@ export async function generateMetadata(): Promise<Metadata> {
   const session = await auth();
   if (!session?.user) return {};
   const pharmacy = await getPharmacyHeader(session.user.pharmacyId);
-  if (!pharmacy?.logoUrl) return {};
-  return {
-    icons: {
+  if (!pharmacy) return {};
+
+  const meta: Metadata = {
+    // Nom de l'officine dans l'onglet (différencie l'app connectée de la
+    // vitrine publique "PharmaPlanning"). Le template s'applique aux
+    // sous-pages qui définissent leur propre titre (ex: "Absences · Pharmacie X").
+    title: {
+      default: pharmacy.name,
+      template: `%s · ${pharmacy.name}`,
+    },
+  };
+
+  // Favicon personnalisé uniquement si l'officine a un logo custom ; sinon
+  // on hérite du favicon de marque PharmaPlanning (pas de croix cassée).
+  if (pharmacy.logoUrl) {
+    meta.icons = {
       icon: pharmacy.logoUrl,
       shortcut: pharmacy.logoUrl,
       apple: pharmacy.logoUrl,
-    },
-  };
+    };
+  }
+  return meta;
 }
 
 export default async function DashboardLayout({

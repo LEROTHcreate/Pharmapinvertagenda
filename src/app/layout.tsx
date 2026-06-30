@@ -36,6 +36,9 @@ export const metadata: Metadata = {
     icon: [
       { url: "/pharmaplanning-logo.svg", type: "image/svg+xml" },
       { url: "/pharmaplanning-logo.png", type: "image/png" },
+      // Fallback universel : satisfait la requête nue /favicon.ico et couvre
+      // Safari / vieux navigateurs qui gèrent mal les favicons SVG.
+      { url: "/favicon.ico", sizes: "any" },
     ],
     apple: "/pharmaplanning-apple-touch-icon.png",
     shortcut: "/pharmaplanning-logo.svg",

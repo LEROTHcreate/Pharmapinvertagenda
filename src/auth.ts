@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { AppSession } from "@/types/session";
@@ -38,8 +39,14 @@ const demoSession: AppSession = {
  * `users` (Prisma), liée par email. On applique le même gate qu'avant :
  * compte actif ET approuvé, sinon `null` (un compte PENDING/désactivé qui
  * aurait une session Supabase est traité comme non connecté).
+ *
+ * Mémoïsé par requête via `cache()` de React : sur une même navigation,
+ * `auth()` est appelé plusieurs fois (generateMetadata + layout + page).
+ * Sans cache, chaque appel refait un round-trip réseau `getUser()` vers
+ * Supabase Auth + une requête DB → latence inutile. `cache()` garantit
+ * un seul appel réel par requête serveur, partagé entre tous les appelants.
  */
-export async function auth(): Promise<AppSession | null> {
+export const auth = cache(async (): Promise<AppSession | null> => {
   if (isDemoMode) return demoSession;
 
   const supabase = createSupabaseServerClient();
@@ -68,4 +75,4 @@ export async function auth(): Promise<AppSession | null> {
     // indicative pour conserver la forme attendue par les consommateurs.
     expires: new Date(Date.now() + 86400000).toISOString(),
   };
-}
+});

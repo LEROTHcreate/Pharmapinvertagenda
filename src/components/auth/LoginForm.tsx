@@ -6,9 +6,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Check, Eye, EyeOff, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FloatingField } from "./FloatingField";
-import { LoginSuccessOverlay } from "./LoginSuccessOverlay";
 
-export function LoginForm() {
+/**
+ * `success` et `onSuccess` sont remontés au parent (LoginCard) : c'est lui qui
+ * affiche l'overlay de succès en enfant direct de la card (sans ancêtre
+ * transformé), pour qu'il couvre TOUTE la card et non juste la zone du form.
+ */
+export function LoginForm({
+  success,
+  onSuccess,
+}: {
+  success: boolean;
+  onSuccess: () => void;
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -16,9 +26,6 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  // True après une connexion réussie — déclenche l'overlay d'animation
-  // (rings + check + voile flou) ~800 ms avant la redirection vers /planning.
-  const [success, setSuccess] = useState(false);
 
   /**
    * Demande explicitement au navigateur d'enregistrer l'identifiant après une
@@ -65,7 +72,7 @@ export function LoginForm() {
       await storeCredential(email, password);
       // Moment "WOW" : on affiche l'overlay ~1100 ms avant la redirection
       // pour laisser le flash + confettis + check pop s'animer en entier.
-      setSuccess(true);
+      onSuccess();
       const next = params.get("callbackUrl") ?? "/planning";
       setTimeout(() => {
         router.push(next);
@@ -175,12 +182,6 @@ export function LoginForm() {
           Mot de passe oublié&nbsp;?
         </a>
       </div>
-
-      {/* Overlay plein écran qui apparaît brièvement (~800 ms) entre la
-          réussite de la connexion et la redirection. Donne un retour visuel
-          satisfaisant — voile flou + 3 anneaux émeraude + check qui se
-          dessine + texte "Connecté ✨". */}
-      {success && <LoginSuccessOverlay />}
     </form>
   );
 }
