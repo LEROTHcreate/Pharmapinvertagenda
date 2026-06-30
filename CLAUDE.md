@@ -86,10 +86,9 @@ pharma-planning/
 │   │   ├── utils.ts                   # Utilitaires généraux
 │   │   ├── planning-utils.ts          # Calculs heures, staffing, conflits
 │   │   └── export-xlsx.ts             # Génération Excel (exceljs)
-│   ├── hooks/
-│   │   ├── usePlanning.ts             # Hook principal planning (fetch + mutations)
-│   │   ├── useEmployees.ts
-│   │   └── useAbsences.ts
+│   │   (NB: pas de dossier src/hooks/ dédié pour l'instant — la logique
+│   │    planning (fetch + mutations optimistes) vit dans PlanningView.tsx +
+│   │    le store Zustand ci-dessous. À extraire en hooks si ça grossit.)
 │   ├── store/
 │   │   └── planning-store.ts          # Zustand store pour état local du planning
 │   ├── types/
@@ -255,9 +254,9 @@ const ROLE_SPECIFIC_TASKS: Record<EmployeeStatus, TaskCode[]> = {
   TITULAIRE:   ['COMPTOIR', 'PARAPHARMACIE', 'REUNION_FOURNISSEUR', 'LIVRAISON'],
   PREPARATEUR: ['COMPTOIR', 'PARAPHARMACIE', 'MAIL', 'MISE_A_PRIX', 'ROBOT'],
   ETUDIANT:    ['COMPTOIR'],
-  LIVREUR:     ['LIVRAISON', 'MISE_A_PRIX'],
-  BACK_OFFICE: ['COMMANDE', 'MISE_A_PRIX'],
-  SECRETAIRE:  ['SECRETARIAT', 'COMMANDE', 'MISE_A_PRIX'],
+  LIVREUR:     ['LIVRAISON', 'MISE_EN_RAYON', 'VERIFICATION_STOCKS'],
+  BACK_OFFICE: ['COMMANDE'],
+  SECRETAIRE:  ['SECRETARIAT', 'COMMANDE'],
 };
 
 // Liste complète des postes autorisés pour un rôle
@@ -386,7 +385,7 @@ NEXTAUTH_URL="http://localhost:3000"
 ## Notes pour Claude Code
 
 - Quand tu génères un composant, inclus toujours les types TypeScript.
-- Utilise `@tanstack/react-query` pour le data fetching côté client (ou SWR si tu préfères, mais reste cohérent).
+- Data fetching côté client : `fetch()` direct + mutations optimistes via le store **Zustand** (`src/store/planning-store.ts`). `@tanstack/react-query` est installé (provider en place) mais **non utilisé actuellement** — y recourir seulement si les besoins de cache client se complexifient (notifications, temps réel), en restant cohérent.
 - Les composants planning sont le cœur de l'app : priorise la performance (virtualisation si > 20 employés, `React.memo` sur les cellules).
 - Le planning doit être utilisable sur une tablette en pharmacie : touch-friendly, boutons assez grands.
 - Toujours gérer les états loading/error/empty dans les composants.
