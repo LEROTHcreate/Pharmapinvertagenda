@@ -83,8 +83,9 @@ export async function buildPayrollWorkbook(opts: {
   for (const l of lines) {
     const b = computeBenchmark({
       status: l.status,
-      hourlyGrossRate: l.hourlyGrossRate,
+      hourlyGrossRate: l.effectiveHourlyRate,
       seniorityMonths: l.seniorityMonths,
+      coefficient: l.coefficient,
       region,
       month,
     });
@@ -95,7 +96,8 @@ export async function buildPayrollWorkbook(opts: {
     row.getCell(2).value = STATUS_LABELS[l.status];
     row.getCell(3).value = b.coefficient;
     const rateCell = row.getCell(4);
-    rateCell.value = l.hourlyGrossRate ?? null;
+    // Taux effectif €/h (implicite en mode mensuel : salaire / h contractuelles)
+    rateCell.value = l.effectiveHourlyRate ?? null;
     rateCell.numFmt = EUR;
     if (b.legal === "below_min") {
       rateCell.font = { color: { argb: RED }, bold: true };

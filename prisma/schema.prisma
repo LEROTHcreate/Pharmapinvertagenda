@@ -116,6 +116,16 @@ model Pharmacy {
   // max 200KB) ou chemin relatif (ex: "/logo.png" pour les pharmacies
   // seedées). Null = fallback sur le logo générique PharmaPlanning.
   logoUrl   String?
+
+  // ─── Réglages Rémunération ─────────────────────────────────────────
+  // Région de référence pour le benchmark marché (NATIONAL, IDF,
+  // GRANDE_METROPOLE, PROVINCE, RURAL). Null = NATIONAL par défaut.
+  payrollRegion String?
+  // Taux de cotisations paramétrables (override des défauts 0.22 / 0.42).
+  // Null = on retombe sur DEFAULT_PAYROLL_RATES.
+  payrollContribEmployee Float? // Cotisations salariales (ex: 0.22)
+  payrollContribEmployer Float? // Cotisations patronales (ex: 0.42)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -199,6 +209,12 @@ model User {
 }
 
 /// Employé — profil métier (apparaît comme colonne dans le planning)
+/// Mode de rémunération d'un salarié.
+enum PayMode {
+  HOURLY  // Payé au taux horaire : heures travaillées × taux
+  MONTHLY // Mensualisé : salaire brut mensuel fixe (heures sup payées en plus)
+}
+
 model Employee {
   id           String         @id @default(cuid())
   firstName    String
@@ -210,11 +226,20 @@ model Employee {
   isActive     Boolean        @default(true)
   hireDate     DateTime?
 
-  // Taux horaire BRUT (€) — utilisé par le module /remuneration pour
-  // estimer le coût mensuel. Null tant que pas saisi par l'admin
-  // titulaire avec accès Rémunération. NB : ce n'est PAS un bulletin de
-  // paie légal (cf. clause d'avertissement sur la page).
-  hourlyGrossRate Float?
+  // ─── Rémunération (module /remuneration) ───────────────────────────
+  // Deux modes (payMode) :
+  //  - HOURLY  : on utilise hourlyGrossRate (€/h brut).
+  //  - MONTHLY : on utilise monthlyGrossSalary (€/mois brut, mensualisé).
+  //    Taux horaire implicite = monthlyGrossSalary / heures mensuelles
+  //    contractuelles (weeklyHours × 52/12). Les heures sup au-delà du
+  //    contrat sont payées EN PLUS du salaire mensuel.
+  // NB : ce n'est PAS un bulletin de paie légal (cf. avertissement page).
+  payMode            PayMode @default(HOURLY)
+  hourlyGrossRate    Float?  // Taux horaire brut (mode HOURLY)
+  monthlyGrossSalary Float?  // Salaire brut mensuel (mode MONTHLY)
+  // Coefficient conventionnel (grille pharmacie d'officine). Si renseigné,
+  // sert de base au benchmark à la place de l'estimation par ancienneté.
+  coefficient        Int?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 

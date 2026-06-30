@@ -1,11 +1,12 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { updatePharmacyInput, type UpdatePharmacyInput } from "@/validators/pharmacy";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
-import { isSuperAdmin } from "@/lib/payroll-permissions";
+import { canEditPayroll, isSuperAdmin } from "@/lib/payroll-permissions";
 import { uploadImageIfDataUrl } from "@/lib/storage";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -75,6 +76,70 @@ export async function updatePharmacy(input: UpdatePharmacyInput): Promise<Action
   // Le minStaff impacte la grille planning (couleurs effectif)
   revalidatePath("/planning");
 
+  return { ok: true };
+}
+
+/* ─── Réglages Rémunération ──────────────────────────────────────────
+   Région de référence pour le benchmark + taux de cotisations
+   paramétrables. Réservé aux admins autorisés au module Rémunération
+   (super-admin ou titulaire avec canAccessPayroll). Les taux sont stockés
+   en FRACTION (0.22 = 22 %). Null = on retombe sur les défauts du moteur. */
+const payrollSettingsInput = z.object({
+  payrollRegion: z
+    .enum(["NATIONAL", "IDF", "GRANDE_METROPOLE", "PROVINCE", "RURAL"])
+    .nullable(),
+  payrollContribEmployee: z.number().min(0).max(1).nullable(),
+  payrollContribEmployer: z.number().min(0).max(1).nullable(),
+});
+export type PayrollSettingsInput = z.infer<typeof payrollSettingsInput>;
+
+export async function updatePayrollSettings(
+  input: PayrollSettingsInput
+): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Non authentifié" };
+
+  // Autorisation pleine (mêmes règles que la page Rémunération).
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      role: true,
+      employeeId: true,
+      canAccessPayroll: true,
+      employee: { select: { status: true } },
+    },
+  });
+  if (
+    !me ||
+    !canEditPayroll({
+      role: me.role,
+      employeeId: me.employeeId,
+      canAccessPayroll: me.canAccessPayroll,
+      employeeStatus: me.employee?.status ?? null,
+    })
+  ) {
+    return { ok: false, error: "Accès au module Rémunération requis." };
+  }
+
+  const parsed = payrollSettingsInput.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Données invalides",
+    };
+  }
+
+  await prisma.pharmacy.update({
+    where: { id: session.user.pharmacyId },
+    data: {
+      payrollRegion: parsed.data.payrollRegion,
+      payrollContribEmployee: parsed.data.payrollContribEmployee,
+      payrollContribEmployer: parsed.data.payrollContribEmployer,
+    },
+  });
+
+  revalidatePath("/parametres");
+  revalidatePath("/remuneration");
   return { ok: true };
 }
 

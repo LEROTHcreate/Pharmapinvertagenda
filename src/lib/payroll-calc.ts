@@ -44,7 +44,7 @@
  * Sources : URSSAF, Service-Public.fr, Code du travail.
  */
 
-import { ScheduleType } from "@prisma/client";
+import { ScheduleType, type EmployeeStatus, type PayMode } from "@prisma/client";
 import type { ScheduleEntryDTO } from "@/types";
 
 const SLOT_HOURS = 0.5;
@@ -67,22 +67,49 @@ export const DEFAULT_PAYROLL_RATES = {
   sickMaintenanceMinSeniorityMonths: 12,
 } as const;
 
-export type PayrollRates = typeof DEFAULT_PAYROLL_RATES;
+export type PayrollRates = {
+  socialContributionsEmployee: number;
+  socialContributionsEmployer: number;
+  overtimePremium25: number;
+  overtimePremium50: number;
+  sickWaitingDays: number;
+  sickEmployerMaintenance: number;
+  sickMaintenanceMinSeniorityMonths: number;
+};
 
 export type EmployeeForPayroll = {
   id: string;
   firstName: string;
   lastName: string;
+  status: EmployeeStatus;
   weeklyHours: number;
+  /** Mode de rémunération : taux horaire OU salaire mensuel. */
+  payMode: PayMode;
   hourlyGrossRate: number | null;
+  monthlyGrossSalary: number | null;
+  /** Coefficient conventionnel saisi (null = estimé via ancienneté). */
+  coefficient: number | null;
   hireDate: Date | null;
 };
 
 export type PayrollLine = {
   employeeId: string;
   employeeName: string;
-  /** Taux horaire brut (€) — null si pas encore renseigné */
+  /** Statut métier (pour le benchmark sectoriel) */
+  status: EmployeeStatus;
+  /** Ancienneté en mois au 1er du mois analysé (pour l'échelon/coefficient) */
+  seniorityMonths: number;
+  /** Mode de rémunération appliqué */
+  payMode: PayMode;
+  /** Taux horaire brut saisi (€) — null en mode mensuel ou si non renseigné */
   hourlyGrossRate: number | null;
+  /** Salaire mensuel brut saisi (€) — null en mode horaire ou si non renseigné */
+  monthlyGrossSalary: number | null;
+  /** Taux horaire EFFECTIF utilisé (saisi en horaire, ou implicite =
+   *  salaire mensuel / heures mensuelles contractuelles). Sert au benchmark. */
+  effectiveHourlyRate: number | null;
+  /** Coefficient saisi (null si estimé via ancienneté côté benchmark) */
+  coefficient: number | null;
 
   // ─── Heures du mois ventilées ──────────────────────────────────────
   /** Heures TASK travaillées dans le mois (hors heures sup) */
@@ -118,6 +145,8 @@ export type PayrollLine = {
   socialContributionsEmployer: number;
   /** Coût total pour l'officine (brut + patronales) */
   totalEmployerCost: number;
+  /** Surcoût € dû AUX MAJORATIONS d'heures sup (part +25/+50 seule, hors base) */
+  overtimePremiumCost: number;
 };
 
 /**
@@ -229,21 +258,56 @@ export function computePayrollLine(
   const taskHoursRegular = taskHours - overtimeTotal;
 
   // ─── Montants ──────────────────────────────────────────────────────
-  const baseRate = rate ?? 0;
+  // Taux horaire EFFECTIF selon le mode de rémunération :
+  //  - MONTHLY : salaire mensuel ÷ heures mensuelles contractuelles
+  //              (respecte donc le contrat 30h/35h/… via contractMonthlyHours)
+  //  - HOURLY  : taux horaire saisi
+  const isMonthly =
+    employee.payMode === "MONTHLY" && employee.monthlyGrossSalary != null;
+  const baseRate = isMonthly
+    ? contractMonthlyHours > 0
+      ? (employee.monthlyGrossSalary as number) / contractMonthlyHours
+      : 0
+    : rate ?? 0;
   const grossRegular = taskHoursRegular * baseRate;
   const grossOT25 = overtimeHours25 * baseRate * (1 + rates.overtimePremium25);
   const grossOT50 = overtimeHours50 * baseRate * (1 + rates.overtimePremium50);
+  // Surcoût des majorations seul (la part au-delà du taux de base) — sert à
+  // chiffrer ce que coûtent réellement les heures sup vs un volume contractuel.
+  const overtimePremiumCost =
+    overtimeHours25 * baseRate * rates.overtimePremium25 +
+    overtimeHours50 * baseRate * rates.overtimePremium50;
   const grossLeave = leaveSlots * SLOT_HOURS * baseRate;
   const grossTraining = trainingSlots * SLOT_HOURS * baseRate;
   const grossSickEmployer = sickEmployerSlots * SLOT_HOURS * baseRate;
 
-  const grossEmployer =
-    grossRegular +
-    grossOT25 +
-    grossOT50 +
-    grossLeave +
-    grossTraining +
-    grossSickEmployer;
+  let grossEmployer: number;
+  if (isMonthly) {
+    // Mensualisé : la base est le salaire mensuel FIXE (congés payés et
+    // formation déjà inclus dans ce salaire maintenu). On déduit uniquement
+    // les absences NON maintenues : ABSENT + jours de carence maladie en
+    // entier, et la part non maintenue de la maladie post-carence (IJSS CPAM).
+    // Les heures sup au-delà du contrat sont ajoutées EN PLUS.
+    const postCarenceDeductRate = eligibleForEmployerMaintenance
+      ? 1 - rates.sickEmployerMaintenance
+      : 1;
+    const unpaidDeduction =
+      (unpaidAbsenceSlots + sickSlotsWaiting) * SLOT_HOURS * baseRate +
+      sickSlotsAfterWaiting * SLOT_HOURS * baseRate * postCarenceDeductRate;
+    grossEmployer =
+      Math.max(0, (employee.monthlyGrossSalary as number) - unpaidDeduction) +
+      grossOT25 +
+      grossOT50;
+  } else {
+    // Au taux horaire : on paie chaque catégorie d'heures au taux.
+    grossEmployer =
+      grossRegular +
+      grossOT25 +
+      grossOT50 +
+      grossLeave +
+      grossTraining +
+      grossSickEmployer;
+  }
 
   const socialContributionsEmployee =
     grossEmployer * rates.socialContributionsEmployee;
@@ -255,7 +319,13 @@ export function computePayrollLine(
   return {
     employeeId: employee.id,
     employeeName: fullName,
+    status: employee.status,
+    seniorityMonths,
+    payMode: employee.payMode,
     hourlyGrossRate: rate,
+    monthlyGrossSalary: employee.monthlyGrossSalary,
+    effectiveHourlyRate: isMonthly ? round2(baseRate) : rate,
+    coefficient: employee.coefficient,
     taskHoursRegular,
     overtimeHours25,
     overtimeHours50,
@@ -270,6 +340,7 @@ export function computePayrollLine(
     netEstimated: round2(netEstimated),
     socialContributionsEmployer: round2(socialContributionsEmployer),
     totalEmployerCost: round2(totalEmployerCost),
+    overtimePremiumCost: round2(overtimePremiumCost),
   };
 }
 

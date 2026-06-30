@@ -1,14 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Info, Loader2, Pencil, Save, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Info,
+  Lightbulb,
+  Loader2,
+  MapPin,
+  Minus,
+  Pencil,
+  Save,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import type { EmployeeStatus } from "@prisma/client";
+import { computeBenchmark, type Benchmark } from "@/lib/payroll-benchmark";
+import { computeInsights, type Insight } from "@/lib/payroll-insights";
+import {
+  REFERENCE_META,
+  REGION_LABELS,
+  type Region,
+} from "@/lib/payroll-reference";
 
 type Line = {
   employeeId: string;
   employeeName: string;
+  status: EmployeeStatus;
+  seniorityMonths: number;
+  payMode: "HOURLY" | "MONTHLY";
   hourlyGrossRate: number | null;
+  monthlyGrossSalary: number | null;
+  effectiveHourlyRate: number | null;
+  coefficient: number | null;
   taskHoursRegular: number;
   overtimeHours25: number;
   overtimeHours50: number;
@@ -23,7 +53,17 @@ type Line = {
   netEstimated: number;
   socialContributionsEmployer: number;
   totalEmployerCost: number;
+  overtimePremiumCost: number;
 };
+
+const REGION_KEY = "pp_payroll_region";
+const REGIONS: Region[] = [
+  "NATIONAL",
+  "IDF",
+  "GRANDE_METROPOLE",
+  "PROVINCE",
+  "RURAL",
+];
 
 type Totals = {
   grossEmployer: number;
@@ -53,6 +93,51 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
   const [loading, setLoading] = useState(true);
   const [lines, setLines] = useState<Line[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
+  // Région choisie pour le benchmark marché (persistée localement).
+  const [region, setRegion] = useState<Region>("NATIONAL");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(REGION_KEY) as Region | null;
+    if (saved && saved in REGION_LABELS) setRegion(saved);
+  }, []);
+  const changeRegion = useCallback((r: Region) => {
+    setRegion(r);
+    try {
+      window.localStorage.setItem(REGION_KEY, r);
+    } catch {
+      /* localStorage indispo — non bloquant */
+    }
+  }, []);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(
+        `/api/payroll/export?month=${month}&region=${region}`
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({
+          tone: "error",
+          title: "Export impossible",
+          description: data.error ?? "Erreur lors de la génération du fichier",
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `remuneration_${month}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }, [month, region, toast]);
 
   const fetchPayroll = useCallback(
     async (m: string) => {
@@ -71,6 +156,16 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         const data = await res.json();
         setLines(data.lines);
         setTotals(data.totals);
+        // Région : si l'utilisateur n'a pas de préférence locale, on adopte
+        // celle réglée au niveau de la pharmacie (renvoyée par l'API).
+        if (
+          typeof window !== "undefined" &&
+          !window.localStorage.getItem(REGION_KEY) &&
+          data.region &&
+          data.region in REGION_LABELS
+        ) {
+          setRegion(data.region as Region);
+        }
       } finally {
         setLoading(false);
       }
@@ -81,6 +176,49 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
   useEffect(() => {
     fetchPayroll(month);
   }, [month, fetchPayroll]);
+
+  // Benchmark par salarié (métier × ancienneté → coefficient, ajusté région).
+  const benchmarks = useMemo(() => {
+    const m = new Map<string, Benchmark>();
+    for (const l of lines) {
+      m.set(
+        l.employeeId,
+        computeBenchmark({
+          status: l.status,
+          hourlyGrossRate: l.effectiveHourlyRate,
+          seniorityMonths: l.seniorityMonths,
+          coefficient: l.coefficient,
+          region,
+          month,
+        })
+      );
+    }
+    return m;
+  }, [lines, region, month]);
+
+  // Recommandations agrégées (« comment mieux faire »).
+  const insights = useMemo(() => {
+    return computeInsights(
+      lines.map((l) => ({
+        employeeName: l.employeeName,
+        hourlyGrossRate: l.hourlyGrossRate,
+        grossEmployer: l.grossEmployer,
+        totalEmployerCost: l.totalEmployerCost,
+        overtimeHours: l.overtimeHours25 + l.overtimeHours50,
+        overtimePremiumCost: l.overtimePremiumCost,
+        benchmark:
+          benchmarks.get(l.employeeId) ??
+          computeBenchmark({
+            status: l.status,
+            hourlyGrossRate: l.effectiveHourlyRate,
+            seniorityMonths: l.seniorityMonths,
+            coefficient: l.coefficient,
+            region,
+            month,
+          }),
+      }))
+    );
+  }, [lines, benchmarks, region, month]);
 
   return (
     <div className="p-3 md:p-4 space-y-4">
@@ -95,6 +233,22 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
+          {/* Sélecteur de région — ajuste la moyenne marché du benchmark */}
+          <label className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 h-9 text-[12.5px]">
+            <MapPin className="h-3.5 w-3.5 text-violet-500" />
+            <select
+              value={region}
+              onChange={(e) => changeRegion(e.target.value as Region)}
+              aria-label="Région pour le benchmark"
+              className="bg-transparent outline-none font-medium text-foreground/80 cursor-pointer pr-1"
+            >
+              {REGIONS.map((r) => (
+                <option key={r} value={r}>
+                  {REGION_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5">
             <button
               onClick={() => setMonth((m) => shiftMonth(m, -1))}
@@ -122,6 +276,20 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
+          {/* Export Excel — récap mensuel + masse salariale pour le comptable */}
+          <button
+            onClick={handleExport}
+            disabled={exporting || lines.length === 0}
+            title="Télécharger la rémunération du mois au format Excel"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 h-9 text-[12.5px] font-medium text-foreground/80 hover:bg-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Excel
+          </button>
         </div>
       </header>
 
@@ -149,6 +317,23 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         </div>
       )}
 
+      {/* Recommandations — « comment mieux faire » */}
+      {!loading && lines.length > 0 && insights.insights.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-violet-600" />
+            <h2 className="text-[13px] font-semibold text-zinc-800">
+              Recommandations
+            </h2>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {insights.insights.map((ins) => (
+              <InsightCard key={ins.id} insight={ins} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tableau des lignes */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         {loading ? (
@@ -165,7 +350,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
               <thead className="bg-zinc-50/60 text-[10.5px] font-semibold uppercase tracking-wide text-zinc-600">
                 <tr>
                   <th className="text-left px-3 py-2.5">Employé</th>
-                  <th className="text-right px-3 py-2.5">Taux €/h</th>
+                  <th className="text-right px-3 py-2.5">Rémunération</th>
                   <th className="text-right px-3 py-2.5">H trav.</th>
                   <th className="text-right px-3 py-2.5">H sup</th>
                   <th className="text-right px-3 py-2.5">Congés</th>
@@ -173,6 +358,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
                   <th className="text-right px-3 py-2.5">Brut</th>
                   <th className="text-right px-3 py-2.5">Net est.</th>
                   <th className="text-right px-3 py-2.5">Coût total</th>
+                  <th className="text-center px-3 py-2.5">Marché</th>
                 </tr>
               </thead>
               <tbody>
@@ -180,6 +366,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
                   <PayrollRow
                     key={l.employeeId}
                     line={l}
+                    benchmark={benchmarks.get(l.employeeId)}
                     onRateUpdated={() => fetchPayroll(month)}
                   />
                 ))}
@@ -193,8 +380,67 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         * Maladie = heures payées par l'employeur après 3 jours de carence (sous condition d'ancienneté ≥ 1 an,
         Convention Pharmacie d'Officine). Les IJSS de la CPAM ne figurent pas dans le coût employeur.
       </p>
+
+      {/* Fraîcheur des données de référence (benchmark) */}
+      <div className="rounded-xl bg-zinc-50/70 px-3 py-2.5 text-[11px] text-zinc-500 leading-relaxed">
+        <span className="font-medium text-zinc-600">Données de référence</span> —
+        Minimum conventionnel calculé sur la {REFERENCE_META.conventionName} (valeur
+        du point datée) ; le coefficient affiché est <strong>estimé via l'ancienneté</strong> et
+        peut différer de l'échelon réel. Moyennes marché &amp; écarts régionaux : indicatifs,
+        à fin de comparaison. À jour au {fmtDate(REFERENCE_META.lastReviewed)}. Sources :{" "}
+        {REFERENCE_META.sources.join(", ")}.
+      </div>
     </div>
   );
+}
+
+/* ─── Carte de recommandation ───────────────────────────────────────── */
+function InsightCard({ insight }: { insight: Insight }) {
+  const cfg = {
+    critical: {
+      wrap: "border-red-200/70 bg-red-50/70",
+      icon: <AlertTriangle className="h-4 w-4 text-red-600" />,
+      title: "text-red-900",
+    },
+    warning: {
+      wrap: "border-amber-200/70 bg-amber-50/70",
+      icon: <AlertTriangle className="h-4 w-4 text-amber-600" />,
+      title: "text-amber-900",
+    },
+    info: {
+      wrap: "border-sky-200/60 bg-sky-50/60",
+      icon: <Info className="h-4 w-4 text-sky-600" />,
+      title: "text-sky-900",
+    },
+    positive: {
+      wrap: "border-emerald-200/60 bg-emerald-50/60",
+      icon: <Check className="h-4 w-4 text-emerald-600" />,
+      title: "text-emerald-900",
+    },
+  }[insight.tone];
+
+  return (
+    <div className={cn("rounded-2xl border p-3 flex items-start gap-2.5", cfg.wrap)}>
+      <div className="mt-0.5 shrink-0">{cfg.icon}</div>
+      <div className="min-w-0">
+        <p className={cn("text-[12.5px] font-semibold leading-snug", cfg.title)}>
+          {insight.title}
+        </p>
+        <p className="mt-0.5 text-[11.5px] text-zinc-600 leading-relaxed">
+          {insight.detail}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function fmtDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function TotalCard({
@@ -228,36 +474,78 @@ function TotalCard({
 
 function PayrollRow({
   line,
+  benchmark,
   onRateUpdated,
 }: {
   line: Line;
+  benchmark?: Benchmark;
   onRateUpdated: () => void;
 }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<string>(
-    line.hourlyGrossRate != null ? String(line.hourlyGrossRate) : ""
-  );
+  const [mode, setMode] = useState<"HOURLY" | "MONTHLY">(line.payMode);
+  const [val, setVal] = useState("");
+  const [coeff, setCoeff] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function saveRate() {
-    const trimmed = draft.trim().replace(",", ".");
-    const value = trimmed === "" ? null : Number(trimmed);
-    if (value !== null && (Number.isNaN(value) || value < 0 || value > 200)) {
+  function startEdit() {
+    setMode(line.payMode);
+    setVal(
+      line.payMode === "MONTHLY"
+        ? line.monthlyGrossSalary != null
+          ? String(line.monthlyGrossSalary)
+          : ""
+        : line.hourlyGrossRate != null
+          ? String(line.hourlyGrossRate)
+          : ""
+    );
+    setCoeff(line.coefficient != null ? String(line.coefficient) : "");
+    setEditing(true);
+  }
+
+  async function saveComp() {
+    const raw = val.trim().replace(",", ".");
+    const value = raw === "" ? null : Number(raw);
+    const maxV = mode === "MONTHLY" ? 50000 : 200;
+    if (value !== null && (Number.isNaN(value) || value < 0 || value > maxV)) {
       toast({
         tone: "error",
-        title: "Taux invalide",
-        description: "Saisis un nombre entre 0 et 200 €.",
+        title: "Valeur invalide",
+        description:
+          mode === "MONTHLY"
+            ? "Salaire mensuel entre 0 et 50 000 €."
+            : "Taux horaire entre 0 et 200 €.",
+      });
+      return;
+    }
+    const coeffRaw = coeff.trim();
+    const coeffVal = coeffRaw === "" ? null : Number(coeffRaw);
+    if (
+      coeffVal !== null &&
+      (!Number.isInteger(coeffVal) || coeffVal < 0 || coeffVal > 2000)
+    ) {
+      toast({
+        tone: "error",
+        title: "Coefficient invalide",
+        description: "Entier entre 0 et 2000 (laisser vide pour estimer).",
       });
       return;
     }
     setBusy(true);
     try {
-      const res = await fetch(`/api/employees/${line.employeeId}/hourly-rate`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ hourlyGrossRate: value }),
-      });
+      const res = await fetch(
+        `/api/employees/${line.employeeId}/compensation`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            payMode: mode,
+            hourlyGrossRate: mode === "HOURLY" ? value : null,
+            monthlyGrossSalary: mode === "MONTHLY" ? value : null,
+            coefficient: coeffVal,
+          }),
+        }
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast({
@@ -275,47 +563,92 @@ function PayrollRow({
   }
 
   const overtime = line.overtimeHours25 + line.overtimeHours50;
+  const belowMin = benchmark?.legal === "below_min";
 
   return (
     <tr className="border-t border-border hover:bg-zinc-50/40 transition-colors">
       <td className="px-3 py-2 font-medium text-zinc-900">{line.employeeName}</td>
-      <td className="px-3 py-2 text-right">
+      <td className="px-3 py-2 text-right align-top">
         {editing ? (
-          <div className="inline-flex items-center gap-1">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              autoFocus
-              className="w-16 rounded border border-zinc-300 px-2 py-0.5 text-right text-[12.5px] font-mono"
-            />
-            <button
-              onClick={saveRate}
-              disabled={busy}
-              className="rounded p-1 text-emerald-700 hover:bg-emerald-50"
-              title="Enregistrer"
-            >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            </button>
-            <button
-              onClick={() => {
-                setDraft(line.hourlyGrossRate != null ? String(line.hourlyGrossRate) : "");
-                setEditing(false);
-              }}
-              className="rounded p-1 text-zinc-500 hover:bg-zinc-100"
-              title="Annuler"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+          <div className="inline-flex flex-col items-stretch gap-1 text-left min-w-[150px]">
+            {/* Bascule mode horaire / mensuel */}
+            <div className="inline-flex self-start rounded-md border border-zinc-300 overflow-hidden text-[10px] font-medium">
+              <button
+                type="button"
+                onClick={() => setMode("HOURLY")}
+                className={cn(
+                  "px-2 py-0.5",
+                  mode === "HOURLY" ? "bg-violet-600 text-white" : "text-zinc-600 hover:bg-zinc-100"
+                )}
+              >
+                €/h
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("MONTHLY")}
+                className={cn(
+                  "px-2 py-0.5 border-l border-zinc-300",
+                  mode === "MONTHLY" ? "bg-violet-600 text-white" : "text-zinc-600 hover:bg-zinc-100"
+                )}
+              >
+                €/mois
+              </button>
+            </div>
+            <div className="inline-flex items-center gap-1">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={val}
+                onChange={(e) => setVal(e.target.value)}
+                autoFocus
+                placeholder={mode === "MONTHLY" ? "€/mois" : "€/h"}
+                className="w-20 rounded border border-zinc-300 px-2 py-0.5 text-right text-[12.5px] font-mono"
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={coeff}
+                onChange={(e) => setCoeff(e.target.value)}
+                placeholder="Coeff."
+                title="Coefficient conventionnel (optionnel — laisser vide pour estimer via l'ancienneté)"
+                className="w-14 rounded border border-zinc-300 px-2 py-0.5 text-right text-[12.5px] font-mono"
+              />
+            </div>
+            <div className="inline-flex items-center gap-1 self-end">
+              <button
+                onClick={saveComp}
+                disabled={busy}
+                className="rounded p-1 text-emerald-700 hover:bg-emerald-50"
+                title="Enregistrer"
+              >
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="rounded p-1 text-zinc-500 hover:bg-zinc-100"
+                title="Annuler"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         ) : (
           <button
-            onClick={() => setEditing(true)}
-            className="inline-flex items-center gap-1 font-mono tabular-nums hover:text-violet-700"
-            title="Cliquer pour modifier"
+            onClick={startEdit}
+            className={cn(
+              "inline-flex items-center gap-1 font-mono tabular-nums hover:text-violet-700",
+              belowMin && "text-red-600 font-semibold"
+            )}
+            title={
+              belowMin
+                ? `Sous le minimum conventionnel (${benchmark?.minHourly.toFixed(2)} €/h pour le coeff. ${benchmark?.coefficient}). Cliquer pour corriger.`
+                : line.payMode === "MONTHLY" && line.effectiveHourlyRate != null
+                  ? `≈ ${line.effectiveHourlyRate.toFixed(2)} €/h · cliquer pour modifier`
+                  : "Cliquer pour modifier"
+            }
           >
-            {line.hourlyGrossRate != null ? `${line.hourlyGrossRate.toFixed(2)} €` : "—"}
+            {belowMin && <AlertTriangle className="h-3 w-3 text-red-600" />}
+            {compLabel(line)}
             <Pencil className="h-3 w-3 opacity-50" />
           </button>
         )}
@@ -353,7 +686,69 @@ function PayrollRow({
       <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold text-violet-900">
         {fmt(line.totalEmployerCost)}
       </td>
+      <td className="px-3 py-2 text-center">
+        {benchmark ? <BenchmarkChip benchmark={benchmark} /> : <span className="text-zinc-400">—</span>}
+      </td>
     </tr>
+  );
+}
+
+/* ─── Pastille de position marché / conformité ──────────────────────── */
+function BenchmarkChip({ benchmark: b }: { benchmark: Benchmark }) {
+  // Priorité visuelle : alerte légale d'abord (sous le minimum conventionnel).
+  if (b.legal === "below_min") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-semibold text-red-700"
+        title={`Sous le minimum conventionnel : ${b.minHourly.toFixed(2)} €/h requis (coeff. ${b.coefficient} · ${b.coefficientLabel}).`}
+      >
+        <AlertTriangle className="h-3 w-3" />
+        Sous minimum
+      </span>
+    );
+  }
+  if (b.market === "na" || b.marketHourly == null) {
+    return (
+      <span className="text-[10.5px] text-zinc-400" title="Pas de référence marché salariée">
+        n/a
+      </span>
+    );
+  }
+  const cfg = {
+    under: {
+      cls: "bg-amber-100 text-amber-700",
+      icon: <TrendingDown className="h-3 w-3" />,
+      label: "Sous marché",
+    },
+    aligned: {
+      cls: "bg-emerald-100 text-emerald-700",
+      icon: <Minus className="h-3 w-3" />,
+      label: "Aligné",
+    },
+    above: {
+      cls: "bg-sky-100 text-sky-700",
+      icon: <TrendingUp className="h-3 w-3" />,
+      label: "Au-dessus",
+    },
+  }[b.market];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
+        cfg.cls
+      )}
+      title={
+        `Coeff. estimé ${b.coefficient} (${b.coefficientLabel}) · ` +
+        `min. conv. ${b.minHourly.toFixed(2)} €/h · ` +
+        `moyenne marché ${b.marketHourly.toFixed(2)} €/h` +
+        (b.marketGapPct != null
+          ? ` · écart ${b.marketGapPct > 0 ? "+" : ""}${b.marketGapPct}%`
+          : "")
+      }
+    >
+      {cfg.icon}
+      {cfg.label}
+    </span>
   );
 }
 
@@ -362,4 +757,16 @@ function fmt(n: number): string {
     style: "currency",
     currency: "EUR",
   }).format(n);
+}
+
+/** Libellé compact de la rémunération selon le mode (horaire / mensuel). */
+function compLabel(line: Line): string {
+  if (line.payMode === "MONTHLY") {
+    return line.monthlyGrossSalary != null
+      ? `${new Intl.NumberFormat("fr-FR").format(Math.round(line.monthlyGrossSalary))} €/mois`
+      : "—";
+  }
+  return line.hourlyGrossRate != null
+    ? `${line.hourlyGrossRate.toFixed(2)} €/h`
+    : "—";
 }

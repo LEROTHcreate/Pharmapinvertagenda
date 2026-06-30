@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
-import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canViewPayroll } from "@/lib/payroll-permissions";
@@ -10,31 +9,25 @@ import {
   type EmployeeForPayroll,
   type PayrollRates,
 } from "@/lib/payroll-calc";
+import { buildPayrollWorkbook } from "@/lib/export-payroll-xlsx";
+import { REGION_LABELS, type Region } from "@/lib/payroll-reference";
 import { toIsoDate } from "@/lib/planning-utils";
 import type { ScheduleEntryDTO } from "@/types";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
- * GET /api/payroll?month=YYYY-MM
- *
- * Renvoie les lignes de rémunération calculées pour le mois demandé.
- * Réservé aux super-admins + admins titulaires avec accès payroll.
- *
- * Sécurité multi-tenant : la requête ne lit QUE les Employee + ScheduleEntry
- * de la pharmacie de l'utilisateur connecté (filtre pharmacyId systématique).
+ * GET /api/payroll/export?month=YYYY-MM&region=IDF
+ * Génère le classeur Excel de la rémunération du mois (masse salariale +
+ * détail par salarié + benchmark). Mêmes droits que la page Rémunération.
  */
-const querySchema = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/, "Format attendu : YYYY-MM"),
-});
-
 async function GET__impl(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Vérifie le rôle + le statut de l'Employee lié pour le filtrage titulaire
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
@@ -57,20 +50,30 @@ async function GET__impl(req: Request) {
   }
 
   const url = new URL(req.url);
-  const parsed = querySchema.safeParse({ month: url.searchParams.get("month") });
-  if (!parsed.success) {
+  const month = url.searchParams.get("month") ?? "";
+  if (!/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json(
-      { error: "Paramètre 'month' invalide (format YYYY-MM)" },
+      { error: "Paramètre 'month' invalide (YYYY-MM)" },
       { status: 400 }
     );
   }
+  const regionParam = url.searchParams.get("region") ?? "NATIONAL";
+  const region: Region =
+    regionParam in REGION_LABELS ? (regionParam as Region) : "NATIONAL";
 
-  const [year, monthNum] = parsed.data.month.split("-").map(Number);
+  const [year, monthNum] = month.split("-").map(Number);
   const monthStart = new Date(Date.UTC(year, monthNum - 1, 1));
-  const monthEnd = new Date(Date.UTC(year, monthNum, 0)); // Dernier jour du mois
+  const monthEnd = new Date(Date.UTC(year, monthNum, 0));
 
-  // ─── Charge employés actifs + entrées du mois + réglages (parallèle) ─
-  const [employees, entries, pharmacy] = await Promise.all([
+  const [pharmacy, employees, entries] = await Promise.all([
+    prisma.pharmacy.findUnique({
+      where: { id: session.user.pharmacyId },
+      select: {
+        name: true,
+        payrollContribEmployee: true,
+        payrollContribEmployer: true,
+      },
+    }),
     prisma.employee.findMany({
       where: { pharmacyId: session.user.pharmacyId, isActive: true },
       orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
@@ -78,13 +81,13 @@ async function GET__impl(req: Request) {
         id: true,
         firstName: true,
         lastName: true,
+        status: true,
         weeklyHours: true,
         payMode: true,
         hourlyGrossRate: true,
         monthlyGrossSalary: true,
         coefficient: true,
         hireDate: true,
-        status: true,
       },
     }),
     prisma.scheduleEntry.findMany({
@@ -101,33 +104,13 @@ async function GET__impl(req: Request) {
         absenceCode: true,
       },
     }),
-    prisma.pharmacy.findUnique({
-      where: { id: session.user.pharmacyId },
-      select: {
-        payrollRegion: true,
-        payrollContribEmployee: true,
-        payrollContribEmployer: true,
-      },
-    }),
   ]);
 
-  // Taux de cotisations : réglages pharmacie si présents, sinon défauts.
-  const rates: PayrollRates = {
-    ...DEFAULT_PAYROLL_RATES,
-    socialContributionsEmployee:
-      pharmacy?.payrollContribEmployee ??
-      DEFAULT_PAYROLL_RATES.socialContributionsEmployee,
-    socialContributionsEmployer:
-      pharmacy?.payrollContribEmployer ??
-      DEFAULT_PAYROLL_RATES.socialContributionsEmployer,
-  };
-
-  // Index entries par employé pour calcul rapide
   const entriesByEmp = new Map<string, ScheduleEntryDTO[]>();
   for (const e of entries) {
     const arr = entriesByEmp.get(e.employeeId) ?? [];
     arr.push({
-      id: "", // pas utile pour le calcul
+      id: "",
       employeeId: e.employeeId,
       date: toIsoDate(e.date),
       timeSlot: e.timeSlot,
@@ -138,6 +121,16 @@ async function GET__impl(req: Request) {
     });
     entriesByEmp.set(e.employeeId, arr);
   }
+
+  const rates: PayrollRates = {
+    ...DEFAULT_PAYROLL_RATES,
+    socialContributionsEmployee:
+      pharmacy?.payrollContribEmployee ??
+      DEFAULT_PAYROLL_RATES.socialContributionsEmployee,
+    socialContributionsEmployer:
+      pharmacy?.payrollContribEmployer ??
+      DEFAULT_PAYROLL_RATES.socialContributionsEmployer,
+  };
 
   const lines = employees.map((emp) => {
     const empForCalc: EmployeeForPayroll = {
@@ -160,38 +153,23 @@ async function GET__impl(req: Request) {
     );
   });
 
-  // Total agrégé pour le récap
-  const totals = lines.reduce(
-    (acc, l) => ({
-      grossEmployer: acc.grossEmployer + l.grossEmployer,
-      netEstimated: acc.netEstimated + l.netEstimated,
-      socialContributionsEmployer:
-        acc.socialContributionsEmployer + l.socialContributionsEmployer,
-      totalEmployerCost: acc.totalEmployerCost + l.totalEmployerCost,
-    }),
-    {
-      grossEmployer: 0,
-      netEstimated: 0,
-      socialContributionsEmployer: 0,
-      totalEmployerCost: 0,
-    }
-  );
-
-  return NextResponse.json({
-    month: parsed.data.month,
-    region: pharmacy?.payrollRegion ?? "NATIONAL",
+  const buffer = await buildPayrollWorkbook({
+    pharmacyName: pharmacy?.name ?? "Pharmacie",
+    month,
+    region,
     lines,
-    totals: {
-      grossEmployer: round2(totals.grossEmployer),
-      netEstimated: round2(totals.netEstimated),
-      socialContributionsEmployer: round2(totals.socialContributionsEmployer),
-      totalEmployerCost: round2(totals.totalEmployerCost),
+  });
+
+  const filename = `remuneration_${month}.xlsx`;
+  return new NextResponse(new Uint8Array(buffer), {
+    status: 200,
+    headers: {
+      "content-type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "content-disposition": `attachment; filename="${filename}"`,
+      "cache-control": "no-store",
     },
   });
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
 }
 
 export const GET = withErrorHandling(GET__impl);
