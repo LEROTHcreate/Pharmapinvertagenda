@@ -537,6 +537,7 @@ export const PlanningGrid = memo(function PlanningGrid({
       <div className="overflow-x-auto scrollbar-thin overscroll-x-contain">
         <table
           data-density={density}
+          aria-label="Grille de planning de l'équipe"
           // Variables CSS responsive : largeur de colonne employé + colonne
           // heure + colonne effectif. Sur mobile on réduit fortement pour
           // tenir tout le planning dans la largeur d'écran (vue d'ensemble),

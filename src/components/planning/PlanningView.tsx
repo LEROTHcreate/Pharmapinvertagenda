@@ -1558,7 +1558,7 @@ export function PlanningView({
           <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5 ml-1">
             <button
               onClick={() => navigateWeek(-1)}
-              className="h-7 w-7 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-accent/60 transition-colors"
+              className="h-8 w-8 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-accent/60 transition-colors"
               aria-label="Semaine précédente"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -1566,7 +1566,7 @@ export function PlanningView({
             <button
               onClick={goToCurrentWeek}
               className={cn(
-                "h-7 px-3 rounded-full text-[12px] font-medium transition-colors",
+                "h-8 px-3 rounded-full text-[12px] font-medium transition-colors",
                 isCurrentWeek
                   ? "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
                   : "text-foreground/80 hover:bg-accent/60"
@@ -1581,7 +1581,7 @@ export function PlanningView({
             </button>
             <button
               onClick={() => navigateWeek(1)}
-              className="h-7 w-7 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-accent/60 transition-colors"
+              className="h-8 w-8 rounded-full inline-flex items-center justify-center text-foreground/70 hover:bg-accent/60 transition-colors"
               aria-label="Semaine suivante"
             >
               <ChevronRight className="h-4 w-4" />

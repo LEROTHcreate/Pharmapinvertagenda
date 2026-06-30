@@ -383,7 +383,7 @@ export function MobileWeekView({
                     {Math.abs(delta) >= 0.5 && (
                       <div
                         className={cn(
-                          "mt-0.5 text-[9px] font-medium leading-none tabular-nums",
+                          "mt-0.5 text-[10px] font-medium leading-none tabular-nums",
                           delta > 0 ? "text-rose-600" : "text-amber-600"
                         )}
                       >
