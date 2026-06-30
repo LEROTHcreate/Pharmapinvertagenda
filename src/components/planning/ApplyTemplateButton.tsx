@@ -61,6 +61,17 @@ export function ApplyTemplateButton({
   const [s1Id, setS1Id] = useState<string | null>(null);
   const [s2Id, setS2Id] = useState<string | null>(null);
   const [duration, setDuration] = useState<number>(1);
+  // Étape de confirmation pour les applications massives/destructrices.
+  const [confirmStep, setConfirmStep] = useState(false);
+
+  // Une application est "à risque" si elle couvre une longue période OU écrase
+  // des modifs OU supprime des absences → on exige une confirmation explicite.
+  const needsConfirm = duration >= 12 || overwrite || deleteAbsences;
+
+  // Toute modification des paramètres réinitialise l'étape de confirmation.
+  useEffect(() => {
+    setConfirmStep(false);
+  }, [duration, overwrite, deleteAbsences, s1Id, s2Id]);
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +107,7 @@ export function ApplyTemplateButton({
       setDuration(1);
       setOverwrite(false);
       setDeleteAbsences(false);
+      setConfirmStep(false);
       setError(null);
     }
   }, [open]);
@@ -322,17 +334,53 @@ export function ApplyTemplateButton({
             </div>
           )}
 
+          {/* Étape de confirmation pour les applications massives/destructrices */}
+          {confirmStep && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-800 flex items-start gap-2 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                Confirme l&apos;application sur{" "}
+                <strong>
+                  {duration} semaine{duration > 1 ? "s" : ""}
+                </strong>
+                {overwrite && (
+                  <>
+                    {" "}
+                    · <strong>écrase</strong> les créneaux existants
+                  </>
+                )}
+                {deleteAbsences && (
+                  <>
+                    {" "}
+                    · <strong>supprime</strong> les absences existantes
+                  </>
+                )}
+                . Cette action modifie le planning de toute l&apos;équipe.
+              </span>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
               Annuler
             </Button>
-            <Button onClick={applyBatch} disabled={!canApply}>
+            <Button
+              onClick={() => {
+                if (needsConfirm && !confirmStep) {
+                  setConfirmStep(true);
+                  return;
+                }
+                applyBatch();
+              }}
+              disabled={!canApply}
+              variant={confirmStep ? "destructive" : "default"}
+            >
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
-              Appliquer
+              {confirmStep ? "Confirmer l'application" : "Appliquer"}
             </Button>
           </DialogFooter>
         </DialogContent>

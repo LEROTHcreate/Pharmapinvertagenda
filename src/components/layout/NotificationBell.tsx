@@ -50,6 +50,16 @@ export function NotificationBell() {
     const v = window.localStorage.getItem(SEEN_KEY);
     return v ? Number(v) : 0;
   });
+  // Baseline GELÉE pour l'affichage du surlignage non-lu : on la fige à
+  // l'ouverture (sur l'ancien lastSeen) pour que les notifs non lues restent
+  // visuellement distinctes PENDANT la consultation, même si le badge, lui,
+  // se vide immédiatement. Sans ça, ouvrir le popover effaçait le repère.
+  const [sessionSeen, setSessionSeen] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const v = window.localStorage.getItem(SEEN_KEY);
+    return v ? Number(v) : 0;
+  });
+  const wasOpen = useRef(false);
   const fetchTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchNotifications() {
@@ -79,14 +89,20 @@ export function NotificationBell() {
     };
   }, []);
 
-  // Quand le popover s'ouvre → on considère les notifs comme vues
+  // À l'OUVERTURE (transition fermé→ouvert) : on fige la baseline d'affichage
+  // sur l'ancien lastSeen (le surlignage non-lu reste visible pendant la
+  // consultation), puis on marque comme vu → le badge se vide.
   useEffect(() => {
-    if (open && items.length > 0) {
+    if (open && !wasOpen.current) {
+      wasOpen.current = true;
+      setSessionSeen(lastSeen); // gèle l'ancienne baseline pour l'affichage
       const now = Date.now();
       window.localStorage.setItem(SEEN_KEY, String(now));
       setLastSeen(now);
+    } else if (!open) {
+      wasOpen.current = false;
     }
-  }, [open, items.length]);
+  }, [open, lastSeen]);
 
   const unreadCount = items.filter(
     (i) => new Date(i.createdAt).getTime() > lastSeen
@@ -151,7 +167,7 @@ export function NotificationBell() {
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {items.map((item) => {
                 const isUnread =
-                  new Date(item.createdAt).getTime() > lastSeen;
+                  new Date(item.createdAt).getTime() > sessionSeen;
                 return (
                   <li key={item.id}>
                     <Link
