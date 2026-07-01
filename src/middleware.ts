@@ -98,6 +98,33 @@ export async function middleware(request: NextRequest) {
 
   if (isDemoMode) return NextResponse.next();
 
+  const path = request.nextUrl.pathname;
+  const isOnApi = path.startsWith("/api");
+  // Contenu public accessible à TOUS (connecté ou non) : landing + pages
+  // légales. ⚠ Les pages légales DOIVENT rester publiques : elles sont liées
+  // depuis le formulaire d'inscription (« J'accepte les CGU ») → un visiteur
+  // non connecté doit pouvoir les consulter avant de créer son compte.
+  const isPublicContent =
+    path === "/" ||
+    path.startsWith("/cgu") ||
+    path.startsWith("/confidentialite") ||
+    path.startsWith("/mentions-legales") ||
+    // Fichiers statiques publics (logo des emails, icônes + manifest PWA…) :
+    // ne JAMAIS les mettre derrière l'auth, sinon le logo casse dans les
+    // emails et l'installation PWA échoue. Le matcher exclut déjà /_next ;
+    // on couvre ici les assets de /public servis à la racine.
+    /\.(png|svg|jpe?g|webp|ico|webmanifest)$/.test(path);
+
+  // ─── Court-circuit AVANT tout appel Supabase ───
+  // Routes API (auth propre) + landing/légales/assets publics : aucun besoin
+  // d'auth ni de refresh de session. On sort ici → ces requêtes ne paient
+  // PLUS le coût d'une validation de session (perf : ~1 opération auth en moins
+  // par asset/page publique).
+  if (isOnApi || isPublicContent) return NextResponse.next({ request });
+
+  // ─── À partir d'ici : pages d'auth publiques ou pages protégées ───
+  // On a besoin de connaître la présence d'une session (et de rafraîchir les
+  // cookies si besoin).
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -121,37 +148,19 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // IMPORTANT : getUser() (et non getSession) pour valider le token et
-  // déclencher le rafraîchissement des cookies si besoin.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const isLoggedIn = !!user;
+  // getClaims() : validation LOCALE du JWT (signature + expiration, clés
+  // asymétriques), SANS round-trip réseau dans le cas nominal — contrairement
+  // à getUser() qui appelait Supabase à chaque requête. Le rafraîchissement des
+  // cookies (token proche de l'expiration) reste déclenché au besoin. Le gate
+  // métier (compte actif/approuvé) est fait par `auth()` dans les pages.
+  const { data } = await supabase.auth.getClaims();
+  const isLoggedIn = !!data?.claims;
 
-  const path = request.nextUrl.pathname;
-  const isOnApi = path.startsWith("/api");
-  // Contenu public accessible à TOUS (connecté ou non) : landing + pages
-  // légales. ⚠ Les pages légales DOIVENT rester publiques : elles sont liées
-  // depuis le formulaire d'inscription (« J'accepte les CGU ») → un visiteur
-  // non connecté doit pouvoir les consulter avant de créer son compte.
-  const isPublicContent =
-    path === "/" ||
-    path.startsWith("/cgu") ||
-    path.startsWith("/confidentialite") ||
-    path.startsWith("/mentions-legales") ||
-    // Fichiers statiques publics (logo des emails, icônes + manifest PWA…) :
-    // ne JAMAIS les mettre derrière l'auth, sinon le logo casse dans les
-    // emails et l'installation PWA échoue. Le matcher exclut déjà /_next ;
-    // on couvre ici les assets de /public servis à la racine.
-    /\.(png|svg|jpe?g|webp|ico|webmanifest)$/.test(path);
   const isOnPublicAuth =
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
     path.startsWith("/forgot-password") ||
     path.startsWith("/reset-password");
-
-  // Les routes API gèrent leur propre auth ; landing + pages légales publiques.
-  if (isOnApi || isPublicContent) return response;
 
   // Pages publiques d'auth : si déjà connecté → vers le planning.
   if (isOnPublicAuth) {
