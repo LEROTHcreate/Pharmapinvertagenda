@@ -372,6 +372,11 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
           month={month}
           revenue={revenue}
           totalEmployerCost={totals.totalEmployerCost}
+          totalWorkedHours={lines.reduce(
+            (s, l) =>
+              s + l.taskHoursRegular + l.overtimeHours25 + l.overtimeHours50,
+            0
+          )}
           onSaved={() => fetchPayroll(month)}
         />
       )}
@@ -510,11 +515,14 @@ function SalaryRatioCard({
   month,
   revenue,
   totalEmployerCost,
+  totalWorkedHours,
   onSaved,
 }: {
   month: string;
   revenue: { revenueHT: number; marginHT: number | null } | null;
   totalEmployerCost: number;
+  /** Heures réellement travaillées ce mois (= mesure du module Statistiques). */
+  totalWorkedHours: number;
   onSaved: () => void;
 }) {
   const { toast } = useToast();
@@ -573,6 +581,15 @@ function SalaryRatioCard({
     revenue?.marginHT && revenue.marginHT > 0
       ? (totalEmployerCost / revenue.marginHT) * 100
       : null;
+  // Ponts avec le module Statistiques (mêmes heures travaillées) :
+  //  - CA / heure travaillée = productivité horaire de l'officine ;
+  //  - coût horaire moyen = masse salariale ramenée à l'heure produite.
+  const caPerHour =
+    revenue && revenue.revenueHT > 0 && totalWorkedHours > 0
+      ? revenue.revenueHT / totalWorkedHours
+      : null;
+  const costPerHour =
+    totalWorkedHours > 0 ? totalEmployerCost / totalWorkedHours : null;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
@@ -643,12 +660,30 @@ function SalaryRatioCard({
           {ratioMarge != null && (
             <Metric label="Masse salariale / marge" value={`${ratioMarge.toFixed(1)} %`} />
           )}
+          {/* Pont Stats ↔ Paie : mêmes heures travaillées, rapportées au CA et au coût */}
+          <Metric
+            label="Heures travaillées"
+            value={`${totalWorkedHours.toFixed(0)} h`}
+          />
+          {caPerHour != null && (
+            <Metric
+              label="CA / heure travaillée"
+              value={`${fmt(caPerHour)}/h`}
+              strong
+            />
+          )}
+          {costPerHour != null && (
+            <Metric label="Coût horaire moyen" value={`${fmt(costPerHour)}/h`} />
+          )}
         </div>
       ) : null}
 
       <p className="mt-3 text-[11px] text-muted-foreground">
         Repère officine : la masse salariale (coût total employeur) représente souvent
-        ~10 à 14 % du CA HT. Saisie manuelle, mise à jour chaque mois.
+        ~10 à 14 % du CA HT. Les <strong>heures travaillées</strong> sont celles du
+        module Statistiques (même base de calcul) : le CA / heure mesure la
+        productivité, le coût horaire moyen la charge salariale par heure produite.
+        Saisie du CA manuelle, mise à jour chaque mois.
       </p>
     </div>
   );
