@@ -13,6 +13,7 @@ import {
 import { upcomingTips } from "@/lib/planning-tips";
 import { seasonalTips } from "@/lib/seasonal-staffing";
 import { analyzeCoverage } from "@/lib/coverage-analysis";
+import { analyzeCcnCompliance } from "@/lib/ccn-compliance";
 import { getHolidaysFR } from "@/lib/holidays-fr";
 import { TIME_SLOTS, ABSENCE_LABELS } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
@@ -100,6 +101,14 @@ export default async function InfosPage() {
     ? analyzeCoverage(employeesDTO, weekDates, index, openSlots, minStaff)
     : [];
 
+  // ─── Conformité Convention collective (admin uniquement) ─────────
+  // Repos quotidien 11 h, durée max jour/semaine, amplitude, pause, coupures,
+  // repos hebdo, jours consécutifs. Sans contexte inter-semaines ici : le
+  // repos hebdo dégrade en « à vérifier » (fallback prudent du moteur).
+  const ccnViolations = isAdmin
+    ? analyzeCcnCompliance(employeesDTO, weekDates, index)
+    : [];
+
   // ─── Absents, par jour de la semaine ─────────────────────────────
   const absentsByDay: AbsentsDay[] = weekDates.map((date) => {
     const people = employeesDTO
@@ -165,6 +174,7 @@ export default async function InfosPage() {
       isAdmin={isAdmin}
       weekLabel={weekLabel}
       coverageWarnings={coverageWarnings}
+      ccnViolations={ccnViolations}
       absentsByDay={absentsByDay}
       tips={tips}
       holidays={holidays}

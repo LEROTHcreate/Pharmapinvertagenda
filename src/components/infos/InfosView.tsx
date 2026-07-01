@@ -14,7 +14,9 @@ import {
   Users,
 } from "lucide-react";
 import type { CoverageWarning } from "@/lib/coverage-analysis";
+import type { CcnViolation } from "@/lib/ccn-compliance";
 import type { PlanningTip } from "@/lib/planning-tips";
+import { CcnComplianceWarnings } from "@/components/planning/CcnComplianceWarnings";
 import { cn } from "@/lib/utils";
 
 /** Absences groupées par jour de la semaine affichée. */
@@ -36,6 +38,7 @@ export type InfosData = {
   isAdmin: boolean;
   weekLabel: string;
   coverageWarnings: CoverageWarning[];
+  ccnViolations: CcnViolation[];
   absentsByDay: AbsentsDay[];
   tips: PlanningTip[];
   holidays: UpcomingHoliday[];
@@ -53,12 +56,24 @@ export type InfosData = {
  *  4. Fériés      — prochains jours fériés (officine fermée)
  */
 export function InfosView(data: InfosData) {
-  const { isAdmin, weekLabel, coverageWarnings, absentsByDay, tips, holidays, pending } =
-    data;
+  const {
+    isAdmin,
+    weekLabel,
+    coverageWarnings,
+    ccnViolations,
+    absentsByDay,
+    tips,
+    holidays,
+    pending,
+  } = data;
 
   const totalAbsents = absentsByDay.reduce((n, d) => n + d.people.length, 0);
-  const urgentCount =
-    (isAdmin ? pending.absences + pending.users + coverageWarnings.length : 0);
+  const urgentCount = isAdmin
+    ? pending.absences +
+      pending.users +
+      coverageWarnings.length +
+      ccnViolations.length
+    : 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-16">
@@ -117,6 +132,9 @@ export function InfosView(data: InfosData) {
               {coverageWarnings.map((w, i) => (
                 <CoverageCard key={`${w.kind}-${i}`} warning={w} />
               ))}
+
+              {/* Conformité Convention collective (bandeau, masqué si conforme) */}
+              <CcnComplianceWarnings violations={ccnViolations} />
             </div>
           )}
         </Section>
