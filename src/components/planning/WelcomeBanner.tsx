@@ -247,7 +247,7 @@ export function WelcomeBanner({
                 // right-0 = on aligne le bord droit de la bulle avec le bord
                 // droit du conteneur de l'ampoule. Combiné aux nouvelles
                 // valeurs CSS du triangle, la flèche pointe pile sur l'ampoule.
-                "absolute right-0 top-full mt-3 z-30 w-[280px] sm:w-[320px]",
+                "absolute right-0 top-full mt-3 z-30 w-[300px] sm:w-[360px] max-w-[calc(100vw-2rem)]",
                 "rounded-2xl border-2 border-amber-300 dark:border-amber-700",
                 "bg-card px-4 py-3 pr-8 text-left shadow-[0_8px_28px_-6px_rgba(0,0,0,0.18)]",
                 "animate-bubble-pop cursor-pointer select-none",
@@ -264,16 +264,27 @@ export function WelcomeBanner({
                 <X className="h-3 w-3" />
               </span>
 
-              <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 mb-2">
                 <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
                 <p className="text-[11px] uppercase tracking-[0.06em] font-semibold text-amber-700 dark:text-amber-400">
                   À prévoir
                 </p>
+                {tips.length > 1 && (
+                  <span className="ml-auto rounded-full bg-amber-100 dark:bg-amber-950/50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300 tabular-nums">
+                    {tips.length}
+                  </span>
+                )}
               </div>
 
-              <ul className="space-y-2">
+              {/* Liste scrollable : avec les tips saisonniers, on peut en avoir
+                  plusieurs → hauteur plafonnée + défilement pour rester lisible
+                  sans déborder de l'écran. */}
+              <ul className="space-y-2.5 max-h-[52vh] overflow-y-auto overscroll-contain pr-1 -mr-1 scrollbar-thin">
                 {tips.map((tip, i) => (
-                  <li key={`${tip.date}-${i}`} className="flex items-start gap-2">
+                  <li
+                    key={`${tip.date}-${i}`}
+                    className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5"
+                  >
                     <span
                       aria-hidden
                       className={cn(
@@ -287,7 +298,7 @@ export function WelcomeBanner({
                       <p className="text-[12.5px] font-semibold text-foreground leading-tight">
                         {tip.title}
                       </p>
-                      <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-snug">
+                      <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed">
                         {tip.description}
                       </p>
                     </div>

@@ -51,12 +51,34 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  // Tree-shaking renforcé des gros packages → bundle client plus léger.
+  experimental: {
+    optimizePackageImports: ["lucide-react", "date-fns"],
+  },
+  // next/image : formats modernes + autorise les URLs Supabase Storage.
+  images: {
+    formats: ["image/avif", "image/webp"],
+    remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }],
+  },
   async headers() {
     return [
       {
-        // Toutes les routes (HTML, API, _next/static, …)
+        // Headers de sécurité sur toutes les routes.
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        // Bundles Next hashés = immuables → cache navigateur 1 an (plus de
+        // re-téléchargement à chaque navigation/visite).
+        source: "/_next/static/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
+        // Avatars (noms stables) → cache 30 jours.
+        source: "/avatars/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=2592000" }],
       },
     ];
   },

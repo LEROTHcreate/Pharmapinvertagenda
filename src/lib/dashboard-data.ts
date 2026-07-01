@@ -70,40 +70,44 @@ export const getPendingAbsencesCount = (pharmacyId: string) =>
  * compte les messages dont l'auteur n'est pas moi et dont la date de
  * création est postérieure à mon `lastReadAt` (ou tous s'il est null).
  *
- * Pas de cache : c'est un signal qui doit rester frais (l'utilisateur
- * vient de recevoir un message, il s'attend à voir le badge tout de suite).
+ * Caché 10 s (par utilisateur) : 2 requêtes Prisma + agrégation, exécutées à
+ * CHAQUE navigation du dashboard → sans cache, ~50-100 ms ajoutés partout. Le
+ * badge tolère 10 s de fraîcheur ; la page Messages, elle, poll en direct.
  */
-export async function getMessagesUnreadCounts(
-  userId: string
-): Promise<{ swap: number; text: number }> {
-  const memberships = await prisma.conversationMember.findMany({
-    where: { userId },
-    select: { conversationId: true, lastReadAt: true },
-  });
-  if (memberships.length === 0) return { swap: 0, text: 0 };
+export const getMessagesUnreadCounts = (userId: string) =>
+  unstable_cache(
+    async (): Promise<{ swap: number; text: number }> => {
+      const memberships = await prisma.conversationMember.findMany({
+        where: { userId },
+        select: { conversationId: true, lastReadAt: true },
+      });
+      if (memberships.length === 0) return { swap: 0, text: 0 };
 
-  const orConditions = memberships.map((m) => ({
-    conversationId: m.conversationId,
-    ...(m.lastReadAt ? { createdAt: { gt: m.lastReadAt } } : {}),
-  }));
+      const orConditions = memberships.map((m) => ({
+        conversationId: m.conversationId,
+        ...(m.lastReadAt ? { createdAt: { gt: m.lastReadAt } } : {}),
+      }));
 
-  const messages = await prisma.message.findMany({
-    where: {
-      OR: orConditions,
-      authorId: { not: userId },
-      type: { in: ["TEXT", "SWAP_REQUEST"] },
+      const messages = await prisma.message.findMany({
+        where: {
+          OR: orConditions,
+          authorId: { not: userId },
+          type: { in: ["TEXT", "SWAP_REQUEST"] },
+        },
+        select: { type: true },
+      });
+
+      let swap = 0;
+      let text = 0;
+      for (const m of messages) {
+        if (m.type === "SWAP_REQUEST") swap++;
+        else if (m.type === "TEXT") text++;
+      }
+      return { swap, text };
     },
-    select: { type: true },
-  });
-
-  let swap = 0;
-  let text = 0;
-  for (const m of messages) {
-    if (m.type === "SWAP_REQUEST") swap++;
-    else if (m.type === "TEXT") text++;
-  }
-  return { swap, text };
-}
+    ["messages-unread", userId],
+    { tags: [`messages-unread:${userId}`], revalidate: 10 }
+  )();
 
 /**
  * Contexte d'accès paie de l'utilisateur (flag + statut Employee), pour décider

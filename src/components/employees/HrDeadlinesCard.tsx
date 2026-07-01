@@ -101,10 +101,10 @@ export function HrDeadlinesCard({ deadlines }: { deadlines: HrDeadline[] }) {
                 className={cn(
                   "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
                   d.level === "overdue"
-                    ? "bg-red-100 text-red-700"
+                    ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300"
                     : d.level === "soon"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-zinc-100 text-zinc-600"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                      : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
                 )}
               >
                 {whenLabel(d.daysUntil)}

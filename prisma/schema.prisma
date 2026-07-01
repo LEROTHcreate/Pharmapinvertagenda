@@ -379,6 +379,13 @@ model AbsenceRequest {
 
   @@index([pharmacyId, status])
   @@index([employeeId])
+  // Perf : check de conflit d'absence exécuté à CHAQUE sauvegarde de planning
+  // (pharmacyId + status + chevauchement dateStart/dateEnd) → range scan indexé
+  // au lieu d'un filtre post-index sur les dates.
+  @@index([pharmacyId, status, dateStart, dateEnd])
+  // Perf : endpoint notifications employé (pollé) — filtre status + tri
+  // reviewedAt desc servis par l'index au lieu d'un tri en mémoire.
+  @@index([employeeId, status, reviewedAt])
   @@map("absence_requests")
 }
 

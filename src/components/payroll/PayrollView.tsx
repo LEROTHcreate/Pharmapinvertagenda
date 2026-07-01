@@ -28,6 +28,7 @@ import {
   REGION_LABELS,
   type Region,
 } from "@/lib/payroll-reference";
+import { AbsenceImpactPanel } from "@/components/payroll/AbsenceImpactPanel";
 
 type Line = {
   employeeId: string;
@@ -371,6 +372,11 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
           month={month}
           revenue={revenue}
           totalEmployerCost={totals.totalEmployerCost}
+          totalWorkedHours={lines.reduce(
+            (s, l) =>
+              s + l.taskHoursRegular + l.overtimeHours25 + l.overtimeHours50,
+            0
+          )}
           onSaved={() => fetchPayroll(month)}
         />
       )}
@@ -439,6 +445,9 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         Convention Pharmacie d'Officine). Les IJSS de la CPAM ne figurent pas dans le coût employeur.
       </p>
 
+      {/* Pont Absences ↔ Paie : détail lisible de l'impact des absences du mois */}
+      <AbsenceImpactPanel lines={lines} />
+
       {/* Fraîcheur des données de référence (benchmark) */}
       <div className="rounded-xl bg-zinc-50/70 px-3 py-2.5 text-[11px] text-zinc-500 leading-relaxed">
         <span className="font-medium text-zinc-600">Données de référence</span> —
@@ -506,11 +515,14 @@ function SalaryRatioCard({
   month,
   revenue,
   totalEmployerCost,
+  totalWorkedHours,
   onSaved,
 }: {
   month: string;
   revenue: { revenueHT: number; marginHT: number | null } | null;
   totalEmployerCost: number;
+  /** Heures réellement travaillées ce mois (= mesure du module Statistiques). */
+  totalWorkedHours: number;
   onSaved: () => void;
 }) {
   const { toast } = useToast();
@@ -569,6 +581,15 @@ function SalaryRatioCard({
     revenue?.marginHT && revenue.marginHT > 0
       ? (totalEmployerCost / revenue.marginHT) * 100
       : null;
+  // Ponts avec le module Statistiques (mêmes heures travaillées) :
+  //  - CA / heure travaillée = productivité horaire de l'officine ;
+  //  - coût horaire moyen = masse salariale ramenée à l'heure produite.
+  const caPerHour =
+    revenue && revenue.revenueHT > 0 && totalWorkedHours > 0
+      ? revenue.revenueHT / totalWorkedHours
+      : null;
+  const costPerHour =
+    totalWorkedHours > 0 ? totalEmployerCost / totalWorkedHours : null;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
@@ -595,7 +616,7 @@ function SalaryRatioCard({
               value={ca}
               onChange={(e) => setCa(e.target.value)}
               placeholder="ex : 180000"
-              className="block w-40 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px] font-mono"
+              className="block w-40 rounded-md border border-input px-2.5 py-1.5 text-[13px] font-mono"
             />
           </div>
           <div className="space-y-1">
@@ -605,7 +626,7 @@ function SalaryRatioCard({
               value={marge}
               onChange={(e) => setMarge(e.target.value)}
               placeholder="ex : 55000"
-              className="block w-40 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px] font-mono"
+              className="block w-40 rounded-md border border-input px-2.5 py-1.5 text-[13px] font-mono"
             />
           </div>
           <div className="flex items-center gap-1.5">
@@ -639,12 +660,30 @@ function SalaryRatioCard({
           {ratioMarge != null && (
             <Metric label="Masse salariale / marge" value={`${ratioMarge.toFixed(1)} %`} />
           )}
+          {/* Pont Stats ↔ Paie : mêmes heures travaillées, rapportées au CA et au coût */}
+          <Metric
+            label="Heures travaillées"
+            value={`${totalWorkedHours.toFixed(0)} h`}
+          />
+          {caPerHour != null && (
+            <Metric
+              label="CA / heure travaillée"
+              value={`${fmt(caPerHour)}/h`}
+              strong
+            />
+          )}
+          {costPerHour != null && (
+            <Metric label="Coût horaire moyen" value={`${fmt(costPerHour)}/h`} />
+          )}
         </div>
       ) : null}
 
       <p className="mt-3 text-[11px] text-muted-foreground">
         Repère officine : la masse salariale (coût total employeur) représente souvent
-        ~10 à 14 % du CA HT. Saisie manuelle, mise à jour chaque mois.
+        ~10 à 14 % du CA HT. Les <strong>heures travaillées</strong> sont celles du
+        module Statistiques (même base de calcul) : le CA / heure mesure la
+        productivité, le coût horaire moyen la charge salariale par heure produite.
+        Saisie du CA manuelle, mise à jour chaque mois.
       </p>
     </div>
   );
@@ -790,13 +829,13 @@ function PayrollRow({
         {editing ? (
           <div className="inline-flex flex-col items-stretch gap-1 text-left min-w-[150px]">
             {/* Bascule mode horaire / mensuel */}
-            <div className="inline-flex self-start rounded-md border border-zinc-300 overflow-hidden text-[10px] font-medium">
+            <div className="inline-flex self-start rounded-md border border-input overflow-hidden text-[10px] font-medium">
               <button
                 type="button"
                 onClick={() => setMode("HOURLY")}
                 className={cn(
                   "px-2 py-0.5",
-                  mode === "HOURLY" ? "bg-violet-600 text-white" : "text-zinc-600 hover:bg-zinc-100"
+                  mode === "HOURLY" ? "bg-violet-600 text-white" : "text-foreground/70 hover:bg-accent/60"
                 )}
               >
                 €/h
@@ -805,8 +844,8 @@ function PayrollRow({
                 type="button"
                 onClick={() => setMode("MONTHLY")}
                 className={cn(
-                  "px-2 py-0.5 border-l border-zinc-300",
-                  mode === "MONTHLY" ? "bg-violet-600 text-white" : "text-zinc-600 hover:bg-zinc-100"
+                  "px-2 py-0.5 border-l border-input",
+                  mode === "MONTHLY" ? "bg-violet-600 text-white" : "text-foreground/70 hover:bg-accent/60"
                 )}
               >
                 €/mois
@@ -820,7 +859,7 @@ function PayrollRow({
                 onChange={(e) => setVal(e.target.value)}
                 autoFocus
                 placeholder={mode === "MONTHLY" ? "€/mois" : "€/h"}
-                className="w-20 rounded border border-zinc-300 px-2 py-0.5 text-right text-[12.5px] font-mono"
+                className="w-20 rounded border border-input px-2 py-0.5 text-right text-[12.5px] font-mono"
               />
               <input
                 type="text"
@@ -829,7 +868,7 @@ function PayrollRow({
                 onChange={(e) => setCoeff(e.target.value)}
                 placeholder="Coeff."
                 title="Coefficient conventionnel (optionnel — laisser vide pour estimer via l'ancienneté)"
-                className="w-14 rounded border border-zinc-300 px-2 py-0.5 text-right text-[12.5px] font-mono"
+                className="w-14 rounded border border-input px-2 py-0.5 text-right text-[12.5px] font-mono"
               />
             </div>
             <div className="inline-flex items-center gap-1 self-end">
@@ -917,7 +956,7 @@ function BenchmarkChip({ benchmark: b }: { benchmark: Benchmark }) {
   if (b.legal === "below_min") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-semibold text-red-700"
+        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300"
         title={`Sous le minimum conventionnel : ${b.minHourly.toFixed(2)} €/h requis (coeff. ${b.coefficient} · ${b.coefficientLabel}).`}
       >
         <AlertTriangle className="h-3 w-3" />
@@ -934,17 +973,17 @@ function BenchmarkChip({ benchmark: b }: { benchmark: Benchmark }) {
   }
   const cfg = {
     under: {
-      cls: "bg-amber-100 text-amber-700",
+      cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
       icon: <TrendingDown className="h-3 w-3" />,
       label: "Sous marché",
     },
     aligned: {
-      cls: "bg-emerald-100 text-emerald-700",
+      cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
       icon: <Minus className="h-3 w-3" />,
       label: "Aligné",
     },
     above: {
-      cls: "bg-sky-100 text-sky-700",
+      cls: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
       icon: <TrendingUp className="h-3 w-3" />,
       label: "Au-dessus",
     },

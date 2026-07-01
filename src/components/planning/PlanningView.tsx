@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3 } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -22,8 +23,6 @@ import { MobileTeamGantt } from "@/components/planning/MobileTeamGantt";
 import { MobileWeekView } from "@/components/planning/MobileWeekView";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { TASK_LABELS, STATUS_LABELS } from "@/types";
-import { TaskSelector } from "@/components/planning/TaskSelector";
-import { BulkTaskSelector } from "@/components/planning/BulkTaskSelector";
 import type { ApplyScope } from "@/components/planning/ApplyScopeSelector";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
 import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
@@ -35,12 +34,28 @@ import { PrintButton } from "@/components/planning/PrintButton";
 import { ExportXlsxButton } from "@/components/planning/ExportXlsxButton";
 import { useToast } from "@/components/ui/toast";
 import { holidaysIndexForDates } from "@/lib/holidays-fr";
-import {
-  AbsenceConflictDialog,
-  type AbsenceConflict,
-} from "@/components/planning/AbsenceConflictDialog";
+import type { AbsenceConflict } from "@/components/planning/AbsenceConflictDialog";
 import { usePlanningStore } from "@/store/planning-store";
 import { entryKey, parseCellKey } from "@/lib/cell-keys";
+
+// Modals lourds chargés à la demande (ouverture seulement) → allègent le
+// bundle initial de /planning + accélèrent l'hydratation de la page.
+const TaskSelector = dynamic(
+  () => import("@/components/planning/TaskSelector").then((m) => m.TaskSelector),
+  { ssr: false }
+);
+const BulkTaskSelector = dynamic(
+  () =>
+    import("@/components/planning/BulkTaskSelector").then((m) => m.BulkTaskSelector),
+  { ssr: false }
+);
+const AbsenceConflictDialog = dynamic(
+  () =>
+    import("@/components/planning/AbsenceConflictDialog").then(
+      (m) => m.AbsenceConflictDialog
+    ),
+  { ssr: false }
+);
 
 type Selection = {
   employeeId: string;

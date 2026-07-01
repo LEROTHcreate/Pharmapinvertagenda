@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { ScheduleType } from "@prisma/client";
-import { SLOT_HOURS } from "@/types";
+import {
+  SLOT_HOURS,
+  isoWeekStartUTC,
+  weeklyOvertimeSplit,
+} from "@/lib/work-hours";
 import type { AbsenceCode, EmployeeStatus } from "@prisma/client";
 
 // Absences "rémunérées" qui comptent comme temps de contrat rempli (congé payé,
@@ -101,15 +105,6 @@ export function getPeriodRange(period: StatsPeriod, now = new Date()): PeriodInf
   };
 }
 
-/** Lundi de la semaine ISO en UTC (start-of-week). */
-function isoWeekStartUTC(d: Date): Date {
-  const day = d.getUTCDay(); // 0=dim, 1=lun…6=sam
-  const diff = day === 0 ? -6 : 1 - day;
-  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  start.setUTCDate(start.getUTCDate() + diff);
-  return start;
-}
-
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -188,7 +183,9 @@ function buildEmployeeStats(
       totalTaskHours += taskH;
       totalAbsenceHours += absH;
       // HS : uniquement sur le travail réel (les absences ne génèrent pas d'HS).
-      totalOvertimeHours += Math.max(0, taskH - emp.weeklyHours);
+      // Même base que la paie via weeklyOvertimeSplit (on n'utilise ici que le
+      // total ; la paie exploite en plus la répartition +25 / +50).
+      totalOvertimeHours += weeklyOvertimeSplit(taskH, emp.weeklyHours).total;
       totalEffectiveHours += (b.task + b.paidAbsence) * SLOT_HOURS;
       weekly.push({ weekStart: key, taskHours: taskH });
     }
