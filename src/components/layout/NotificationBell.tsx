@@ -77,15 +77,23 @@ export function NotificationBell() {
   }
 
   useEffect(() => {
-    fetchNotifications();
-    fetchTimer.current = setInterval(fetchNotifications, 60_000);
-    function onFocus() {
+    // PERF : on ne poll PAS quand l'onglet est masqué (inutile de solliciter
+    // /api/notifications en arrière-plan). Au retour au premier plan (focus ou
+    // visibilitychange), on rafraîchit immédiatement.
+    function refresh() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
       fetchNotifications();
     }
-    window.addEventListener("focus", onFocus);
+    refresh();
+    fetchTimer.current = setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       if (fetchTimer.current) clearInterval(fetchTimer.current);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, []);
 

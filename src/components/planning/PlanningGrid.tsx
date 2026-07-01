@@ -173,19 +173,21 @@ export const PlanningGrid = memo(function PlanningGrid({
   const [isModHeld, setIsModHeld] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const sync = (e: KeyboardEvent | MouseEvent) =>
-      setIsModHeld(e.ctrlKey || e.metaKey);
+    // PERF : on suit Ctrl/Cmd via keydown/keyup UNIQUEMENT. L'ancienne version
+    // écoutait aussi `mousemove`/`mousedown` → `setIsModHeld` était appelé à
+    // chaque pixel de déplacement souris, et le moindre changement de
+    // `isModHeld` re-render toutes les ~700 cellules de la grille (chacune
+    // ré-exécutant les hooks dnd-kit). keydown/keyup suffisent ; le cas
+    // marginal « Ctrl tenu avant que la fenêtre ait le focus » n'en vaut pas
+    // le coût.
+    const sync = (e: KeyboardEvent) => setIsModHeld(e.ctrlKey || e.metaKey);
     const onBlur = () => setIsModHeld(false);
     window.addEventListener("keydown", sync);
     window.addEventListener("keyup", sync);
-    window.addEventListener("mousemove", sync);
-    window.addEventListener("mousedown", sync);
     window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", sync);
       window.removeEventListener("keyup", sync);
-      window.removeEventListener("mousemove", sync);
-      window.removeEventListener("mousedown", sync);
       window.removeEventListener("blur", onBlur);
     };
   }, []);
@@ -507,6 +509,19 @@ export const PlanningGrid = memo(function PlanningGrid({
     [onCellClick, employees, date, onSelectionChange]
   );
 
+  // Handler STABLE pour le clic direct sur une cellule TASK en mode DnD
+  // (souris Ctrl/Cmd ou tactile). Évitait d'allouer une closure PAR cellule à
+  // chaque render — ce qui cassait le memo() des ~700 cellules et re-rendait
+  // toute la grille à la moindre interaction.
+  const onCellClickAt = useCallback(
+    (empIdx: number, slotIdx: number) => {
+      if (onCellClick && employees[empIdx]) {
+        onCellClick(employees[empIdx].id, date, TIME_SLOTS[slotIdx]);
+      }
+    },
+    [onCellClick, employees, date]
+  );
+
   if (employees.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-12 text-center">
@@ -565,8 +580,8 @@ export const PlanningGrid = memo(function PlanningGrid({
             {/* Ligne unique : nom · statut · contrat · jour · semaine */}
             {/* Sur mobile : fond plein (perf + lisibilité). Sur desktop :
                 léger blur sous l'en-tête sticky pour effet "frosted glass". */}
-            <tr className="bg-card md:bg-card/80 md:backdrop-blur-md">
-              <th className="sticky left-0 z-20 bg-card md:bg-card/95 md:backdrop-blur-md px-3 py-3 text-left w-16 min-w-16 align-bottom">
+            <tr className="bg-card">
+              <th className="sticky left-0 z-20 bg-card px-3 py-3 text-left w-16 min-w-16 align-bottom">
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                   Heure
                 </span>
@@ -593,7 +608,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                   />
                 );
               })}
-              <th className="sticky right-0 z-20 bg-card md:bg-card/95 md:backdrop-blur-md px-3 py-3 w-12 min-w-12 align-bottom">
+              <th className="sticky right-0 z-20 bg-card px-3 py-3 w-12 min-w-12 align-bottom">
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
                   Eff
                 </span>
@@ -702,11 +717,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                         onMouseDown={handleCellMouseDown}
                         onMouseEnter={handleCellMouseEnter}
                         onMouseUp={handleCellMouseUp}
-                        onCellClickDirect={
-                          onCellClick && employees[empIdx]
-                            ? () => onCellClick(employees[empIdx].id, date, TIME_SLOTS[slotIdx])
-                            : undefined
-                        }
+                        onCellClickAt={onCellClickAt}
                       />
                     );
                   })}
@@ -814,7 +825,7 @@ const Cell = memo(function Cell({
   onMouseDown,
   onMouseEnter,
   onMouseUp,
-  onCellClickDirect,
+  onCellClickAt,
 }: {
   cellKey: CellKey;
   /** True si cette cellule est sur la ligne "heure actuelle" → trait rouge. */
@@ -841,7 +852,7 @@ const Cell = memo(function Cell({
   onMouseDown: (e: React.MouseEvent, empIdx: number, slotIdx: number) => void;
   onMouseEnter: (empIdx: number, slotIdx: number) => void;
   onMouseUp: (empIdx: number, slotIdx: number) => void;
-  onCellClickDirect?: () => void;
+  onCellClickAt?: (empIdx: number, slotIdx: number) => void;
 }) {
   // Hooks DnD : toujours appelés (rules of hooks), désactivés si pas pertinent.
   // - draggable : seulement les cellules TASK (on ne déplace pas une absence
@@ -995,7 +1006,7 @@ const Cell = memo(function Cell({
         ref={setNodeRef}
         {...handlers}
         {...dndProps}
-        onClick={taskCellUsesDnd ? onCellClickDirect : undefined}
+        onClick={taskCellUsesDnd ? () => onCellClickAt?.(empIdx, slotIdx) : undefined}
         className={cn(
           baseClasses,
           "has-content",

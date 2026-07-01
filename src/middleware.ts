@@ -48,22 +48,36 @@ stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
  * Fail-open seulement si les DEUX échouent : un souci de lecture NE doit jamais
  * bloquer le site, mais on évite de rater l'activation à cause d'un SDK capricieux.
  */
+// PERF : cache mémoire du flag (persiste sur une instance edge chaude) →
+// on ne relit PLUS Edge Config à CHAQUE navigation, juste toutes les ~30 s.
+// Contrepartie : une bascule maintenance met jusqu'à 30 s à se propager, ce
+// qui est acceptable pour ce cas d'usage.
+let maintCache: { value: boolean; ts: number } | null = null;
+const MAINT_TTL_MS = 30_000;
+
 async function isMaintenanceOn(): Promise<boolean> {
+  const now = Date.now();
+  if (maintCache && now - maintCache.ts < MAINT_TTL_MS) return maintCache.value;
+
+  let value = false;
   try {
-    return (await get<boolean>("maintenance")) === true;
+    value = (await get<boolean>("maintenance")) === true;
   } catch {
     // Fallback : conn = https://edge-config.vercel.com/<id>?token=<t>
     const conn = process.env.EDGE_CONFIG;
-    if (!conn) return false;
-    try {
-      const res = await fetch(conn.replace("?", "/item/maintenance?"), {
-        cache: "no-store",
-      });
-      return res.ok ? (await res.json()) === true : false;
-    } catch {
-      return false;
+    if (conn) {
+      try {
+        const res = await fetch(conn.replace("?", "/item/maintenance?"), {
+          cache: "no-store",
+        });
+        value = res.ok ? (await res.json()) === true : false;
+      } catch {
+        value = false;
+      }
     }
   }
+  maintCache = { value, ts: now };
+  return value;
 }
 
 /**
