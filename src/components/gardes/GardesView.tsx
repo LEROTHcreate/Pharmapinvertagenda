@@ -19,7 +19,6 @@ import {
   type GardeType,
   type GardeRates,
 } from "@/lib/gardes";
-import { cn } from "@/lib/utils";
 
 type Pharmacist = { id: string; name: string; color: string };
 type UpcomingGarde = {
