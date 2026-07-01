@@ -208,6 +208,16 @@ export const PlanningGrid = memo(function PlanningGrid({
     })
   );
 
+  // PERF (grille) : le drag & drop des cellules n'est utile que sur tactile
+  // (long-press) ou sur souris avec Ctrl/Cmd tenu. Le reste du temps (usage
+  // desktop courant : édition, navigation, sélection), on rend des cellules
+  // SANS aucun hook dnd-kit → la grille ne paie plus le coût de ~700 hooks
+  // re-exécutés à chaque render. On ne bascule sur la variante DnD (avec hooks)
+  // que quand elle peut réellement servir. La réorganisation des colonnes
+  // (en-têtes) garde son propre DnD, indépendant.
+  const CellComponent =
+    dndEnabled && (isTouchDevice || isModHeld) ? DndCell : PlainCell;
+
   // ─── Block detection : trouve les cellules TASK adjacentes même code ─
   // Walk back/forward depuis la cellule source jusqu'à rencontrer une
   // cellule différente (autre taskCode, absence, ou vide).
@@ -693,7 +703,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                     // Toute la colonne se "soulève" pendant un drag de réordonnancement
                     const isInDragSourceCol = !!draggingColId && draggingColId === emp.id;
                     return (
-                      <Cell
+                      <CellComponent
                         key={emp.id}
                         cellKey={key}
                         isCurrentRow={isCurrent}
@@ -802,31 +812,8 @@ export const PlanningGrid = memo(function PlanningGrid({
 // continue et nette sur toute la largeur.
 const CURRENT_TIME_LINE = "inset 0 3px 0 0 rgb(244 63 94)"; // rose-500
 
-const Cell = memo(function Cell({
-  cellKey,
-  isCurrentRow,
-  empIdx,
-  slotIdx,
-  entry,
-  prevEntry,
-  nextEntry,
-  canEdit,
-  dndEnabled,
-  isTouchDevice,
-  isModHeld,
-  isInActiveBlock,
-  isSelected,
-  isOvertime,
-  isPrevOvertime,
-  isNextOvertime,
-  isRecent,
-  isMyColumn,
-  isInDragSourceCol,
-  onMouseDown,
-  onMouseEnter,
-  onMouseUp,
-  onCellClickAt,
-}: {
+/** Props communs à toutes les variantes de cellule (présentation + sélection). */
+type CellProps = {
   cellKey: CellKey;
   /** True si cette cellule est sur la ligne "heure actuelle" → trait rouge. */
   isCurrentRow: boolean;
@@ -853,39 +840,66 @@ const Cell = memo(function Cell({
   onMouseEnter: (empIdx: number, slotIdx: number) => void;
   onMouseUp: (empIdx: number, slotIdx: number) => void;
   onCellClickAt?: (empIdx: number, slotIdx: number) => void;
-}) {
-  // Hooks DnD : toujours appelés (rules of hooks), désactivés si pas pertinent.
-  // - draggable : seulement les cellules TASK (on ne déplace pas une absence
-  //   ni une cellule vide).
-  // - droppable : cellules TASK et vides ; absences refusent le drop pour
-  //   protéger les jours de congé/maladie validés.
+};
+
+/**
+ * Bits dérivés du drag & drop, résolus par la variante appelante :
+ *  - `PlainCell` (défaut desktop hors Ctrl) → valeurs neutres, AUCUN hook.
+ *  - `DndCell`   (tactile ou Ctrl/Cmd tenu) → issus de useDraggable/useDroppable.
+ */
+type CellDnd = {
+  setNodeRef?: (node: HTMLElement | null) => void;
+  dndProps: Record<string, unknown>;
+  isDragging: boolean;
+  isOver: boolean;
+  taskCellUsesDnd: boolean;
+};
+
+const EMPTY_DND: CellDnd = {
+  setNodeRef: undefined,
+  dndProps: {},
+  isDragging: false,
+  isOver: false,
+  taskCellUsesDnd: false,
+};
+
+/**
+ * Rendu PUR d'une cellule (aucun hook dnd-kit). Reçoit les bits de drag & drop
+ * déjà résolus. Factorisé pour que PlainCell et DndCell partagent EXACTEMENT le
+ * même markup — seule diffère la présence des hooks dnd-kit (cf. plus bas).
+ */
+function CellView({
+  isCurrentRow,
+  empIdx,
+  slotIdx,
+  entry,
+  prevEntry,
+  nextEntry,
+  canEdit,
+  dndEnabled,
+  isTouchDevice,
+  isModHeld,
+  isInActiveBlock,
+  isSelected,
+  isOvertime,
+  isPrevOvertime,
+  isNextOvertime,
+  isRecent,
+  isMyColumn,
+  isInDragSourceCol,
+  onMouseDown,
+  onMouseEnter,
+  onMouseUp,
+  onCellClickAt,
+  setNodeRef,
+  dndProps,
+  isDragging,
+  isOver,
+  taskCellUsesDnd,
+}: CellProps & CellDnd) {
   const isAbsence = entry?.type === "ABSENCE";
   const isTask = entry?.type === "TASK";
 
-  const draggable = useDraggable({
-    id: cellKey,
-    disabled: !dndEnabled || !isTask,
-  });
-  const droppable = useDroppable({
-    id: cellKey,
-    disabled: !dndEnabled || isAbsence,
-  });
-
-  const setNodeRef = (node: HTMLElement | null) => {
-    draggable.setNodeRef(node);
-    droppable.setNodeRef(node);
-  };
-
-  const isDragging = draggable.isDragging;
-  const isOver = droppable.isOver;
-
-  // DnD activé sur :
-  //   - Tactile : long-press 350ms démarre le drag (tap rapide = TaskSelector)
-  //   - Souris : Ctrl/Cmd + drag — sans modifier c'est rect-select 30min×30min.
-  //     Le state du modifier est tracké globalement via window listener (cf. plus haut).
-  // Sur cellule non-TASK ou si dndEnabled=false → DnD jamais actif.
-  const taskCellUsesDnd =
-    dndEnabled && isTask && (isTouchDevice || isModHeld);
   const isContinuation =
     !!entry &&
     !!prevEntry &&
@@ -997,10 +1011,8 @@ const Cell = memo(function Cell({
     if (isMyColumn) overlays.push(`linear-gradient(${myColumnWash}, ${myColumnWash})`);
     const background =
       overlays.length > 0 ? `${overlays.join(", ")}, ${c.bg}` : c.bg;
-    // Listeners DnD si actif sur TASK ; sinon handlers de sélection rect
-    const dndProps = taskCellUsesDnd
-      ? { ...draggable.listeners, ...draggable.attributes }
-      : {};
+    // `dndProps` (listeners + attributes du draggable) est fourni par la
+    // variante DnD ; vide en PlainCell.
     return (
       <td
         ref={setNodeRef}
@@ -1081,6 +1093,64 @@ const Cell = memo(function Cell({
       {...handlers}
       className={cn(baseClasses, isMyColumn && "bg-amber-50/50")}
       style={isCurrentRow ? { boxShadow: CURRENT_TIME_LINE } : undefined}
+    />
+  );
+}
+
+/**
+ * Variante SANS drag & drop — le cas par défaut sur desktop (hors Ctrl/Cmd).
+ *
+ * PERF : c'est LE gain clé. Auparavant chaque cellule montait toujours
+ * `useDraggable` + `useDroppable` (~700 hooks re-exécutés à chaque édition /
+ * navigation / sélection → grille qui rame). Ici aucun hook dnd-kit n'est
+ * monté : la grille ne paie le coût du drag & drop QUE lorsqu'il peut
+ * réellement servir (tactile, ou Ctrl/Cmd tenu → DndCell).
+ */
+const PlainCell = memo(function PlainCell(props: CellProps) {
+  return <CellView {...props} {...EMPTY_DND} />;
+});
+
+/**
+ * Variante AVEC drag & drop (hooks dnd-kit). Montée uniquement quand le drag
+ * peut servir : tactile (long-press) ou souris + Ctrl/Cmd tenu.
+ */
+const DndCell = memo(function DndCell(props: CellProps) {
+  const isAbsence = props.entry?.type === "ABSENCE";
+  const isTask = props.entry?.type === "TASK";
+
+  // - draggable : seulement les cellules TASK (on ne déplace ni une absence ni
+  //   une cellule vide).
+  // - droppable : cellules TASK et vides ; les absences refusent le drop pour
+  //   protéger les jours de congé/maladie validés.
+  const draggable = useDraggable({
+    id: props.cellKey,
+    disabled: !props.dndEnabled || !isTask,
+  });
+  const droppable = useDroppable({
+    id: props.cellKey,
+    disabled: !props.dndEnabled || isAbsence,
+  });
+
+  const setNodeRef = (node: HTMLElement | null) => {
+    draggable.setNodeRef(node);
+    droppable.setNodeRef(node);
+  };
+
+  // DnD réellement actif sur cette cellule TASK : tactile OU Ctrl/Cmd tenu.
+  const taskCellUsesDnd =
+    props.dndEnabled && isTask && (props.isTouchDevice || props.isModHeld);
+  const dndProps = taskCellUsesDnd
+    ? { ...draggable.listeners, ...draggable.attributes }
+    : {};
+
+  return (
+    <CellView
+      {...props}
+      setNodeRef={setNodeRef}
+      dndProps={dndProps}
+      isDragging={draggable.isDragging}
+      isOver={droppable.isOver}
+      taskCellUsesDnd={taskCellUsesDnd}
     />
   );
 });
