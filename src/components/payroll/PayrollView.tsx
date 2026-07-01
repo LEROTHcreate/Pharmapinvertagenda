@@ -28,6 +28,7 @@ import {
   REGION_LABELS,
   type Region,
 } from "@/lib/payroll-reference";
+import { AbsenceImpactPanel } from "@/components/payroll/AbsenceImpactPanel";
 
 type Line = {
   employeeId: string;
@@ -438,6 +439,9 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         * Maladie = heures payées par l'employeur après 3 jours de carence (sous condition d'ancienneté ≥ 1 an,
         Convention Pharmacie d'Officine). Les IJSS de la CPAM ne figurent pas dans le coût employeur.
       </p>
+
+      {/* Pont Absences ↔ Paie : détail lisible de l'impact des absences du mois */}
+      <AbsenceImpactPanel lines={lines} />
 
       {/* Fraîcheur des données de référence (benchmark) */}
       <div className="rounded-xl bg-zinc-50/70 px-3 py-2.5 text-[11px] text-zinc-500 leading-relaxed">
