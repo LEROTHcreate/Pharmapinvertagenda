@@ -12,6 +12,7 @@ import {
   LogOut,
   UserCog,
   LayoutTemplate,
+  Lightbulb,
   MessageCircle,
   Settings,
   StickyNote,
@@ -33,6 +34,7 @@ import type { UserRole } from "@prisma/client";
 
 type NavKey =
   | "planning"
+  | "infos"
   | "gabarits"
   | "employes"
   | "absences"
@@ -52,6 +54,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
+  { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true },
   { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },

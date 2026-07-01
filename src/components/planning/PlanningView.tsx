@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3 } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
-import { ABSENCE_LABELS, WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
+import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import {
   computeOvertimeCells,
@@ -27,11 +27,8 @@ import type { ApplyScope } from "@/components/planning/ApplyScopeSelector";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
 import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
 import type { EmployeeStatus } from "@prisma/client";
-import { CoverageWarnings } from "@/components/planning/CoverageWarnings";
-import { analyzeCoverage } from "@/lib/coverage-analysis";
 import { ViewModeSelector } from "@/components/planning/ViewModeSelector";
 import { PrintButton } from "@/components/planning/PrintButton";
-import { ExportXlsxButton } from "@/components/planning/ExportXlsxButton";
 import { useToast } from "@/components/ui/toast";
 import { holidaysIndexForDates } from "@/lib/holidays-fr";
 import type { AbsenceConflict } from "@/components/planning/AbsenceConflictDialog";
@@ -593,46 +590,11 @@ export function PlanningView({
   );
   const selectedDayHoliday = holidaysIndex.get(selectedDay) ?? null;
 
-  /**
-   * Manquements aux règles de couverture sur la semaine en cours :
-   *  - Toujours ≥ 1 pharmacien sur chaque créneau ouvert
-   *  - Toujours ≥ 2 préparateurs
-   *  - Notifier si le livreur est absent (titulaires assurent les livraisons)
-   */
-  const coverageWarnings = useMemo(() => {
-    // Créneaux d'ouverture standard (08:30 → 21:00) — exclut tôt matin
-    // Horaires d'ouverture au public : 08:30 → 20:00
-    const openSlots = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
-    return analyzeCoverage(employees, dayDates, index, openSlots, minStaff);
-  }, [employees, dayDates, index, minStaff]);
-
-  // Filtre selon le jour sélectionné : le lundi on garde la vue d'ensemble
-  // de la semaine (utile en début de semaine pour repérer les trous), les
-  // autres jours on n'affiche que les warnings du jour pour ne pas surcharger.
-  const visibleCoverageWarnings = useMemo(() => {
-    if (dayIndex === 0) return coverageWarnings;
-    return coverageWarnings.filter((w) => w.date === selectedDay);
-  }, [coverageWarnings, dayIndex, selectedDay]);
-
-  const absentToday = useMemo(() => {
-    return employees
-      .filter((emp) => {
-        const day = index.get(emp.id)?.get(selectedDay);
-        if (!day) return false;
-        return Array.from(day.values()).some((e) => e.type === "ABSENCE");
-      })
-      .map((emp) => {
-        const day = index.get(emp.id)?.get(selectedDay);
-        const sample = day
-          ? Array.from(day.values()).find((e) => e.type === "ABSENCE")
-          : null;
-        return {
-          id: emp.id,
-          name: `${emp.firstName} ${emp.lastName.charAt(0)}.`,
-          absenceCode: sample?.absenceCode ?? null,
-        };
-      });
-  }, [employees, index, selectedDay]);
+  // NB : l'analyse de couverture (sous-effectif, pas de pharmacien…) et la
+  // liste des absents ont été déplacées dans la page « Infos & conseils »
+  // (/infos) — elles ne sont donc plus recalculées à chaque modification du
+  // planning. Le repère d'effectif reste porté par les pastilles par créneau
+  // (grille) et la ligne « Eff. mini » (vue Semaine).
 
   // Navigation semaine : un seul round-trip via router.replace (le serveur
   // re-fetch la nouvelle semaine et l'effet sur initialEntries/initialWeekStart
@@ -1486,7 +1448,6 @@ export function PlanningView({
                 onApplied={() => refetchWeek(weekStart)}
               />
             )}
-            {isAdmin && <ExportXlsxButton weekStart={weekStart} />}
             <EmployeeStatusFilter
               selected={statusFilter}
               onChange={setStatusFilter}
@@ -1650,48 +1611,6 @@ export function PlanningView({
           })}
         </div>
       </div>
-
-      {/* Bulle "Statut équipe" — admin uniquement (les collaborateurs ne
-          gèrent pas la couverture, on évite de leur afficher des alertes
-          sur lesquelles ils ne peuvent pas agir). `no-print` car en
-          impression on veut juste la grille, pas les alertes manquements
-          d'effectif (qui prendraient une page entière inutilement).
-          Masquée sur mobile (`hidden md:block`) pour alléger l'écran : l'info
-          est déjà portée par la vue Jour (bandeau absents + pastilles
-          d'effectif) et la vue Semaine (ligne "Eff. mini"). */}
-      {isAdmin && (absentToday.length > 0 || visibleCoverageWarnings.length > 0) && (
-        <div className="hidden md:block no-print rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
-            <span className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-foreground/70">
-              Statut équipe — {dayIndex === 0 ? "semaine en cours" : "jour sélectionné"}
-            </span>
-          </div>
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-6 sm:gap-y-2.5">
-            {absentToday.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                <span className="text-[10.5px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
-                  Absents
-                </span>
-                {absentToday.map((a) => (
-                  <span
-                    key={a.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-800 px-2.5 py-0.5 tracking-tight"
-                  >
-                    {a.name}
-                    {a.absenceCode && (
-                      <span className="text-amber-600/70 text-[10px]">
-                        · {ABSENCE_LABELS[a.absenceCode]}
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            )}
-            <CoverageWarnings warnings={visibleCoverageWarnings} />
-          </div>
-        </div>
-      )}
 
       {/* Bandeau "jour férié" — badge "FR" stylé (pas d'emoji drapeau qui
           rend mal sur Windows), alignement centré, design Apple-épuré. */}

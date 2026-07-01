@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CalendarClock, Lightbulb } from "lucide-react";
+import Link from "next/link";
+import { Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { AvatarImage } from "@/components/layout/AvatarImage";
 import { pickRandomGreeting } from "@/lib/daily-greeting";
 import type { PlanningTip } from "@/lib/planning-tips";
@@ -22,10 +18,10 @@ const TIPS_SEEN_KEY = "pp_tips_seen";
  * Easter egg : 5 clicks rapides (≤ 600 ms entre chaque) → message spécial +
  * bounce dramatique avec sparkles supplémentaires.
  *
- * Ampoule "conseils" : ouvre un panneau (DropdownMenu Radix) listant les tips
- * contextuels de la semaine. Le panneau est portalisé et anti-collision → il
- * reste TOUJOURS dans l'écran (hauteur bornée + scroll interne), contrairement
- * à l'ancienne bulle positionnée en absolu qui débordait en bas de page.
+ * Ampoule "conseils" : raccourci vers la page « Infos & conseils » (/infos)
+ * qui regroupe tout le contextuel (à valider, sous-effectif, conseils,
+ * fériés). Elle pulse tant que les conseils du moment n'ont pas été consultés
+ * (signature mémorisée en localStorage).
  */
 
 /** Phrases spéciales débloquées en spammant l'avatar 5× rapide */
@@ -216,106 +212,36 @@ export function WelcomeBanner({
         </p>
       </div>
 
-      {/* Ampoule "conseils" pinnée au coin droit du bandeau. Le panneau est
-          rendu par Radix (portal + anti-collision) → jamais de débordement. */}
-      {tips.length > 0 ? (
-        <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2">
-          <DropdownMenu onOpenChange={(o) => o && markSeen()}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={`${tips.length} conseil${tips.length > 1 ? "s" : ""} pour la semaine`}
-                className={cn(
-                  "relative inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors",
-                  "text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
-                  "data-[state=open]:bg-amber-50 dark:data-[state=open]:bg-amber-950/40 data-[state=open]:text-amber-600"
-                )}
-                title={`${tips.length} conseil${tips.length > 1 ? "s" : ""} pour la semaine`}
-              >
-                <Lightbulb className="h-4 w-4" />
-                {/* Pastille pulsante tant que les conseils du moment n'ont pas
-                    été ouverts (signature en localStorage). */}
-                {!seen && (
-                  <span
-                    aria-hidden
-                    className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5"
-                  >
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card" />
-                  </span>
-                )}
-              </button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              // Hauteur bornée à l'espace dispo à l'écran (var fournie par
-              // Radix) → le panneau ne déborde jamais, la liste scrolle.
-              className="flex max-h-[min(26rem,var(--radix-dropdown-menu-content-available-height,26rem))] w-[min(360px,calc(100vw-1.5rem))] flex-col overflow-hidden p-0 border-amber-200 dark:border-amber-800/60 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.22)]"
-            >
-              {/* En-tête */}
-              <div className="flex shrink-0 items-center gap-2.5 border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20 px-4 py-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400">
-                  <Lightbulb className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[13px] font-semibold leading-tight text-foreground">
-                    À prévoir cette semaine
-                  </p>
-                  <p className="text-[11px] leading-tight text-muted-foreground">
-                    {tips.length} point{tips.length > 1 ? "s" : ""} pour anticiper l&apos;affluence
-                  </p>
-                </div>
-              </div>
-
-              {/* Liste scrollable */}
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 scrollbar-thin">
-                <ul className="space-y-1.5">
-                  {tips.map((tip, i) => {
-                    const warn = tip.level === "warning";
-                    const Icon = warn ? AlertTriangle : CalendarClock;
-                    return (
-                      <li
-                        key={`${tip.date}-${i}`}
-                        className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"
-                      >
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
-                            warn
-                              ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-                              : "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
-                          )}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[12.5px] font-semibold leading-snug text-foreground">
-                            {tip.title}
-                          </p>
-                          <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
-                            {tip.description}
-                          </p>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ) : (
-        // Ampoule "inactive" (sans conseil) — pinnée au même endroit pour
-        // garantir une position visuelle stable peu importe l'état.
-        <Lightbulb
-          className="hidden sm:block absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-amber-500/40"
-          aria-hidden
-        />
-      )}
+      {/* Ampoule "conseils" pinnée au coin droit → raccourci vers /infos.
+          Pulse tant que les conseils du moment n'ont pas été consultés. */}
+      <Link
+        href="/infos"
+        onClick={markSeen}
+        aria-label={
+          tips.length > 0
+            ? `Infos & conseils — ${tips.length} à voir`
+            : "Infos & conseils"
+        }
+        title="Infos & conseils"
+        className={cn(
+          "absolute right-3 sm:right-4 top-1/2 -translate-y-1/2",
+          "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+          "text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+          tips.length === 0 && "text-amber-500/50 hover:text-amber-500"
+        )}
+      >
+        <Lightbulb className="h-4 w-4" />
+        {tips.length > 0 && !seen && (
+          <span
+            aria-hidden
+            className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5"
+          >
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card" />
+          </span>
+        )}
+      </Link>
     </section>
   );
 }
