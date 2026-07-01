@@ -126,6 +126,13 @@ model Pharmacy {
   payrollContribEmployee Float? // Cotisations salariales (ex: 0.22)
   payrollContribEmployer Float? // Cotisations patronales (ex: 0.42)
 
+  // ─── Réglages Pharmacie de garde ───────────────────────────────────
+  // Indemnités de garde (€) par type. Null = valeurs par défaut indicatives
+  // (voir GARDE_RATES_PLACEHOLDER). Modifiables depuis la page /gardes.
+  gardeRateNuit      Float? // Indemnité d'une garde de nuit
+  gardeRateDimanche  Float? // Indemnité d'une garde de dimanche
+  gardeRateJourFerie Float? // Indemnité d'une garde de jour férié
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -139,6 +146,7 @@ model Pharmacy {
   payrollNotes   PayrollNote[]
   availabilityWishes AvailabilityWish[]
   monthlyRevenues    MonthlyRevenue[]
+  gardes             Garde[]
 
   @@map("pharmacies")
 }
@@ -266,6 +274,7 @@ model Employee {
   absenceRequests    AbsenceRequest[]
   templateEntries    WeekTemplateEntry[]
   availabilityWishes AvailabilityWish[]
+  gardes             Garde[]
 
   @@index([pharmacyId])
   @@index([pharmacyId, isActive])
@@ -597,4 +606,35 @@ model RateLimitBucket {
 
   @@index([resetAt])
   @@map("rate_limit_buckets")
+}
+
+/// Type de garde (majoration principale). Aligné sur src/lib/gardes.ts.
+enum GardeType {
+  NUIT
+  DIMANCHE
+  JOUR_FERIE
+}
+
+/// Pharmacie de garde — un pharmacien assure une garde à une date donnée.
+/// Sert au compteur d'équité, à la suggestion de rotation et au calcul des
+/// indemnités (cf. src/lib/gardes.ts). Seuls les employés PHARMACIEN sont
+/// affectables (contrôle applicatif).
+model Garde {
+  id           String      @id @default(cuid())
+  date         DateTime    @db.Date
+  type         GardeType
+  // Majorations cumulées EN PLUS du type principal (ex. une NUIT un DIMANCHE).
+  extraMajorations GardeType[]
+  note         String?
+  createdAt    DateTime    @default(now())
+
+  pharmacistId String
+  pharmacist   Employee    @relation(fields: [pharmacistId], references: [id], onDelete: Cascade)
+
+  pharmacyId   String
+  pharmacy     Pharmacy    @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId, date])
+  @@index([pharmacistId])
+  @@map("gardes")
 }

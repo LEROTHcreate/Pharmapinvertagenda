@@ -16,6 +16,7 @@ import {
   MessageCircle,
   Settings,
   StickyNote,
+  ShieldCheck,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ type NavKey =
   | "notes"
   | "stats"
   | "remuneration"
+  | "gardes"
   | "utilisateurs"
   | "parametres";
 type NavItem = {
@@ -55,6 +57,7 @@ const NAV: NavItem[] = [
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
   { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
+  { key: "gardes", href: "/gardes", label: "Gardes", icon: ShieldCheck, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
   { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },
 ];
