@@ -47,8 +47,11 @@
 import { ScheduleType, type EmployeeStatus, type PayMode } from "@prisma/client";
 import type { ScheduleEntryDTO } from "@/types";
 import { isWorkingDay } from "@/lib/planning-tips";
-
-const SLOT_HOURS = 0.5;
+import {
+  SLOT_HOURS,
+  isoWeekKey,
+  weeklyOvertimeSplit,
+} from "@/lib/work-hours";
 
 // Taux indicatifs par défaut — modifiables via la page paramètres pharmacie.
 export const DEFAULT_PAYROLL_RATES = {
@@ -259,10 +262,13 @@ export function computePayrollLine(
   let overtimeHours25 = 0;
   let overtimeHours50 = 0;
   for (const weekSlots of taskSlotsByWeek.values()) {
-    const weekHours = weekSlots * SLOT_HOURS;
-    const weekOvertime = Math.max(0, weekHours - employee.weeklyHours);
-    overtimeHours25 += Math.min(weekOvertime, 8);
-    overtimeHours50 += Math.max(0, weekOvertime - 8);
+    // Même base partagée que les Statistiques (cf. lib/work-hours).
+    const { h25, h50 } = weeklyOvertimeSplit(
+      weekSlots * SLOT_HOURS,
+      employee.weeklyHours
+    );
+    overtimeHours25 += h25;
+    overtimeHours50 += h50;
   }
   const overtimeTotal = overtimeHours25 + overtimeHours50;
   const taskHours = taskSlots * SLOT_HOURS;
@@ -372,15 +378,6 @@ function monthsBetween(a: Date, b: Date): number {
   // embauché le 30 et analysé le 1er → l'ancienneté ne compte pas ce mois.
   if (b.getDate() < a.getDate()) months--;
   return months;
-}
-
-/** Clé de semaine ISO (lundi, UTC) d'une date "YYYY-MM-DD". */
-function isoWeekKey(dateIso: string): string {
-  const d = new Date(`${dateIso}T00:00:00Z`);
-  const day = d.getUTCDay(); // 0=dim, 1=lun…6=sam
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
 }
 
 /** Nombre de jours OUVRÉS (lun-sam hors fériés) strictement entre deux dates ISO. */
