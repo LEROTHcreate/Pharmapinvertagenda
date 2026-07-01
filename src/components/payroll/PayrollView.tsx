@@ -595,7 +595,7 @@ function SalaryRatioCard({
               value={ca}
               onChange={(e) => setCa(e.target.value)}
               placeholder="ex : 180000"
-              className="block w-40 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px] font-mono"
+              className="block w-40 rounded-md border border-input px-2.5 py-1.5 text-[13px] font-mono"
             />
           </div>
           <div className="space-y-1">
@@ -605,7 +605,7 @@ function SalaryRatioCard({
               value={marge}
               onChange={(e) => setMarge(e.target.value)}
               placeholder="ex : 55000"
-              className="block w-40 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px] font-mono"
+              className="block w-40 rounded-md border border-input px-2.5 py-1.5 text-[13px] font-mono"
             />
           </div>
           <div className="flex items-center gap-1.5">
@@ -790,13 +790,13 @@ function PayrollRow({
         {editing ? (
           <div className="inline-flex flex-col items-stretch gap-1 text-left min-w-[150px]">
             {/* Bascule mode horaire / mensuel */}
-            <div className="inline-flex self-start rounded-md border border-zinc-300 overflow-hidden text-[10px] font-medium">
+            <div className="inline-flex self-start rounded-md border border-input overflow-hidden text-[10px] font-medium">
               <button
                 type="button"
                 onClick={() => setMode("HOURLY")}
                 className={cn(
                   "px-2 py-0.5",
-                  mode === "HOURLY" ? "bg-violet-600 text-white" : "text-zinc-600 hover:bg-zinc-100"
+                  mode === "HOURLY" ? "bg-violet-600 text-white" : "text-foreground/70 hover:bg-accent/60"
                 )}
               >
                 €/h
@@ -805,8 +805,8 @@ function PayrollRow({
                 type="button"
                 onClick={() => setMode("MONTHLY")}
                 className={cn(
-                  "px-2 py-0.5 border-l border-zinc-300",
-                  mode === "MONTHLY" ? "bg-violet-600 text-white" : "text-zinc-600 hover:bg-zinc-100"
+                  "px-2 py-0.5 border-l border-input",
+                  mode === "MONTHLY" ? "bg-violet-600 text-white" : "text-foreground/70 hover:bg-accent/60"
                 )}
               >
                 €/mois
@@ -820,7 +820,7 @@ function PayrollRow({
                 onChange={(e) => setVal(e.target.value)}
                 autoFocus
                 placeholder={mode === "MONTHLY" ? "€/mois" : "€/h"}
-                className="w-20 rounded border border-zinc-300 px-2 py-0.5 text-right text-[12.5px] font-mono"
+                className="w-20 rounded border border-input px-2 py-0.5 text-right text-[12.5px] font-mono"
               />
               <input
                 type="text"
@@ -829,7 +829,7 @@ function PayrollRow({
                 onChange={(e) => setCoeff(e.target.value)}
                 placeholder="Coeff."
                 title="Coefficient conventionnel (optionnel — laisser vide pour estimer via l'ancienneté)"
-                className="w-14 rounded border border-zinc-300 px-2 py-0.5 text-right text-[12.5px] font-mono"
+                className="w-14 rounded border border-input px-2 py-0.5 text-right text-[12.5px] font-mono"
               />
             </div>
             <div className="inline-flex items-center gap-1 self-end">
@@ -917,7 +917,7 @@ function BenchmarkChip({ benchmark: b }: { benchmark: Benchmark }) {
   if (b.legal === "below_min") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-semibold text-red-700"
+        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300"
         title={`Sous le minimum conventionnel : ${b.minHourly.toFixed(2)} €/h requis (coeff. ${b.coefficient} · ${b.coefficientLabel}).`}
       >
         <AlertTriangle className="h-3 w-3" />
@@ -934,17 +934,17 @@ function BenchmarkChip({ benchmark: b }: { benchmark: Benchmark }) {
   }
   const cfg = {
     under: {
-      cls: "bg-amber-100 text-amber-700",
+      cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
       icon: <TrendingDown className="h-3 w-3" />,
       label: "Sous marché",
     },
     aligned: {
-      cls: "bg-emerald-100 text-emerald-700",
+      cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
       icon: <Minus className="h-3 w-3" />,
       label: "Aligné",
     },
     above: {
-      cls: "bg-sky-100 text-sky-700",
+      cls: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
       icon: <TrendingUp className="h-3 w-3" />,
       label: "Au-dessus",
     },

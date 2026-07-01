@@ -92,11 +92,11 @@ export function CalendarSyncCard({ initialToken }: { initialToken: string | null
               readOnly
               value={feedUrl ?? "…"}
               onFocus={(e) => e.currentTarget.select()}
-              className="flex-1 rounded-md border border-zinc-300 bg-muted/40 px-2.5 py-1.5 text-[12px] font-mono text-zinc-700"
+              className="flex-1 rounded-md border border-input bg-muted/40 px-2.5 py-1.5 text-[12px] font-mono text-foreground/80"
             />
             <button
               onClick={copy}
-              className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[12.5px] font-medium hover:bg-accent/60"
+              className="inline-flex items-center gap-1 rounded-md border border-input px-2.5 py-1.5 text-[12.5px] font-medium hover:bg-accent/60"
               title="Copier l'URL"
             >
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}

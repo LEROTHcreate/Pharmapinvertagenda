@@ -17,9 +17,9 @@ const KIND_LABELS: Record<WishKind, string> = {
 };
 
 const KIND_STYLES: Record<WishKind, string> = {
-  UNAVAILABLE: "bg-red-100 text-red-700",
-  PREFER_OFF: "bg-amber-100 text-amber-700",
-  PREFER_WORK: "bg-emerald-100 text-emerald-700",
+  UNAVAILABLE: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300",
+  PREFER_OFF: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  PREFER_WORK: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
 };
 
 function todayIso(): string {
@@ -152,7 +152,7 @@ export function AvailabilityWishesView({
                 min={todayIso()}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="block rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px]"
+                className="block rounded-md border border-input bg-background px-2.5 py-1.5 text-[13px]"
               />
             </div>
             <div className="space-y-1">
@@ -160,7 +160,7 @@ export function AvailabilityWishesView({
               <select
                 value={kind}
                 onChange={(e) => setKind(e.target.value as WishKind)}
-                className="block rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px]"
+                className="block rounded-md border border-input bg-background px-2.5 py-1.5 text-[13px]"
               >
                 {(Object.keys(KIND_LABELS) as WishKind[]).map((k) => (
                   <option key={k} value={k}>
@@ -176,7 +176,7 @@ export function AvailabilityWishesView({
                 onChange={(e) => setNote(e.target.value)}
                 maxLength={200}
                 placeholder="ex : rendez-vous médical"
-                className="block w-full rounded-md border border-zinc-300 px-2.5 py-1.5 text-[13px]"
+                className="block w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-[13px]"
               />
             </div>
             <button
