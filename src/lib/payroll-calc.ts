@@ -45,10 +45,8 @@
  */
 
 import { ScheduleType, type EmployeeStatus, type PayMode } from "@prisma/client";
-import type { ScheduleEntryDTO } from "@/types";
+import { type ScheduleEntryDTO, SLOT_HOURS } from "@/types";
 import { isWorkingDay } from "@/lib/planning-tips";
-
-const SLOT_HOURS = 0.5;
 
 // Taux indicatifs par défaut — modifiables via la page paramètres pharmacie.
 export const DEFAULT_PAYROLL_RATES = {

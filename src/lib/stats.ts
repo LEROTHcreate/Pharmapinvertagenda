@@ -49,13 +49,9 @@ export function getPeriodRange(period: StatsPeriod, now = new Date()): PeriodInf
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth(); // 0-11
   if (period === "week") {
-    // Lundi de la semaine courante (pharma fermée dimanche, on aligne sur ISO)
-    const day = now.getUTCDay(); // 0=dim, 1=lun…6=sam
-    const diff = day === 0 ? -6 : 1 - day;
-    const monday = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    );
-    monday.setUTCDate(monday.getUTCDate() + diff);
+    // Lundi de la semaine courante (réutilise le même calcul UTC que le
+    // bucketing hebdo — plus de logique start-of-week dupliquée dans ce fichier).
+    const monday = isoWeekStartUTC(now);
     const nextMonday = new Date(monday);
     nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
     const sat = new Date(monday);
