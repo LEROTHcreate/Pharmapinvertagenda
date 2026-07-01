@@ -836,15 +836,17 @@ body[data-focus="true"] .md\:hidden header {
   contain: layout paint style;
   transform: translateZ(0);
 }
+/* Blobs STATIQUES : peints une seule fois puis mis en cache par le
+   compositeur. Aucune animation ni will-change → pas de recomposition en
+   continu (c'était la cause n°1 du jank d'interaction sur desktop). */
 .mesh-bg::before,
 .mesh-bg::after,
 .mesh-bg > span {
   content: "";
   position: absolute;
   border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.35;
-  will-change: transform;
+  filter: blur(80px);
+  opacity: 0.32;
 }
 .mesh-bg::before {
   top: -10%;
@@ -852,7 +854,6 @@ body[data-focus="true"] .md\:hidden header {
   width: 50%;
   height: 50%;
   background: radial-gradient(circle, rgb(167 139 250 / 0.45), transparent 70%);
-  animation: blob-drift 28s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
 }
 .mesh-bg::after {
   bottom: -10%;
@@ -860,7 +861,6 @@ body[data-focus="true"] .md\:hidden header {
   width: 55%;
   height: 55%;
   background: radial-gradient(circle, rgb(129 140 248 / 0.4), transparent 70%);
-  animation: blob-drift 36s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate-reverse;
 }
 .mesh-bg > span {
   top: 30%;
@@ -868,7 +868,6 @@ body[data-focus="true"] .md\:hidden header {
   width: 40%;
   height: 40%;
   background: radial-gradient(circle, rgb(244 114 182 / 0.25), transparent 70%);
-  animation: blob-drift 42s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
 }
 
 /* ─── Toast (glass) ─── */
