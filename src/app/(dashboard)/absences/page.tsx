@@ -1,20 +1,28 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { AbsencesView } from "@/components/absences/AbsencesView";
+import { AbsencesHub } from "@/components/absences/AbsencesHub";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Absences — PharmaPlanning" };
+export const metadata = { title: "Absences & disponibilités — PharmaPlanning" };
 
-export default async function AbsencesPage() {
+export default async function AbsencesPage({
+  searchParams,
+}: {
+  searchParams: { tab?: string };
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
+  const initialTab =
+    searchParams.tab === "disponibilites" ? "disponibilites" : "absences";
+
   return (
-    <AbsencesView
+    <AbsencesHub
       currentUser={{
         role: session.user.role,
         employeeId: session.user.employeeId ?? null,
       }}
+      initialTab={initialTab}
     />
   );
 }

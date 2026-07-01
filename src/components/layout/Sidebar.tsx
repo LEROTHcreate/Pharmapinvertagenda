@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
 import {
   Calendar,
-  CalendarCheck,
   Users,
   CalendarOff,
   BarChart3,
@@ -30,7 +29,6 @@ type NavKey =
   | "gabarits"
   | "employes"
   | "absences"
-  | "disponibilites"
   | "messages"
   | "notes"
   | "stats"
@@ -49,8 +47,7 @@ const NAV: NavItem[] = [
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true },
   { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true },
-  { key: "absences", href: "/absences", label: "Absences", icon: CalendarOff },
-  { key: "disponibilites", href: "/disponibilites", label: "Disponibilités", icon: CalendarCheck },
+  { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
