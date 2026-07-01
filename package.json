@@ -16,6 +16,8 @@
     "db:seed:pinvert": "tsx prisma/seed.ts pin-vert",
     "db:seed:template": "tsx prisma/seed.ts template",
     "db:studio": "prisma studio",
+    "maint:on": "node scripts/maintenance.mjs on",
+    "maint:off": "node scripts/maintenance.mjs off",
     "db:update-admin": "tsx prisma/update-admin.ts",
     "postinstall": "prisma generate"
   },
@@ -41,6 +43,7 @@
     "@supabase/supabase-js": "^2.108.2",
     "@tanstack/react-query": "^5.100.5",
     "@types/nodemailer": "^7.0.12",
+    "@vercel/edge-config": "^1.4.3",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
