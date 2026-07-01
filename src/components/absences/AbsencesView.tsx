@@ -40,9 +40,11 @@ type Props = {
     role: "ADMIN" | "EMPLOYEE";
     employeeId: string | null;
   };
+  /** Quand true, masque le titre/padding de page (rendu dans un hub à onglets). */
+  embedded?: boolean;
 };
 
-export function AbsencesView({ currentUser }: Props) {
+export function AbsencesView({ currentUser, embedded = false }: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [requests, setRequests] = useState<AbsenceDTO[]>([]);
@@ -133,16 +135,23 @@ export function AbsencesView({ currentUser }: Props) {
   });
 
   return (
-    <div className="p-3 md:p-4 space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight">Absences</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {isAdmin
-              ? "Validez ou refusez les demandes des collaborateurs"
-              : "Vos demandes d'absence et leur statut"}
-          </p>
-        </div>
+    <div className={cn(embedded ? "space-y-4" : "p-3 md:p-4 space-y-4")}>
+      <div
+        className={cn(
+          "flex items-center gap-3 flex-wrap",
+          embedded ? "justify-end" : "justify-between"
+        )}
+      >
+        {!embedded && (
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight">Absences</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {isAdmin
+                ? "Validez ou refusez les demandes des collaborateurs"
+                : "Vos demandes d'absence et leur statut"}
+            </p>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {isAdmin && (
             <Button variant="outline" onClick={() => setCollectiveOpen(true)}>
