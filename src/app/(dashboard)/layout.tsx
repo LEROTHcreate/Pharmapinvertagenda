@@ -45,12 +45,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
   // Favicon personnalisé uniquement si l'officine a un logo custom ; sinon
   // on hérite du favicon de marque PharmaPlanning (pas de croix cassée).
+  // PERF : logoUrl peut être un data URL base64 (~200 Ko). On ne l'émet QU'UNE
+  // fois (`icon`) et pas en triple (icon + shortcut + apple) — sinon ~600 Ko de
+  // base64 sont inline dans le <head> de CHAQUE page du dashboard, alourdissant
+  // le HTML et le premier rendu. L'icône PWA/home-screen vient du manifest.
   if (pharmacy.logoUrl) {
-    meta.icons = {
-      icon: pharmacy.logoUrl,
-      shortcut: pharmacy.logoUrl,
-      apple: pharmacy.logoUrl,
-    };
+    meta.icons = { icon: pharmacy.logoUrl };
   }
   return meta;
 }
