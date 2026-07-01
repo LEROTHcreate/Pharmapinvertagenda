@@ -625,29 +625,25 @@ export const PlanningGrid = memo(function PlanningGrid({
                   key={slot}
                   className={cn(
                     "group/row transition-colors",
-                    zebraClass,
-                    // Ligne "heure actuelle" : bordure haute de 3px posée sur
-                    // CHAQUE <td> (et non un box-shadow sur le <tr>) → elle se
-                    // dessine AU-DESSUS du fond des cellules de rôle colorées,
-                    // au lieu de passer derrière. `!` pour battre la bordure
-                    // d'heure pleine quand le créneau courant tombe pile à l'heure.
-                    isCurrent &&
-                      "[&>td]:!border-t-[3px] [&>td]:!border-t-rose-500"
+                    zebraClass
+                    // Ligne "heure actuelle" : dessinée par cellule via
+                    // box-shadow inset (cf. CURRENT_TIME_LINE), et non par une
+                    // bordure sur le <tr> — pour rester continue au-dessus des
+                    // colonnes sticky. Voir le prop `isCurrentRow` passé aux <td>.
                   )}
                 >
                   <td
                     className={cn(
                       "sticky left-0 z-10 bg-card px-3 py-1 font-mono text-right tabular-nums select-none",
-                      // Trait horaire renforcé sur toute la largeur de la grille
-                      // — appliqué directement sur chaque <td> car les cellules
-                      // TASK / colonnes sticky ont leur propre fond qui
-                      // masquerait un border-t posé sur le <tr>.
-                      isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70",
+                      // Trait horaire renforcé — masqué quand c'est le créneau
+                      // courant pour laisser la place au trait rouge.
+                      isHourMark && !isCurrent && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70",
                       isHourMark
                         ? "text-foreground font-semibold"
                         : "text-muted-foreground/40 text-[10.5px]",
                       isCurrent && "text-rose-600 font-semibold"
                     )}
+                    style={isCurrent ? { boxShadow: CURRENT_TIME_LINE } : undefined}
                   >
                     {isCurrent && (
                       <span className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-rose-100" />
@@ -685,6 +681,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                       <Cell
                         key={emp.id}
                         cellKey={key}
+                        isCurrentRow={isCurrent}
                         empIdx={empIdx}
                         slotIdx={slotIdx}
                         entry={entry}
@@ -716,8 +713,9 @@ export const PlanningGrid = memo(function PlanningGrid({
                   <td
                     className={cn(
                       "sticky right-0 z-10 bg-card px-2 py-1 text-center select-none",
-                      isHourMark && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70"
+                      isHourMark && !isCurrent && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70"
                     )}
+                    style={isCurrent ? { boxShadow: CURRENT_TIME_LINE } : undefined}
                   >
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -785,8 +783,17 @@ export const PlanningGrid = memo(function PlanningGrid({
 /*                            Cell component                           */
 /* ------------------------------------------------------------------ */
 
+// Ligne "heure actuelle" : dessinée via box-shadow inset (et non un
+// border-top). En border-collapse, un border-top posé sur les <td> est masqué
+// sur les colonnes sticky (heure / effectif) qui repeignent leur fond
+// par-dessus → ligne rouge coupée aux extrémités. Le box-shadow inset, lui,
+// se peint AU-DESSUS du fond de chaque cellule (colorée ou sticky) → ligne
+// continue et nette sur toute la largeur.
+const CURRENT_TIME_LINE = "inset 0 3px 0 0 rgb(244 63 94)"; // rose-500
+
 const Cell = memo(function Cell({
   cellKey,
+  isCurrentRow,
   empIdx,
   slotIdx,
   entry,
@@ -810,6 +817,8 @@ const Cell = memo(function Cell({
   onCellClickDirect,
 }: {
   cellKey: CellKey;
+  /** True si cette cellule est sur la ligne "heure actuelle" → trait rouge. */
+  isCurrentRow: boolean;
   empIdx: number;
   slotIdx: number;
   entry: ScheduleEntryDTO | null;
@@ -940,6 +949,7 @@ const Cell = memo(function Cell({
           isMyColumn && "bg-amber-50/50",
           dropTargetRing
         )}
+        style={isCurrentRow ? { boxShadow: CURRENT_TIME_LINE } : undefined}
         aria-label="Vide"
       />
     );
@@ -997,7 +1007,11 @@ const Cell = memo(function Cell({
         style={{
           background,
           color: c.text,
-          boxShadow: overtimeBorders,
+          // Trait "heure actuelle" combiné au cadre heures-sup s'il y en a un.
+          boxShadow:
+            [overtimeBorders, isCurrentRow && CURRENT_TIME_LINE]
+              .filter(Boolean)
+              .join(", ") || undefined,
         }}
         title={
           isOvertime
@@ -1037,6 +1051,7 @@ const Cell = memo(function Cell({
           backgroundColor: s.bg,
           backgroundImage: layers.join(", "),
           color: s.text,
+          boxShadow: isCurrentRow ? CURRENT_TIME_LINE : undefined,
         }}
         title={`Absence ${entry.absenceCode}`}
       >
@@ -1054,6 +1069,7 @@ const Cell = memo(function Cell({
       ref={setNodeRef}
       {...handlers}
       className={cn(baseClasses, isMyColumn && "bg-amber-50/50")}
+      style={isCurrentRow ? { boxShadow: CURRENT_TIME_LINE } : undefined}
     />
   );
 });
