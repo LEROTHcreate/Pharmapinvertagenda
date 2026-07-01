@@ -178,6 +178,9 @@ async function reviewAbsence(
     throw e;
   }
   revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
+  // La validation a converti des cellules TASK → ABSENCE dans le planning :
+  // invalider aussi le cache planning (sinon cellules périmées côté SSR).
+  revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));
 
   // Email à le collaborateur (best-effort)
   if (employeeWithUser?.user?.email) {
@@ -280,6 +283,8 @@ async function cancelAbsence(
       await tx.absenceRequest.delete({ where: { id: params.id } });
     });
     revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
+    // L'annulation a restauré/supprimé des cellules planning : invalider le cache.
+    revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));
 
     return NextResponse.json({
       ok: true,
