@@ -3,7 +3,7 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createPayrollNoteInput } from "@/validators/payroll-note";
-import { uploadImageIfDataUrl } from "@/lib/storage";
+import { uploadImageIfDataUrl, signedAttachmentUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -48,31 +48,33 @@ async function GET__impl() {
   });
 
   return NextResponse.json({
-    notes: notes.map((n) => ({
-      id: n.id,
-      date: n.date.toISOString().slice(0, 10),
-      infos: n.infos,
-      motif: n.motif,
-      accountingNote: n.accountingNote,
-      status: n.status,
-      accountedAt: n.accountedAt?.toISOString() ?? null,
-      accountedById: n.accountedById,
-      attachment: n.attachmentUrl
-        ? {
-            url: n.attachmentUrl,
-            name: n.attachmentName ?? "image",
-            mime: n.attachmentMime ?? "image/jpeg",
-          }
-        : null,
-      createdAt: n.createdAt.toISOString(),
-      author: {
-        id: n.author.id,
-        name: n.author.name,
-        avatarId: n.author.avatarId,
-        firstName: n.author.employee?.firstName ?? null,
-        displayColor: n.author.employee?.displayColor ?? null,
-      },
-    })),
+    notes: await Promise.all(
+      notes.map(async (n) => ({
+        id: n.id,
+        date: n.date.toISOString().slice(0, 10),
+        infos: n.infos,
+        motif: n.motif,
+        accountingNote: n.accountingNote,
+        status: n.status,
+        accountedAt: n.accountedAt?.toISOString() ?? null,
+        accountedById: n.accountedById,
+        attachment: n.attachmentUrl
+          ? {
+              url: await signedAttachmentUrl(n.attachmentUrl),
+              name: n.attachmentName ?? "image",
+              mime: n.attachmentMime ?? "image/jpeg",
+            }
+          : null,
+        createdAt: n.createdAt.toISOString(),
+        author: {
+          id: n.author.id,
+          name: n.author.name,
+          avatarId: n.author.avatarId,
+          firstName: n.author.employee?.firstName ?? null,
+          displayColor: n.author.employee?.displayColor ?? null,
+        },
+      }))
+    ),
   });
 }
 
@@ -96,10 +98,12 @@ async function POST__impl(req: Request) {
     );
   }
 
-  // Pièce jointe : si data URL base64 → upload vers Storage, on stocke l'URL.
+  // Pièce jointe sensible (paie) → bucket PRIVÉ. On stocke le chemin ; l'URL
+  // signée est générée à la lecture (cf. GET, signedAttachmentUrl).
   const attachmentUrl = await uploadImageIfDataUrl(
     parsed.data.attachment?.url ?? null,
-    "payroll"
+    "payroll",
+    { secure: true }
   );
 
   const created = await prisma.payrollNote.create({

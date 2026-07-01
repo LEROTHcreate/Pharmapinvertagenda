@@ -3,7 +3,7 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { sendMessageInput } from "@/validators/messaging";
-import { uploadImageIfDataUrl } from "@/lib/storage";
+import { uploadImageIfDataUrl, signedAttachmentUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -110,14 +110,15 @@ async function GET__impl(
   }
 
   return NextResponse.json({
-    messages: messages.map((m) => ({
+    messages: await Promise.all(
+      messages.map(async (m) => ({
       id: m.id,
       body: m.body,
       type: m.type,
       createdAt: m.createdAt.toISOString(),
       attachment: m.attachmentUrl
         ? {
-            url: m.attachmentUrl,
+            url: await signedAttachmentUrl(m.attachmentUrl),
             name: m.attachmentName ?? "image",
             mime: m.attachmentMime ?? "image/jpeg",
           }
@@ -143,7 +144,8 @@ async function GET__impl(
             rejectionNote: m.swapRequest.rejectionNote,
           }
         : null,
-    })),
+      }))
+    ),
     shadowAccess: access.isAdminShadow,
   });
 }
@@ -182,10 +184,12 @@ async function POST__impl(
     );
   }
 
-  // Pièce jointe : si data URL base64 → upload vers Storage, on stocke l'URL.
+  // Pièce jointe sensible → bucket PRIVÉ. On stocke le chemin ; l'URL signée
+  // est générée à la lecture (cf. GET, signedAttachmentUrl).
   const attachmentUrl = await uploadImageIfDataUrl(
     parsed.data.attachment?.url ?? null,
-    "messages"
+    "messages",
+    { secure: true }
   );
 
   const message = await prisma.message.create({
