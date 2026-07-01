@@ -132,7 +132,7 @@ export function WelcomeBanner({
       // droit, indépendamment du flux flex — comme ça le contenu (avatar +
       // texte) peut grandir/rétrécir sans jamais décaler l'ampoule.
       // `pr-14` réserve 56px à droite pour que le texte ne passe pas dessous.
-      className="no-print relative rounded-2xl border border-border bg-card md:bg-card/80 md:backdrop-blur-sm px-4 py-2.5 pr-14 sm:px-5 sm:py-3 sm:pr-16 flex items-center gap-3 sm:gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
+      className="no-print relative rounded-2xl border border-border bg-card px-4 py-2.5 pr-14 sm:px-5 sm:py-3 sm:pr-16 flex items-center gap-3 sm:gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
     >
       {/* Avatar cliquable — wrapper button pour le focus + accessibilité,
           relative pour positionner les sparkles autour.
