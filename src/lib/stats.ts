@@ -261,43 +261,49 @@ export async function computeStats(
   previous: PeriodTotals | null;
 }> {
   const range = getPeriodRange(period);
-
-  const employees = await prisma.employee.findMany({
-    where: { pharmacyId, isActive: true },
-    orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      status: true,
-      weeklyHours: true,
-      displayColor: true,
-    },
-  });
-
-  const entries = await prisma.scheduleEntry.findMany({
-    where: {
-      pharmacyId,
-      ...(period === "all" ? {} : { date: { gte: range.start, lt: range.end } }),
-    },
-    select: { employeeId: true, type: true, date: true, absenceCode: true },
-  });
-  const stats = buildEmployeeStats(employees, entries);
-
-  // ─── Période précédente (comparaison) ───
-  let previous: PeriodTotals | null = null;
+  // La plage de la période précédente ne dépend que de `period` (aucune requête)
+  // → on la calcule d'abord pour lancer les 3 lectures EN PARALLÈLE.
   const prevNow = previousNow(period, new Date());
-  if (prevNow) {
-    const prevRange = getPeriodRange(period, prevNow);
-    const prevEntries = await prisma.scheduleEntry.findMany({
+  const prevRange = prevNow ? getPeriodRange(period, prevNow) : null;
+
+  // 3 requêtes indépendantes en parallèle (au lieu de 3 allers-retours série).
+  const [employees, entries, prevEntries] = await Promise.all([
+    prisma.employee.findMany({
+      where: { pharmacyId, isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        weeklyHours: true,
+        displayColor: true,
+      },
+    }),
+    prisma.scheduleEntry.findMany({
       where: {
         pharmacyId,
-        date: { gte: prevRange.start, lt: prevRange.end },
+        ...(period === "all"
+          ? {}
+          : { date: { gte: range.start, lt: range.end } }),
       },
       select: { employeeId: true, type: true, date: true, absenceCode: true },
-    });
-    previous = totalsFrom(buildEmployeeStats(employees, prevEntries));
-  }
+    }),
+    prevRange
+      ? prisma.scheduleEntry.findMany({
+          where: {
+            pharmacyId,
+            date: { gte: prevRange.start, lt: prevRange.end },
+          },
+          select: { employeeId: true, type: true, date: true, absenceCode: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const stats = buildEmployeeStats(employees, entries);
+  const previous: PeriodTotals | null = prevEntries
+    ? totalsFrom(buildEmployeeStats(employees, prevEntries))
+    : null;
 
   return { employees: stats, periodLabel: range.label, previous };
 }
