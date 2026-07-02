@@ -17,7 +17,7 @@ import {
   weekTypeFor,
 } from "@/lib/planning-utils";
 import { TIME_SLOTS } from "@/types";
-import { PlanningGrid, type CellKey, type ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
+import type { CellKey, ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
 import { MyDayView } from "@/components/planning/MyDayView";
 import { MobileTeamGantt } from "@/components/planning/MobileTeamGantt";
 import { MobileWeekView } from "@/components/planning/MobileWeekView";
@@ -52,6 +52,19 @@ const AbsenceConflictDialog = dynamic(
       (m) => m.AbsenceConflictDialog
     ),
   { ssr: false }
+);
+
+// Grille desktop (~1300 lignes + dnd-kit) : chargée à la demande UNIQUEMENT sur
+// desktop (cf. gate `isDesktopWidth`) → le mobile ne télécharge/parse plus ce
+// gros chunk, allègement majeur du bundle initial de /planning sur mobile.
+const PlanningGrid = dynamic(
+  () => import("@/components/planning/PlanningGrid").then((m) => m.PlanningGrid),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 animate-pulse rounded-2xl bg-muted/60" />
+    ),
+  }
 );
 
 type Selection = {
@@ -1350,6 +1363,18 @@ export function PlanningView({
       /* localStorage indispo (mode privé Safari) — on ignore silencieusement */
     }
   }, [isAdmin]);
+
+  // La grille desktop n'est MONTÉE qu'au-delà de md (768px) → mobile ne charge
+  // pas le chunk dnd-kit + grille. Aligné sur le `hidden md:block` du wrapper.
+  const [isDesktopWidth, setIsDesktopWidth] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktopWidth(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   const toggleAdminLock = useCallback(() => {
     setAdminLocked((prev) => {
       const next = !prev;
@@ -1736,26 +1761,28 @@ export function PlanningView({
       {/* ─── Grille équipe ─────────────────────────────────────────
           Sur desktop : toujours affichée. Sur mobile : remplacée par les
           vues dédiées ci-dessus (frise / semaine / moi), donc masquée. */}
-      <div className="hidden md:block">
-        <PlanningGrid
-          employees={visibleEmployees}
-          date={selectedDay}
-          weekDates={dayDates}
-          index={index}
-          canEdit={effectiveCanEdit}
-          minStaff={minStaff}
-          selection={multiSelection}
-          onSelectionChange={setMultiSelection}
-          onCellClick={handleCellClick}
-          overtimeCells={overtimeCells}
-          recentlySaved={recentlySaved}
-          currentEmployeeId={currentEmployeeId ?? null}
-          onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
-          onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
-          onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
-          density={density}
-        />
-      </div>
+      {isDesktopWidth && (
+        <div className="hidden md:block">
+          <PlanningGrid
+            employees={visibleEmployees}
+            date={selectedDay}
+            weekDates={dayDates}
+            index={index}
+            canEdit={effectiveCanEdit}
+            minStaff={minStaff}
+            selection={multiSelection}
+            onSelectionChange={setMultiSelection}
+            onCellClick={handleCellClick}
+            overtimeCells={overtimeCells}
+            recentlySaved={recentlySaved}
+            currentEmployeeId={currentEmployeeId ?? null}
+            onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
+            onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
+            onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
+            density={density}
+          />
+        </div>
+      )}
 
       {/* (Le FAB "+" de création rapide d'absence a été retiré sur mobile :
           la barre d'onglets + la page Accueil couvrent déjà l'accès aux
@@ -1799,7 +1826,7 @@ export function PlanningView({
 
       {/* Barre d'action flottante (sélection multi) — glass Apple-style */}
       {effectiveCanEdit && multiSelection.size > 0 && (
-        <div className="no-print fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/85 backdrop-blur-xl shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
+        <div className="no-print fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
           <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
           <span className="text-[12.5px] tracking-tight">
             <span className="font-semibold tabular-nums">{multiSelection.size}</span>{" "}
