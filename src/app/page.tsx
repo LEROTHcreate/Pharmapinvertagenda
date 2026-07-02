@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import {
   Calendar,
@@ -27,14 +28,25 @@ export const metadata = {
  * Page d'accueil publique — landing page produit.
  *
  * - Visiteur non connecté → présentation + CTA vers /login + /signup
- * - Visiteur connecté → redirect direct vers /planning
+ * - Visiteur connecté → redirect vers l'app :
+ *     · téléphone      → /accueil (home tactile + barre d'onglets du bas)
+ *     · desktop/tablette → /planning (la grille, avec la sidebar complète)
+ *   L'accueil "mobile" faisait doublon avec la sidebar sur grand écran.
  *
  * Le design réutilise le style du layout auth (gradient + blobs + grain)
  * pour une continuité visuelle quand l'utilisateur clique "Se connecter".
  */
 export default async function LandingPage() {
   const session = await auth();
-  if (session?.user) redirect("/accueil");
+  if (session?.user) {
+    // Détection téléphone via User-Agent (côté serveur, pas de matchMedia).
+    // Les tablettes (iPad, tablette Android) → desktop : la grille y est
+    // confortable et tactile-friendly.
+    const ua = headers().get("user-agent") ?? "";
+    const isPhone =
+      /iPhone|iPod|Android.*Mobile|Mobi|IEMobile|BlackBerry|Opera Mini/i.test(ua);
+    redirect(isPhone ? "/accueil" : "/planning");
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafaff] text-foreground">
