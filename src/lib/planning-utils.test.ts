@@ -17,6 +17,14 @@ describe("planning-utils", () => {
     it("pad les mois et jours à 2 chiffres", () => {
       expect(toIsoDate(new Date(2026, 0, 5))).toBe("2026-01-05");
     });
+
+    // Régression : `unstable_cache` sérialise les Date en string ISO au
+    // cache-hit → toIsoDate doit accepter une string sans planter (sinon
+    // crash serveur de /planning et /infos).
+    it("accepte une string ISO (Date sérialisée par le cache)", () => {
+      expect(toIsoDate("2026-06-29T00:00:00.000Z")).toBe("2026-06-29");
+      expect(toIsoDate("2026-06-29")).toBe("2026-06-29");
+    });
   });
 
   describe("startOfWeek", () => {

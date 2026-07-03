@@ -2,8 +2,21 @@ import { ScheduleType, type AbsenceCode, type TaskCode } from "@prisma/client";
 import type { ScheduleEntryDTO } from "@/types";
 import { SLOT_HOURS, TIME_SLOTS } from "@/types";
 
-/** Format ISO YYYY-MM-DD à partir d'une Date (timezone locale) */
-export function toIsoDate(d: Date): string {
+/**
+ * Format ISO YYYY-MM-DD à partir d'une Date — ou d'une string.
+ *
+ * IMPORTANT : `unstable_cache` (Next.js) SÉRIALISE son résultat. Les champs
+ * `Date` reviennent donc en **string ISO** au cache-hit (ex.
+ * "2026-06-29T00:00:00.000Z"). Appeler `d.getFullYear()` dessus plante
+ * ("d.getFullYear is not a function") → crash serveur de /planning et /infos
+ * (qui lisent `getCachedWeekEntries`). On accepte donc les deux formes.
+ */
+export function toIsoDate(d: Date | string): string {
+  if (typeof d === "string") {
+    // Déjà une chaîne ISO (Date sérialisée par le cache) → on garde le jour.
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+    d = new Date(d);
+  }
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
