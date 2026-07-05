@@ -5,8 +5,9 @@ import { unstable_cache } from "next/cache";
  *
  * Source : Google Actualités (flux RSS de recherche) — agrège la presse
  * française sur l'officine : médicaments, remboursements, votes/mesures
- * concernant les pharmaciens, etc. Fiable et toujours alimenté, contrairement
- * à beaucoup de flux d'éditeurs (l'ANSM, par ex., renvoie un flux vide).
+ * concernant les pharmaciens, ruptures & rappels de lots, etc. Fiable et
+ * toujours alimenté, contrairement à beaucoup de flux d'éditeurs (l'ANSM, par
+ * ex., renvoie un flux vide).
  *
  * On ne stocke rien : lecture serveur, mise en cache 1 h (unstable_cache), et
  * on ne renvoie que des titres + liens externes (aucun contenu recopié). En
@@ -21,11 +22,13 @@ export type NewsItem = {
   dateLabel: string;
 };
 
-// Requête large mais ciblée officine. `when:30d` limite aux 30 derniers jours.
-const FEED_URL =
-  "https://news.google.com/rss/search?q=" +
-  encodeURIComponent("pharmacie officine médicament remboursement when:30d") +
-  "&hl=fr&gl=FR&ceid=FR:fr";
+function feedUrl(query: string): string {
+  return (
+    "https://news.google.com/rss/search?q=" +
+    encodeURIComponent(query) +
+    "&hl=fr&gl=FR&ceid=FR:fr"
+  );
+}
 
 /** Décode les entités HTML courantes présentes dans les titres RSS. */
 function decodeEntities(s: string): string {
@@ -47,9 +50,13 @@ function tag(block: string, name: string): string | null {
   return decodeEntities(raw).trim();
 }
 
-async function fetchNews(): Promise<NewsItem[]> {
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function fetchFeed(query: string, limit: number): Promise<NewsItem[]> {
   try {
-    const res = await fetch(FEED_URL, {
+    const res = await fetch(feedUrl(query), {
       headers: { "user-agent": "Mozilla/5.0 (PharmaPlanning)" },
       // unstable_cache gère déjà le cache applicatif → pas de double cache.
       cache: "no-store",
@@ -67,7 +74,9 @@ async function fetchNews(): Promise<NewsItem[]> {
       if (!rawTitle || !link) continue;
       const source = tag(block, "source") ?? "Presse";
       // Google formate « Titre - Source » → on retire le suffixe source.
-      const title = rawTitle.replace(new RegExp(`\\s*[-–]\\s*${escapeRe(source)}\\s*$`), "").trim();
+      const title = rawTitle
+        .replace(new RegExp(`\\s*[-–]\\s*${escapeRe(source)}\\s*$`), "")
+        .trim();
       const pub = tag(block, "pubDate");
       const d = pub ? new Date(pub) : null;
       const dateLabel =
@@ -75,7 +84,7 @@ async function fetchNews(): Promise<NewsItem[]> {
           ? d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
           : "";
       items.push({ title: title || rawTitle, link, source, dateLabel });
-      if (items.length >= 8) break;
+      if (items.length >= limit) break;
     }
     return items;
   } catch {
@@ -83,13 +92,26 @@ async function fetchNews(): Promise<NewsItem[]> {
   }
 }
 
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Actualité pharmacie, cachée 1 h (partagée pour toute la pharmacie). */
+/** Actu pharmacie généraliste (officine, médicaments, remboursements, mesures). */
 export const getPharmacyNews = () =>
-  unstable_cache(fetchNews, ["pharmacy-news"], {
-    revalidate: 3600,
-    tags: ["pharmacy-news"],
-  })();
+  unstable_cache(
+    () =>
+      fetchFeed(
+        "pharmacie officine médicament remboursement when:30d",
+        7
+      ),
+    ["pharmacy-news-general"],
+    { revalidate: 3600, tags: ["pharmacy-news"] }
+  )();
+
+/** Ruptures de stock & rappels de lots de médicaments (très actionnable). */
+export const getMedicineAlerts = () =>
+  unstable_cache(
+    () =>
+      fetchFeed(
+        '"rupture" médicament OR "rappel de lot" médicament OR pénurie médicament when:45d',
+        5
+      ),
+    ["pharmacy-news-alerts"],
+    { revalidate: 3600, tags: ["pharmacy-news"] }
+  )();

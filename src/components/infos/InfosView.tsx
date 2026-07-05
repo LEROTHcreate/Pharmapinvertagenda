@@ -14,6 +14,7 @@ import {
   Flame,
   Lightbulb,
   Newspaper,
+  PackageX,
   ShieldPlus,
   Truck,
   UserPlus,
@@ -93,6 +94,8 @@ export type InfosData = {
   overtime: OvertimeItem[];
   /** Actualité pharmacie (flux Google Actualités, liens externes). */
   news: NewsItem[];
+  /** Ruptures de stock & rappels de lots de médicaments (flux dédié). */
+  alerts: NewsItem[];
 };
 
 const WISH_LABELS: Record<UpcomingWish["kind"], string> = {
@@ -137,6 +140,7 @@ export function InfosView(data: InfosData) {
     anniversaries,
     overtime,
     news,
+    alerts,
   } = data;
 
   const totalAbsents = absentsByDay.reduce((n, d) => n + d.people.length, 0);
@@ -164,10 +168,13 @@ export function InfosView(data: InfosData) {
         </div>
       </header>
 
-      {/* Grille masonry : pleine largeur, colonnes qui s'adaptent au contenu.
-          Chaque Section porte `break-inside-avoid` (cf. composant Section) pour
-          ne jamais être coupée entre deux colonnes. */}
-      <div className="columns-1 gap-5 md:columns-2 xl:columns-3">
+      {/* Layout : à GAUCHE les sections opérationnelles / équipe en masonry
+          (2 colonnes dès md, occupe 2/3 de la largeur sur xl) ; à DROITE une
+          COLONNE DÉDIÉE à l'actualité pharmacie. `items-start` évite d'étirer
+          les deux zones à la même hauteur. */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3 xl:items-start">
+        {/* Zone gauche — masonry des sections opérationnelles / équipe. */}
+        <div className="xl:col-span-2 columns-1 gap-5 md:columns-2">
       {/* ─── 1. À traiter (admin) ─────────────────────────────────── */}
       {isAdmin && (
         <Section
@@ -515,6 +522,10 @@ export function InfosView(data: InfosData) {
         </Section>
       )}
 
+        </div>
+
+        {/* ═══ COLONNE DÉDIÉE : Actualité pharmacie ═══════════════════ */}
+        <aside className="space-y-5">
       {/* ─── Actu pharmacie (Google Actualités — liens externes) ──── */}
       {news.length > 0 && (
         <Section
@@ -559,6 +570,52 @@ export function InfosView(data: InfosData) {
           </p>
         </Section>
       )}
+
+      {/* ─── Ruptures de stock & rappels de lots (flux dédié) ──────── */}
+      {alerts.length > 0 && (
+        <Section
+          title="Ruptures & rappels"
+          icon={<PackageX className="h-4 w-4" />}
+          count={alerts.length}
+          tone="rose"
+        >
+          <ul className="space-y-2">
+            {alerts.map((n) => (
+              <li key={n.link}>
+                <a
+                  href={n.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 transition-colors hover:bg-muted/50"
+                >
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                    <PackageX className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12.5px] font-semibold leading-snug text-foreground group-hover:text-rose-700 dark:group-hover:text-rose-300">
+                      {n.title}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="truncate">{n.source}</span>
+                      {n.dateLabel && (
+                        <>
+                          <span aria-hidden>·</span>
+                          <span className="shrink-0 tabular-nums">{n.dateLabel}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 px-1 text-[10.5px] text-muted-foreground/70">
+            Source : Google Actualités · liens externes
+          </p>
+        </Section>
+      )}
+        </aside>
       </div>
     </div>
   );
