@@ -6,6 +6,13 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Libellés des souhaits de disponibilité (alignés sur AvailabilityWishesView). */
+const WISH_LABELS: Record<"UNAVAILABLE" | "PREFER_OFF" | "PREFER_WORK", string> = {
+  UNAVAILABLE: "Indisponible",
+  PREFER_OFF: "Préfère ne pas travailler",
+  PREFER_WORK: "Souhaite travailler",
+};
+
 /**
  * Notification d'événement — payload uniforme côté client.
  * Le `kind` permet au front de choisir l'icône, le ton et le lien.
@@ -13,10 +20,11 @@ export const dynamic = "force-dynamic";
 export type NotificationItem = {
   id: string;
   kind:
-    | "absence-pending"   // demande d'absence en attente (admin)
-    | "absence-decided"   // ma demande d'absence a été validée/refusée (employé)
-    | "swap-pending"      // demande d'échange en attente (admin)
-    | "user-pending";     // inscription en attente (admin)
+    | "absence-pending"      // demande d'absence en attente (admin)
+    | "absence-decided"      // ma demande d'absence a été validée/refusée (employé)
+    | "swap-pending"         // demande d'échange en attente (admin)
+    | "user-pending"         // inscription en attente (admin)
+    | "availability-wish";   // un collaborateur a donné une dispo (admin)
   title: string;
   description: string;
   href: string;
@@ -47,7 +55,10 @@ async function GET__impl() {
   const pharmacyId = session.user.pharmacyId;
 
   if (isAdmin) {
-    const [pendingAbsences, pendingSwaps, pendingUsers] = await Promise.all([
+    // Souhaits de dispo « récents » : on ne remonte que ceux des 21 derniers
+    // jours pour ne pas noyer le flux avec d'anciennes saisies.
+    const wishSince = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000);
+    const [pendingAbsences, pendingSwaps, pendingUsers, recentWishes] = await Promise.all([
       prisma.absenceRequest.findMany({
         where: { pharmacyId, status: "PENDING" },
         orderBy: { createdAt: "desc" },
@@ -78,6 +89,18 @@ async function GET__impl() {
         orderBy: { createdAt: "desc" },
         take: 20,
         select: { id: true, createdAt: true, name: true, email: true },
+      }),
+      prisma.availabilityWish.findMany({
+        where: { pharmacyId, createdAt: { gte: wishSince } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          createdAt: true,
+          date: true,
+          kind: true,
+          employee: { select: { firstName: true, lastName: true } },
+        },
       }),
     ]);
 
@@ -138,6 +161,27 @@ async function GET__impl() {
         description: u.email,
         href: "/utilisateurs",
         createdAt: u.createdAt.toISOString(),
+        unread: true,
+      });
+    }
+
+    for (const w of recentWishes) {
+      const empName = `${w.employee.firstName}${
+        w.employee.lastName !== "—" ? " " + w.employee.lastName : ""
+      }`;
+      const dayFr = w.date.toLocaleDateString("fr-FR", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+      });
+      items.push({
+        id: `wish-${w.id}`,
+        kind: "availability-wish",
+        title: `${empName} a donné une dispo`,
+        description: `${WISH_LABELS[w.kind]} · ${dayFr}`,
+        // Lien direct vers l'onglet Disponibilités de la page Absences.
+        href: "/absences?tab=disponibilites",
+        createdAt: w.createdAt.toISOString(),
         unread: true,
       });
     }
