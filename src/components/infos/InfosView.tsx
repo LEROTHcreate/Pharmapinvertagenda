@@ -3,15 +3,18 @@
 import Link from "next/link";
 import {
   AlertTriangle,
+  Calendar,
   CalendarClock,
   CalendarOff,
   CheckCircle2,
   ChevronRight,
   Flame,
+  LayoutTemplate,
   Lightbulb,
   Truck,
   UserPlus,
   Users,
+  Zap,
 } from "lucide-react";
 import type { CoverageWarning } from "@/lib/coverage-analysis";
 import type { CcnViolation } from "@/lib/ccn-compliance";
@@ -76,9 +79,9 @@ export function InfosView(data: InfosData) {
     : 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 pb-16">
-      {/* En-tête */}
-      <header className="flex items-start gap-3">
+    <div className="p-3 md:p-4 lg:p-6 pb-16">
+      {/* En-tête (pleine largeur) */}
+      <header className="mb-5 flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
           <Lightbulb className="h-5 w-5" />
         </span>
@@ -92,6 +95,10 @@ export function InfosView(data: InfosData) {
         </div>
       </header>
 
+      {/* Grille masonry : pleine largeur, colonnes qui s'adaptent au contenu.
+          Chaque Section porte `break-inside-avoid` (cf. composant Section) pour
+          ne jamais être coupée entre deux colonnes. */}
+      <div className="columns-1 gap-5 md:columns-2 xl:columns-3">
       {/* ─── 1. À traiter (admin) ─────────────────────────────────── */}
       {isAdmin && (
         <Section
@@ -270,7 +277,67 @@ export function InfosView(data: InfosData) {
           ))}
         </ul>
       </Section>
+
+      {/* ─── 5. Raccourcis (admin) ────────────────────────────────── */}
+      {isAdmin && (
+        <Section
+          title="Raccourcis"
+          icon={<Zap className="h-4 w-4" />}
+          count={0}
+          tone="slate"
+        >
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <QuickLink
+              href="/planning"
+              icon={<Calendar className="h-4 w-4" />}
+              label="Bâtir le planning"
+            />
+            <QuickLink
+              href="/gabarits"
+              icon={<LayoutTemplate className="h-4 w-4" />}
+              label="Appliquer un gabarit"
+            />
+            <QuickLink
+              href="/employes"
+              icon={<Users className="h-4 w-4" />}
+              label="Gérer l'équipe"
+            />
+            <QuickLink
+              href="/absences"
+              icon={<CalendarOff className="h-4 w-4" />}
+              label="Absences & dispos"
+            />
+          </div>
+        </Section>
+      )}
+      </div>
     </div>
+  );
+}
+
+/** Raccourci compact vers une page clé (carte Raccourcis). */
+function QuickLink({
+  href,
+  icon,
+  label,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 transition-colors hover:bg-muted/50"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 text-[13px] font-medium leading-tight text-foreground">
+        {label}
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+    </Link>
   );
 }
 
@@ -297,7 +364,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]">
+    <section className="mb-5 break-inside-avoid rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]">
       <div className="mb-3 flex items-center gap-2">
         <span
           className={cn(
