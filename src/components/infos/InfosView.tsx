@@ -3,14 +3,18 @@
 import Link from "next/link";
 import {
   AlertTriangle,
+  Cake,
   Calendar,
   CalendarClock,
+  CalendarHeart,
   CalendarOff,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Flame,
   LayoutTemplate,
   Lightbulb,
+  ShieldPlus,
   Truck,
   UserPlus,
   Users,
@@ -37,6 +41,43 @@ export type UpcomingHoliday = {
   daysUntil: number;
 };
 
+/** Souhait de dispo posé par un salarié pour un jour à venir. */
+export type UpcomingWish = {
+  id: string;
+  employeeName: string;
+  dateLabel: string;
+  daysUntil: number;
+  kind: "UNAVAILABLE" | "PREFER_OFF" | "PREFER_WORK";
+  note: string | null;
+};
+
+/** Prochaine pharmacie de garde. */
+export type UpcomingGarde = {
+  id: string;
+  pharmacistName: string;
+  dateLabel: string;
+  daysUntil: number;
+  typeLabel: string;
+};
+
+/** Anniversaire d'ancienneté à fêter prochainement. */
+export type WorkAnniversary = {
+  id: string;
+  name: string;
+  years: number;
+  dateLabel: string;
+  daysUntil: number;
+};
+
+/** Dépassement d'heures contractuelles sur la semaine en cours. */
+export type OvertimeItem = {
+  id: string;
+  name: string;
+  contractHours: number;
+  workedHours: number;
+  overtimeHours: number;
+};
+
 export type InfosData = {
   isAdmin: boolean;
   weekLabel: string;
@@ -46,7 +87,28 @@ export type InfosData = {
   tips: PlanningTip[];
   holidays: UpcomingHoliday[];
   pending: { absences: number; users: number };
+  upcomingWishes: UpcomingWish[];
+  upcomingGardes: UpcomingGarde[];
+  anniversaries: WorkAnniversary[];
+  overtime: OvertimeItem[];
 };
+
+const WISH_LABELS: Record<UpcomingWish["kind"], string> = {
+  UNAVAILABLE: "Indisponible",
+  PREFER_OFF: "Préfère off",
+  PREFER_WORK: "Souhaite bosser",
+};
+
+const WISH_STYLES: Record<UpcomingWish["kind"], string> = {
+  UNAVAILABLE: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300",
+  PREFER_OFF: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  PREFER_WORK: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+};
+
+/** « dans X j » lisible (aujourd'hui / demain / dans N j). */
+function daysUntilLabel(days: number): string {
+  return days <= 0 ? "aujourd'hui" : days === 1 ? "demain" : `dans ${days} j`;
+}
 
 /**
  * Centre « Infos & conseils » : regroupe en une seule page tout ce qui était
@@ -68,6 +130,10 @@ export function InfosView(data: InfosData) {
     tips,
     holidays,
     pending,
+    upcomingWishes,
+    upcomingGardes,
+    anniversaries,
+    overtime,
   } = data;
 
   const totalAbsents = absentsByDay.reduce((n, d) => n + d.people.length, 0);
@@ -278,6 +344,174 @@ export function InfosView(data: InfosData) {
         </ul>
       </Section>
 
+      {/* ─── Souhaits de dispo à venir (admin) ────────────────────── */}
+      {isAdmin && (
+        <Section
+          title="Souhaits de dispo"
+          icon={<CalendarHeart className="h-4 w-4" />}
+          count={upcomingWishes.length}
+          tone="teal"
+        >
+          {upcomingWishes.length === 0 ? (
+            <EmptyRow
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              title="Aucun souhait posé"
+              subtitle="Personne n'a signalé d'indispo ou de préférence pour les 14 prochains jours."
+            />
+          ) : (
+            <ul className="space-y-2">
+              {upcomingWishes.map((w) => (
+                <li
+                  key={w.id}
+                  className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                      WISH_STYLES[w.kind]
+                    )}
+                  >
+                    {WISH_LABELS[w.kind]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold leading-tight text-foreground">
+                      {w.employeeName}
+                    </p>
+                    <p className="mt-0.5 text-[12px] capitalize text-muted-foreground">
+                      {w.dateLabel} · {daysUntilLabel(w.daysUntil)}
+                    </p>
+                    {w.note && (
+                      <p className="mt-1 text-[11.5px] italic leading-snug text-muted-foreground/80">
+                        « {w.note} »
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
+
+      {/* ─── Prochaines gardes (tous) ──────────────────────────────── */}
+      <Section
+        title="Prochaines gardes"
+        icon={<ShieldPlus className="h-4 w-4" />}
+        count={upcomingGardes.length}
+        tone="indigo"
+      >
+        {upcomingGardes.length === 0 ? (
+          <EmptyRow
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            title="Aucune garde programmée"
+            subtitle="Aucune pharmacie de garde n'est planifiée pour le moment."
+          />
+        ) : (
+          <ul className="space-y-2">
+            {upcomingGardes.map((g) => (
+              <li
+                key={g.id}
+                className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                  <ShieldPlus className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold leading-tight text-foreground">
+                    {g.pharmacistName}
+                    <span className="ml-1.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
+                      {g.typeLabel}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-[12px] capitalize text-muted-foreground">
+                    {g.dateLabel}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                  {daysUntilLabel(g.daysUntil)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* ─── Anniversaires d'ancienneté (tous) ─────────────────────── */}
+      {anniversaries.length > 0 && (
+        <Section
+          title="Anniversaires d'ancienneté"
+          icon={<Cake className="h-4 w-4" />}
+          count={anniversaries.length}
+          tone="rose"
+        >
+          <ul className="space-y-2">
+            {anniversaries.map((a) => (
+              <li
+                key={a.id}
+                className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                  <Cake className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold leading-tight text-foreground">
+                    {a.name}
+                    <span className="ml-1.5 font-bold text-rose-600 dark:text-rose-300">
+                      {a.years} an{a.years > 1 ? "s" : ""}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-[12px] capitalize text-muted-foreground">
+                    {a.dateLabel} · {daysUntilLabel(a.daysUntil)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      {/* ─── Heures sup de la semaine (admin) ──────────────────────── */}
+      {isAdmin && (
+        <Section
+          title="Heures sup cette semaine"
+          icon={<Clock className="h-4 w-4" />}
+          count={overtime.length}
+          tone="amber"
+        >
+          {overtime.length === 0 ? (
+            <EmptyRow
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              title="Rien à signaler"
+              subtitle="Aucun salarié ne dépasse son contrat sur la semaine en cours."
+            />
+          ) : (
+            <ul className="space-y-2">
+              {overtime.map((o) => (
+                <li
+                  key={o.id}
+                  className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    <Clock className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold leading-tight text-foreground">
+                      {o.name}
+                    </p>
+                    <p className="mt-0.5 text-[12px] tabular-nums text-muted-foreground">
+                      {o.workedHours}h faites / {o.contractHours}h au contrat
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    +{o.overtimeHours}h
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
+
       {/* ─── 5. Raccourcis (admin) ────────────────────────────────── */}
       {isAdmin && (
         <Section
@@ -347,6 +581,8 @@ const TONE_STYLES = {
   amber: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
   emerald: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
   rose: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  teal: "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300",
+  indigo: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300",
   slate: "bg-muted text-muted-foreground",
 } as const;
 

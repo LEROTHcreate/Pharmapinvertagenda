@@ -4,7 +4,9 @@ import {
   startOfWeek,
   toIsoDate,
   indexEntriesByEmployee,
+  weeklyTaskHours,
 } from "@/lib/planning-utils";
+import { GARDE_TYPE_LABELS } from "@/lib/gardes";
 import {
   getCachedWeekEntries,
   getPendingAbsencesCount,
@@ -21,6 +23,10 @@ import {
   InfosView,
   type AbsentsDay,
   type UpcomingHoliday,
+  type UpcomingWish,
+  type UpcomingGarde,
+  type WorkAnniversary,
+  type OvertimeItem,
 } from "@/components/infos/InfosView";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +36,28 @@ function addDays(d: Date, n: number): Date {
   const out = new Date(d);
   out.setDate(out.getDate() + n);
   return out;
+}
+
+/** Deux chiffres (jour/mois). */
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Nombre de jours entiers entre deux dates ISO (bornes en UTC minuit). */
+function daysBetweenIso(fromIso: string, toIso: string): number {
+  return Math.round(
+    (Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) /
+      86_400_000
+  );
+}
+
+/** Libellé jour + mois en toutes lettres (déterministe côté serveur). */
+function labelDayMonth(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 }
 
 /**
@@ -52,11 +80,23 @@ export default async function InfosPage() {
     toIsoDate(addDays(monday, i))
   );
   const todayIso = toIsoDate(new Date());
+  // Fenêtre « à venir » : de ce matin (minuit UTC) à J+14, pour les souhaits de
+  // dispo et les gardes. Les colonnes sont en @db.Date → on compare en UTC.
+  const todayStart = new Date(`${todayIso}T00:00:00.000Z`);
+  const horizon = new Date(todayStart);
+  horizon.setUTCDate(horizon.getUTCDate() + 14);
 
   // Données de base (parallélisées). Les compteurs de validation ne concernent
   // que les admins → on évite les requêtes inutiles pour un collaborateur.
-  const [employees, rawEntries, pharmacy, pendingAbsences, pendingUsers] =
-    await Promise.all([
+  const [
+    employees,
+    rawEntries,
+    pharmacy,
+    pendingAbsences,
+    pendingUsers,
+    rawWishes,
+    rawGardes,
+  ] = await Promise.all([
       prisma.employee.findMany({
         where: { pharmacyId, isActive: true },
         orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
@@ -68,6 +108,7 @@ export default async function InfosPage() {
           weeklyHours: true,
           displayColor: true,
           displayOrder: true,
+          hireDate: true,
         },
       }),
       getCachedWeekEntries(pharmacyId, weekStartIso),
@@ -77,6 +118,33 @@ export default async function InfosPage() {
       }),
       isAdmin ? getPendingAbsencesCount(pharmacyId) : Promise.resolve(0),
       isAdmin ? getPendingUsersCount(pharmacyId) : Promise.resolve(0),
+      // Souhaits de dispo à venir — utiles à l'admin qui bâtit le planning.
+      isAdmin
+        ? prisma.availabilityWish.findMany({
+            where: { pharmacyId, date: { gte: todayStart, lte: horizon } },
+            orderBy: { date: "asc" },
+            take: 12,
+            select: {
+              id: true,
+              date: true,
+              kind: true,
+              note: true,
+              employee: { select: { firstName: true, lastName: true } },
+            },
+          })
+        : Promise.resolve([]),
+      // Prochaines gardes (visible par tous : savoir qui est de garde).
+      prisma.garde.findMany({
+        where: { pharmacyId, date: { gte: todayStart } },
+        orderBy: { date: "asc" },
+        take: 4,
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          pharmacist: { select: { firstName: true, lastName: true } },
+        },
+      }),
     ]);
 
   const employeesDTO = employees as EmployeeDTO[];
@@ -164,6 +232,79 @@ export default async function InfosPage() {
       ),
     }));
 
+  // ─── Souhaits de disponibilité à venir (admin) ──────────────────
+  const upcomingWishes: UpcomingWish[] = rawWishes.map((w) => {
+    const iso = toIsoDate(w.date);
+    return {
+      id: w.id,
+      employeeName: `${w.employee.firstName} ${w.employee.lastName.charAt(0)}.`,
+      dateLabel: labelDayMonth(iso),
+      daysUntil: daysBetweenIso(todayIso, iso),
+      kind: w.kind,
+      note: w.note,
+    };
+  });
+
+  // ─── Prochaines gardes (tous) ────────────────────────────────────
+  const upcomingGardes: UpcomingGarde[] = rawGardes.map((g) => {
+    const iso = toIsoDate(g.date);
+    return {
+      id: g.id,
+      pharmacistName: `${g.pharmacist.firstName} ${g.pharmacist.lastName.charAt(0)}.`,
+      dateLabel: labelDayMonth(iso),
+      daysUntil: daysBetweenIso(todayIso, iso),
+      typeLabel: GARDE_TYPE_LABELS[g.type],
+    };
+  });
+
+  // ─── Anniversaires d'ancienneté (30 prochains jours, ≥ 1 an) ─────
+  const anniversaries: WorkAnniversary[] = employees
+    .flatMap((emp) => {
+      if (!emp.hireDate) return [];
+      const hireIso = toIsoDate(emp.hireDate);
+      const [hy, hm, hd] = hireIso.split("-").map(Number);
+      const todayYear = Number(todayIso.slice(0, 4));
+      // Anniversaire de cette année ; si déjà passé, celui de l'an prochain.
+      let year = todayYear;
+      let annivIso = `${year}-${pad2(hm)}-${pad2(hd)}`;
+      if (annivIso < todayIso) {
+        year = todayYear + 1;
+        annivIso = `${year}-${pad2(hm)}-${pad2(hd)}`;
+      }
+      const years = year - hy;
+      const daysUntil = daysBetweenIso(todayIso, annivIso);
+      if (daysUntil > 30 || years < 1) return [];
+      return [
+        {
+          id: emp.id,
+          name: `${emp.firstName} ${emp.lastName}`,
+          years,
+          dateLabel: labelDayMonth(annivIso),
+          daysUntil,
+        } satisfies WorkAnniversary,
+      ];
+    })
+    .sort((a, b) => a.daysUntil - b.daysUntil);
+
+  // ─── Heures sup de la semaine en cours (admin) ───────────────────
+  const overtime: OvertimeItem[] = isAdmin
+    ? employeesDTO
+        .map((emp) => {
+          const worked = weeklyTaskHours(emp.id, weekDates, index);
+          const overtimeHours =
+            Math.round((worked - emp.weeklyHours) * 100) / 100;
+          return {
+            id: emp.id,
+            name: `${emp.firstName} ${emp.lastName.charAt(0)}.`,
+            contractHours: emp.weeklyHours,
+            workedHours: worked,
+            overtimeHours,
+          } satisfies OvertimeItem;
+        })
+        .filter((o) => o.overtimeHours > 0)
+        .sort((a, b) => b.overtimeHours - a.overtimeHours)
+    : [];
+
   const weekLabel = `semaine du ${monday.toLocaleDateString("fr-FR", {
     day: "numeric",
     month: "long",
@@ -179,6 +320,10 @@ export default async function InfosPage() {
       tips={tips}
       holidays={holidays}
       pending={{ absences: pendingAbsences, users: pendingUsers }}
+      upcomingWishes={upcomingWishes}
+      upcomingGardes={upcomingGardes}
+      anniversaries={anniversaries}
+      overtime={overtime}
     />
   );
 }
