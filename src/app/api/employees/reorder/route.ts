@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
+import { canManageTeam } from "@/lib/permissions";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -25,7 +26,7 @@ async function POST__impl(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!canManageTeam(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

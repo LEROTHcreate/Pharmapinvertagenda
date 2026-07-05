@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -34,7 +35,7 @@ async function POST__impl(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -84,7 +85,7 @@ async function DELETE__impl(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const id = new URL(req.url).searchParams.get("id");
@@ -109,7 +110,7 @@ async function PATCH__impl(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const body = await req.json().catch(() => null);

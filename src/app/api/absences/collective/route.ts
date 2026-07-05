@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { createCollectiveAbsenceInput } from "@/validators/absence";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
@@ -32,7 +33,7 @@ async function createCollectiveAbsence(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
+import { canApplyTemplates } from "@/lib/permissions";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -14,7 +15,7 @@ async function DELETE__impl(
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
+  if (!canApplyTemplates(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { createConversationInput } from "@/validators/messaging";
 
@@ -21,7 +22,7 @@ async function GET__impl(req: Request) {
 
   const url = new URL(req.url);
   const all = url.searchParams.get("all") === "1";
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
 
   // Le compte Support PharmaPlanning voit toutes ses conversations, quelle
   // que soit la pharmacie d'origine — il accompagne plusieurs officines.

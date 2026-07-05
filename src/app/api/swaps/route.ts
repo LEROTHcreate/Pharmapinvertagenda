@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { createSwapInput } from "@/validators/swap";
 import { featureGate } from "@/lib/features";
@@ -113,7 +114,7 @@ async function getSwaps(req: Request) {
 
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
 
   const where: Record<string, unknown> = { pharmacyId: session.user.pharmacyId };
   if (status) where.status = status;

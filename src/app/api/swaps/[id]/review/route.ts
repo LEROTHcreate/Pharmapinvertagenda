@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { reviewSwapInput } from "@/validators/swap";
 import { TIME_SLOTS } from "@/types";
@@ -34,7 +35,7 @@ async function reviewSwap(
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

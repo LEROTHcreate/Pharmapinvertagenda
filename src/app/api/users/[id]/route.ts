@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
+import {
+  isAdminLevel,
+  isCreator,
+  canManageUser,
+  assignableRoles,
+} from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { updateUserSchema } from "@/validators/auth";
@@ -33,7 +39,7 @@ async function PATCH__impl(
   if (!session?.user) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
@@ -47,11 +53,11 @@ async function PATCH__impl(
   if (!parsed.success) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
-  const { employeeId } = parsed.data;
+  const { employeeId, role } = parsed.data;
 
   const target = await prisma.user.findFirst({
     where: { id: params.id, pharmacyId: session.user.pharmacyId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, role: true },
   });
   if (!target) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -62,7 +68,27 @@ async function PATCH__impl(
     return NextResponse.json({ error: "NOT_APPROVED" }, { status: 409 });
   }
 
-  if (employeeId !== null) {
+  // ─── Changement de rôle (optionnel) ──────────────────────────────
+  // Garde-fous : on ne touche jamais au créateur, l'acteur doit avoir le droit
+  // de gérer la cible (rang strictement supérieur) ET le rôle visé doit faire
+  // partie de ceux qu'il peut attribuer.
+  if (role !== undefined) {
+    if (isCreator(target.role)) {
+      return NextResponse.json({ error: "CANNOT_MANAGE_CREATOR" }, { status: 403 });
+    }
+    if (target.id === session.user.id) {
+      return NextResponse.json({ error: "CANNOT_CHANGE_OWN_ROLE" }, { status: 403 });
+    }
+    if (!canManageUser(session.user.role, target.role)) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+    if (!assignableRoles(session.user.role).includes(role)) {
+      return NextResponse.json({ error: "ROLE_FORBIDDEN" }, { status: 403 });
+    }
+  }
+
+  // ─── Ré-attribution du lien collaborateur (optionnel) ────────────
+  if (employeeId !== undefined && employeeId !== null) {
     const employee = await prisma.employee.findFirst({
       where: { id: employeeId, pharmacyId: session.user.pharmacyId },
       select: { id: true, user: { select: { id: true } } },
@@ -77,8 +103,13 @@ async function PATCH__impl(
 
   await prisma.user.update({
     where: { id: target.id },
-    data: { employeeId },
+    data: {
+      // undefined = on ne touche pas ; null = on retire la liaison.
+      ...(employeeId !== undefined ? { employeeId } : {}),
+      ...(role !== undefined ? { role } : {}),
+    },
   });
+  revalidateTag(DASHBOARD_CACHE_TAGS.usersPending(session.user.pharmacyId));
 
   return NextResponse.json({ ok: true });
 }
@@ -108,7 +139,7 @@ async function DELETE__impl(
   if (!session?.user) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
   if (params.id === session.user.id) {
@@ -123,13 +154,18 @@ async function DELETE__impl(
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
+  // Le créateur de l'officine est indéracinable (transfert de propriété requis).
+  if (isCreator(target.role)) {
+    return NextResponse.json({ error: "CANNOT_DELETE_CREATOR" }, { status: 403 });
+  }
+
   // Anti-lockout : on refuse la suppression si elle laisserait la pharmacie
-  // sans aucun admin actif (= dernier admin approuvé/actif de la pharmacie).
-  if (target.role === "ADMIN" && target.status === "APPROVED") {
+  // sans aucun compte de niveau admin (titulaire ou créateur) actif.
+  if (isAdminLevel(target.role) && target.status === "APPROVED") {
     const otherAdminsCount = await prisma.user.count({
       where: {
         pharmacyId: session.user.pharmacyId,
-        role: "ADMIN",
+        role: { in: ["ADMIN", "CREATEUR"] },
         status: "APPROVED",
         isActive: true,
         id: { not: target.id },

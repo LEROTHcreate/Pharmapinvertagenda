@@ -7,6 +7,7 @@ import { ScheduleType, type WeekType } from "@prisma/client";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { withErrorHandling } from "@/lib/api-handler";
+import { canApplyTemplates } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 // Bulk de 26 semaines × 1000+ entries peut prendre ~5-10s
@@ -39,7 +40,7 @@ const inputSchema = z.object({
 async function applyRolling(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
+  if (!canApplyTemplates(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

@@ -21,6 +21,7 @@
  */
 
 import type { EmployeeStatus, UserRole } from "@prisma/client";
+import { isAdminLevel } from "@/lib/permissions";
 
 type SessionLike = {
   role: UserRole;
@@ -41,7 +42,8 @@ type UserContext = {
  * Rémunération à d'autres comptes.
  */
 export function isSuperAdmin(user: SessionLike): boolean {
-  return user.role === "ADMIN" && !user.employeeId;
+  // Niveau admin (titulaire OU créateur) sans fiche Employee = compte créateur.
+  return isAdminLevel(user.role) && !user.employeeId;
 }
 
 /**
@@ -51,8 +53,8 @@ export function isSuperAdmin(user: SessionLike): boolean {
  * - Tout le reste : non.
  */
 export function canViewPayroll(user: UserContext): boolean {
-  if (user.role !== "ADMIN") return false;
-  if (!user.employeeId) return true; // Super-admin
+  if (!isAdminLevel(user.role)) return false; // titulaire ou créateur uniquement
+  if (!user.employeeId) return true; // Super-admin / créateur sans fiche
   if (!user.canAccessPayroll) return false;
   // Pour les admins liés à un Employee, on exige status=TITULAIRE
   return user.employeeStatus === "TITULAIRE";

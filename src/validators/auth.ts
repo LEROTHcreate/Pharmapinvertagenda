@@ -62,8 +62,10 @@ export type SignupInput = z.infer<typeof signupSchema>;
 /** Schéma de validation d'une demande par un admin. */
 export const reviewUserSchema = z.object({
   decision: z.enum(["APPROVE", "REJECT"]),
-  // Rôle requis uniquement en cas d'approbation
-  role: z.enum(["ADMIN", "EMPLOYEE"]).optional(),
+  // Rôle requis uniquement en cas d'approbation. On n'attribue jamais CREATEUR
+  // par ce biais (réservé au transfert de propriété). EMPLOYEE accepté en
+  // legacy mais l'UI n'attribue plus que les 3 rôles canoniques ci-dessous.
+  role: z.enum(["ADMIN", "MANAGEUR", "COLLABORATEUR", "EMPLOYEE"]).optional(),
   // Optionnel : collaborateur du planning à associer au compte (lien User <-> Employee)
   // null/undefined = pas de liaison (à faire plus tard via /employes)
   employeeId: z.string().min(1).nullish(),
@@ -84,7 +86,11 @@ export type ReviewUserInput = z.infer<typeof reviewUserSchema>;
  *   - `string` → on relie au collaborateur ciblé (vérifié côté API : même pharmacie + libre)
  */
 export const updateUserSchema = z.object({
-  employeeId: z.string().min(1).nullable(),
+  // Optionnel : ré-attribuer / retirer la liaison collaborateur.
+  employeeId: z.string().min(1).nullable().optional(),
+  // Optionnel : changer le rôle de permission d'un membre approuvé. Jamais
+  // CREATEUR par ce biais (transfert de propriété = flux dédié).
+  role: z.enum(["ADMIN", "MANAGEUR", "COLLABORATEUR"]).optional(),
 });
 
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
