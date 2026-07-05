@@ -44,14 +44,15 @@
  * Sources : URSSAF, Service-Public.fr, Code du travail.
  */
 
-import { ScheduleType, type EmployeeStatus, type PayMode } from "@prisma/client";
-import type { ScheduleEntryDTO } from "@/types";
-import { isWorkingDay } from "@/lib/planning-tips";
 import {
-  SLOT_HOURS,
-  isoWeekKey,
-  weeklyOvertimeSplit,
-} from "@/lib/work-hours";
+  ScheduleType,
+  type EmployeeStatus,
+  type PayMode,
+  type OvertimeReference,
+} from "@prisma/client";
+import { type ScheduleEntryDTO, SLOT_HOURS } from "@/types";
+import { isWorkingDay } from "@/lib/planning-tips";
+import { smicHourlyAt } from "@/lib/payroll-reference";
 
 // Taux indicatifs par défaut — modifiables via la page paramètres pharmacie.
 export const DEFAULT_PAYROLL_RATES = {
@@ -69,6 +70,14 @@ export const DEFAULT_PAYROLL_RATES = {
   sickEmployerMaintenance: 0.9,
   /** Ancienneté minimale en mois pour bénéficier du maintien CC pharmacie */
   sickMaintenanceMinSeniorityMonths: 12,
+  /**
+   * Réduction générale des cotisations patronales (ex-« Fillon »).
+   * Coefficient MAX (au niveau du SMIC), dégressif jusqu'à 1,6 SMIC où il
+   * s'annule. Officines = entreprises < 50 salariés → T ≈ 0,3194 (valeur 2024,
+   * indicative). Met les charges patronales à ~10-15 % du brut près du SMIC au
+   * lieu de 42 %. 0 = désactive la réduction.
+   */
+  reductionGeneraleMaxCoef: 0.3194,
 } as const;
 
 export type PayrollRates = {
@@ -79,6 +88,7 @@ export type PayrollRates = {
   sickWaitingDays: number;
   sickEmployerMaintenance: number;
   sickMaintenanceMinSeniorityMonths: number;
+  reductionGeneraleMaxCoef: number;
 };
 
 export type EmployeeForPayroll = {
@@ -87,6 +97,8 @@ export type EmployeeForPayroll = {
   lastName: string;
   status: EmployeeStatus;
   weeklyHours: number;
+  /** Période de référence des heures sup : WEEKLY (semaine) ou BIWEEKLY (quinzaine). */
+  overtimeReference: OvertimeReference;
   /** Mode de rémunération : taux horaire OU salaire mensuel. */
   payMode: PayMode;
   hourlyGrossRate: number | null;
@@ -94,6 +106,18 @@ export type EmployeeForPayroll = {
   /** Coefficient conventionnel saisi (null = estimé via ancienneté). */
   coefficient: number | null;
   hireDate: Date | null;
+};
+
+/** Détail des heures sup pour UNE période de décompte (semaine ou quinzaine). */
+export type OvertimePeriod = {
+  /** Lundi de la 1re semaine de la période (ISO YYYY-MM-DD). */
+  weekStart: string;
+  /** Heures TASK travaillées sur la période. */
+  hours: number;
+  /** Heures sup à +25 % sur la période. */
+  overtime25: number;
+  /** Heures sup à +50 % sur la période. */
+  overtime50: number;
 };
 
 export type PayrollLine = {
@@ -112,16 +136,23 @@ export type PayrollLine = {
   /** Taux horaire EFFECTIF utilisé (saisi en horaire, ou implicite =
    *  salaire mensuel / heures mensuelles contractuelles). Sert au benchmark. */
   effectiveHourlyRate: number | null;
+  /** Salaire mensuel brut ÉQUIVALENT (taux effectif × heures mensuelles
+   *  contractuelles) — pour afficher €/h ET €/mois quel que soit le mode. */
+  effectiveMonthlySalary: number | null;
   /** Coefficient saisi (null si estimé via ancienneté côté benchmark) */
   coefficient: number | null;
 
   // ─── Heures du mois ventilées ──────────────────────────────────────
   /** Heures TASK travaillées dans le mois (hors heures sup) */
   taskHoursRegular: number;
-  /** Heures sup à +25% */
+  /** Heures sup à +25% (cumul du mois) */
   overtimeHours25: number;
-  /** Heures sup à +50% */
+  /** Heures sup à +50% (cumul du mois) */
   overtimeHours50: number;
+  /** Période de référence appliquée (semaine ou quinzaine). */
+  overtimeReference: OvertimeReference;
+  /** Détail des heures sup par période (semaine ou quinzaine) — pour la compta. */
+  overtimePeriods: OvertimePeriod[];
   /** Heures CONGE payées 100% par employeur */
   paidLeaveHours: number;
   /** Heures FORMATION_ABS payées 100% par employeur */
@@ -145,9 +176,13 @@ export type PayrollLine = {
   socialContributionsEmployee: number;
   /** Net approximatif (brut - cotisations salariales) */
   netEstimated: number;
-  /** Cotisations patronales (en plus, à charge de l'officine) */
+  /** Cotisations patronales NETTES (après réduction générale), à charge de
+   *  l'officine, en plus du brut. */
   socialContributionsEmployer: number;
-  /** Coût total pour l'officine (brut + patronales) */
+  /** Montant de la réduction générale des cotisations patronales appliquée
+   *  (0 si salaire ≥ 1,6 SMIC). Pour la transparence côté titulaire. */
+  reductionGenerale: number;
+  /** Coût total pour l'officine (brut + patronales nettes) */
   totalEmployerCost: number;
   /** Surcoût € dû AUX MAJORATIONS d'heures sup (part +25/+50 seule, hors base) */
   overtimePremiumCost: number;
@@ -253,22 +288,48 @@ export function computePayrollLine(
   // prendrait théoriquement en charge — mais ce n'est PAS un coût employeur.
   const sickCpamSlots = sickSlotsAfterWaiting - sickEmployerSlots;
 
-  // ─── Heures sup (calcul HEBDOMADAIRE — Art. L3121-28) ───────────────
-  // Les heures sup se comptent SEMAINE par SEMAINE : +25 % pour les 8
-  // premières heures au-delà du contrat, +50 % au-delà. Agréger au mois
-  // masquerait les pics intra-mois (une semaine à 46 h compensée par une
-  // semaine creuse) et sous-estimerait les majorations les plus coûteuses.
-  // On somme donc les heures sup de chaque semaine ISO présente dans le mois.
+  // ─── Heures sup (Art. L3121-28) — par SEMAINE ou par QUINZAINE ───────
+  // +25 % pour les 8 premières heures au-delà du seuil, +50 % au-delà.
+  //  - WEEKLY (défaut)  : seuil = weeklyHours/sem, plafond +25 % = 8 h/sem.
+  //  - BIWEEKLY (module) : le contrat lisse sur 2 semaines → seuil = 2×
+  //    weeklyHours sur la quinzaine, plafond +25 % = 16 h. Ex. 40 h + 30 h =
+  //    70 h ≤ 70 h → 0 heure sup (au lieu de 5 h en hebdo).
+  const isBiweekly = employee.overtimeReference === "BIWEEKLY";
+  const periodContractHours = employee.weeklyHours * (isBiweekly ? 2 : 1);
+  const cap25 = isBiweekly ? 16 : 8;
+
+  // Regroupe les semaines en périodes de décompte (1 semaine, ou 2 pour la
+  // quinzaine — appariées par index de quinzaine, cf. biweekIndex).
+  const periods = new Map<string, { slots: number; firstMonday: string }>();
+  for (const [mondayIso, slots] of taskSlotsByWeek) {
+    const key = isBiweekly ? biweekIndex(mondayIso) : mondayIso;
+    const cur = periods.get(key);
+    if (cur) {
+      cur.slots += slots;
+      if (mondayIso < cur.firstMonday) cur.firstMonday = mondayIso;
+    } else {
+      periods.set(key, { slots, firstMonday: mondayIso });
+    }
+  }
+
   let overtimeHours25 = 0;
   let overtimeHours50 = 0;
-  for (const weekSlots of taskSlotsByWeek.values()) {
-    // Même base partagée que les Statistiques (cf. lib/work-hours).
-    const { h25, h50 } = weeklyOvertimeSplit(
-      weekSlots * SLOT_HOURS,
-      employee.weeklyHours
-    );
+  const overtimePeriods: OvertimePeriod[] = [];
+  for (const { slots, firstMonday } of [...periods.values()].sort((a, b) =>
+    a.firstMonday < b.firstMonday ? -1 : 1
+  )) {
+    const hours = slots * SLOT_HOURS;
+    const ot = Math.max(0, hours - periodContractHours);
+    const h25 = Math.min(ot, cap25);
+    const h50 = Math.max(0, ot - cap25);
     overtimeHours25 += h25;
     overtimeHours50 += h50;
+    overtimePeriods.push({
+      weekStart: firstMonday,
+      hours,
+      overtime25: h25,
+      overtime50: h50,
+    });
   }
   const overtimeTotal = overtimeHours25 + overtimeHours50;
   const taskHours = taskSlots * SLOT_HOURS;
@@ -335,8 +396,27 @@ export function computePayrollLine(
   // colonne réconcilie exactement : net affiché = brut affiché − cotis affichées.
   const netEstimated =
     round2(grossEmployer) - round2(socialContributionsEmployee);
+  // ─── Réduction générale des cotisations patronales (ex-« Fillon ») ──
+  // Coefficient dégressif : maximal au SMIC, nul à partir de 1,6 SMIC. On
+  // proratise le SMIC de référence aux heures contractuelles (temps partiel).
+  // Fait chuter les charges patronales des bas salaires (préparateurs,
+  // étudiants… proches du SMIC) bien en dessous de 42 %.
+  const smicRef = smicHourlyAt(month) * contractMonthlyHours;
+  const T = rates.reductionGeneraleMaxCoef;
+  let reductionGenerale = 0;
+  if (grossEmployer > 0 && smicRef > 0 && T > 0) {
+    const coef = Math.min(
+      T,
+      Math.max(0, (T / 0.6) * ((1.6 * smicRef) / grossEmployer - 1))
+    );
+    // La réduction ne peut excéder les cotisations patronales elles-mêmes.
+    reductionGenerale = Math.min(
+      coef * grossEmployer,
+      grossEmployer * rates.socialContributionsEmployer
+    );
+  }
   const socialContributionsEmployer =
-    grossEmployer * rates.socialContributionsEmployer;
+    grossEmployer * rates.socialContributionsEmployer - reductionGenerale;
   const totalEmployerCost = grossEmployer + socialContributionsEmployer;
 
   return {
@@ -348,10 +428,17 @@ export function computePayrollLine(
     hourlyGrossRate: rate,
     monthlyGrossSalary: employee.monthlyGrossSalary,
     effectiveHourlyRate: isMonthly ? round2(baseRate) : rate,
+    // Salaire mensuel équivalent (les deux modes) — null si aucune rému saisie.
+    effectiveMonthlySalary:
+      (isMonthly ? employee.monthlyGrossSalary != null : rate != null)
+        ? round2(baseRate * contractMonthlyHours)
+        : null,
     coefficient: employee.coefficient,
     taskHoursRegular,
     overtimeHours25,
     overtimeHours50,
+    overtimeReference: employee.overtimeReference,
+    overtimePeriods,
     paidLeaveHours: leaveSlots * SLOT_HOURS,
     trainingHours: trainingSlots * SLOT_HOURS,
     sickHoursEmployerPaid: sickEmployerSlots * SLOT_HOURS,
@@ -362,6 +449,7 @@ export function computePayrollLine(
     socialContributionsEmployee: round2(socialContributionsEmployee),
     netEstimated: round2(netEstimated),
     socialContributionsEmployer: round2(socialContributionsEmployer),
+    reductionGenerale: round2(reductionGenerale),
     totalEmployerCost: round2(totalEmployerCost),
     overtimePremiumCost: round2(overtimePremiumCost),
   };
@@ -378,6 +466,28 @@ function monthsBetween(a: Date, b: Date): number {
   // embauché le 30 et analysé le 1er → l'ancienneté ne compte pas ce mois.
   if (b.getDate() < a.getDate()) months--;
   return months;
+}
+
+/** Clé de semaine ISO (lundi, UTC) d'une date "YYYY-MM-DD". */
+function isoWeekKey(dateIso: string): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const day = d.getUTCDay(); // 0=dim, 1=lun…6=sam
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Index de quinzaine d'un lundi ISO (paires de semaines stables, ancrées sur
+ * l'epoch). Deux lundis consécutifs tombent dans la même quinzaine → seuil
+ * calculé sur 2 semaines. Pour une alternance régulière (ex. 40 h / 30 h),
+ * chaque paire somme au même total quel que soit l'ancrage.
+ */
+function biweekIndex(mondayIso: string): string {
+  const days = Math.floor(
+    new Date(`${mondayIso}T00:00:00Z`).getTime() / 86400000
+  );
+  return String(Math.floor(days / 14));
 }
 
 /** Nombre de jours OUVRÉS (lun-sam hors fériés) strictement entre deux dates ISO. */

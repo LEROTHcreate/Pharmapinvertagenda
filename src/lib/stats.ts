@@ -53,13 +53,9 @@ export function getPeriodRange(period: StatsPeriod, now = new Date()): PeriodInf
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth(); // 0-11
   if (period === "week") {
-    // Lundi de la semaine courante (pharma fermée dimanche, on aligne sur ISO)
-    const day = now.getUTCDay(); // 0=dim, 1=lun…6=sam
-    const diff = day === 0 ? -6 : 1 - day;
-    const monday = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    );
-    monday.setUTCDate(monday.getUTCDate() + diff);
+    // Lundi de la semaine courante (réutilise le même calcul UTC que le
+    // bucketing hebdo — plus de logique start-of-week dupliquée dans ce fichier).
+    const monday = isoWeekStartUTC(now);
     const nextMonday = new Date(monday);
     nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
     const sat = new Date(monday);
@@ -117,6 +113,8 @@ type EmployeeBase = {
   status: EmployeeStatus;
   weeklyHours: number;
   displayColor: string;
+  /** Titulaire : compter ses heures sup ? (false = dividendes/salaire fixe). */
+  titulaireCountsOvertime: boolean;
 };
 
 /** Totaux agrégés équipe sur une période (sert à la comparaison). */
@@ -129,7 +127,7 @@ export type PeriodTotals = {
 };
 
 /** Construit les stats par collaborateur à partir d'un lot d'entrées. (pur) */
-function buildEmployeeStats(
+export function buildEmployeeStats(
   employees: EmployeeBase[],
   entries: Array<{
     employeeId: string;
@@ -189,6 +187,14 @@ function buildEmployeeStats(
       totalEffectiveHours += (b.task + b.paidAbsence) * SLOT_HOURS;
       weekly.push({ weekStart: key, taskHours: taskH });
     }
+    // Titulaire en mode "dividendes / salaire fixe" (défaut) : ses heures sup
+    // ne sont PAS comptabilisées (il travaille quoi qu'il arrive). Le solde
+    // HS-Abs n'a alors pas de sens non plus → 0. Les autres statuts (et les
+    // titulaires ayant explicitement choisi le mode "classique") comptent
+    // normalement.
+    const countsOvertime =
+      emp.status !== "TITULAIRE" || emp.titulaireCountsOvertime;
+    const overtimeHours = countsOvertime ? totalOvertimeHours : 0;
     return {
       id: emp.id,
       firstName: emp.firstName,
@@ -198,8 +204,8 @@ function buildEmployeeStats(
       displayColor: emp.displayColor,
       taskHours: totalTaskHours,
       absenceHours: totalAbsenceHours,
-      overtimeHours: totalOvertimeHours,
-      hsAbsBalance: totalOvertimeHours - totalAbsenceHours,
+      overtimeHours,
+      hsAbsBalance: countsOvertime ? overtimeHours - totalAbsenceHours : 0,
       weekCount: weekly.length,
       // Moyenne hebdo EFFECTIVE (travail + absences rémunérées) — comparée au
       // contrat pour la classification sur/sous-contrat et la tonalité.
@@ -258,43 +264,50 @@ export async function computeStats(
   previous: PeriodTotals | null;
 }> {
   const range = getPeriodRange(period);
-
-  const employees = await prisma.employee.findMany({
-    where: { pharmacyId, isActive: true },
-    orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      status: true,
-      weeklyHours: true,
-      displayColor: true,
-    },
-  });
-
-  const entries = await prisma.scheduleEntry.findMany({
-    where: {
-      pharmacyId,
-      ...(period === "all" ? {} : { date: { gte: range.start, lt: range.end } }),
-    },
-    select: { employeeId: true, type: true, date: true, absenceCode: true },
-  });
-  const stats = buildEmployeeStats(employees, entries);
-
-  // ─── Période précédente (comparaison) ───
-  let previous: PeriodTotals | null = null;
+  // La plage de la période précédente ne dépend que de `period` (aucune requête)
+  // → on la calcule d'abord pour lancer les 3 lectures EN PARALLÈLE.
   const prevNow = previousNow(period, new Date());
-  if (prevNow) {
-    const prevRange = getPeriodRange(period, prevNow);
-    const prevEntries = await prisma.scheduleEntry.findMany({
+  const prevRange = prevNow ? getPeriodRange(period, prevNow) : null;
+
+  // 3 requêtes indépendantes en parallèle (au lieu de 3 allers-retours série).
+  const [employees, entries, prevEntries] = await Promise.all([
+    prisma.employee.findMany({
+      where: { pharmacyId, isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        weeklyHours: true,
+        displayColor: true,
+        titulaireCountsOvertime: true,
+      },
+    }),
+    prisma.scheduleEntry.findMany({
       where: {
         pharmacyId,
-        date: { gte: prevRange.start, lt: prevRange.end },
+        ...(period === "all"
+          ? {}
+          : { date: { gte: range.start, lt: range.end } }),
       },
       select: { employeeId: true, type: true, date: true, absenceCode: true },
-    });
-    previous = totalsFrom(buildEmployeeStats(employees, prevEntries));
-  }
+    }),
+    prevRange
+      ? prisma.scheduleEntry.findMany({
+          where: {
+            pharmacyId,
+            date: { gte: prevRange.start, lt: prevRange.end },
+          },
+          select: { employeeId: true, type: true, date: true, absenceCode: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const stats = buildEmployeeStats(employees, entries);
+  const previous: PeriodTotals | null = prevEntries
+    ? totalsFrom(buildEmployeeStats(employees, prevEntries))
+    : null;
 
   return { employees: stats, periodLabel: range.label, previous };
 }

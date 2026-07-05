@@ -15,14 +15,17 @@ import { cn } from "@/lib/utils";
 import { MyDayCard } from "@/components/accueil/MyDayCard";
 import { MyWeekCard } from "@/components/accueil/MyWeekCard";
 import { TeamNowCard } from "@/components/accueil/TeamNowCard";
-import { QuickAbsenceButton } from "@/components/accueil/QuickAbsenceButton";
 
 /**
  * Page Accueil — tableau de bord pensé pour le mobile.
  *
  * En un coup d'œil : alertes (absences à valider, messages non lus), ma
- * journée (créneau en cours surligné), l'équipe aujourd'hui, action rapide
- * "poser une absence", et accès rapides vers tout le reste (dont Notes).
+ * journée (créneau en cours surligné), l'équipe aujourd'hui, et accès rapides
+ * vers tout le reste (dont Notes).
+ *
+ * NB : pas de CTA "poser une absence" en bouton central — on ne met pas le
+ * congé en avant sur l'écran d'accueil. La demande d'absence reste accessible
+ * via la tuile "Absences" et l'onglet dédié.
  */
 
 type DayBlock = { from: string; to: string; label: string; isAbsence: boolean };
@@ -125,9 +128,6 @@ export function AccueilView({
       {myWeek && myWeek.contract > 0 && (
         <MyWeekCard done={myWeek.done} contract={myWeek.contract} />
       )}
-
-      {/* Action rapide */}
-      <QuickAbsenceButton isAdmin={isAdmin} />
 
       {/* L'équipe en poste MAINTENANT (créneau en cours), total jour en secondaire */}
       <TeamNowCard presentBySlot={presentBySlot} dayTotal={teamPresent} />

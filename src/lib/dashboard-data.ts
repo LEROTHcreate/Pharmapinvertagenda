@@ -147,3 +147,44 @@ export const DASHBOARD_CACHE_TAGS = {
   /** Cache de la liste des gabarits d'une pharmacie. */
   templatesList: (pharmacyId: string) => `templates:${pharmacyId}`,
 };
+
+/**
+ * Lecture CACHÉE des entrées de planning d'une semaine (lun→dim). Clé + tags
+ * IDENTIQUES à /api/planning → l'entrée de cache est PARTAGÉE entre l'API et la
+ * page planning, et invalidée par les mutations (POST/DELETE, apply-batch…).
+ * Évite de re-taper Postgres à chaque navigation sur la page la plus lourde.
+ * `select` restreint aux 8 champs du DTO (pas de sur-fetch).
+ */
+export const getCachedWeekEntries = (
+  pharmacyId: string,
+  weekStartIso: string
+) =>
+  unstable_cache(
+    async () => {
+      const start = new Date(`${weekStartIso}T00:00:00Z`);
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + 6);
+      return prisma.scheduleEntry.findMany({
+        where: { pharmacyId, date: { gte: start, lte: end } },
+        orderBy: [{ date: "asc" }, { timeSlot: "asc" }],
+        select: {
+          id: true,
+          employeeId: true,
+          date: true,
+          timeSlot: true,
+          type: true,
+          taskCode: true,
+          absenceCode: true,
+          notes: true,
+        },
+      });
+    },
+    ["planning-week", pharmacyId, weekStartIso],
+    {
+      tags: [
+        DASHBOARD_CACHE_TAGS.planningWeek(pharmacyId, weekStartIso),
+        DASHBOARD_CACHE_TAGS.planningAll(pharmacyId),
+      ],
+      revalidate: 10,
+    }
+  )();

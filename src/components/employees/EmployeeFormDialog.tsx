@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
-import type { ContractType, EmployeeStatus } from "@prisma/client";
+import type {
+  ContractType,
+  EmployeeStatus,
+  OvertimeReference,
+} from "@prisma/client";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +51,7 @@ type FormState = {
   lastName: string;
   status: EmployeeStatus;
   weeklyHours: string;
+  overtimeReference: OvertimeReference;
   displayColor: string;
   displayOrder: string;
   hireDate: string;
@@ -72,6 +77,7 @@ const emptyForm: FormState = {
   lastName: "",
   status: "PREPARATEUR",
   weeklyHours: "35",
+  overtimeReference: "WEEKLY",
   displayColor: pickRoleColor("PREPARATEUR", 0),
   displayOrder: "0",
   hireDate: "",
@@ -90,6 +96,7 @@ function fromEmployee(e: EmployeeRowData): FormState {
     lastName: e.lastName,
     status: e.status,
     weeklyHours: String(e.weeklyHours),
+    overtimeReference: e.overtimeReference,
     displayColor: e.displayColor,
     displayOrder: String(e.displayOrder),
     hireDate: e.hireDate ?? "",
@@ -146,6 +153,7 @@ export function EmployeeFormDialog({ open, mode, employee, onClose }: Props) {
       lastName: form.lastName.trim(),
       status: form.status,
       weeklyHours: Number(form.weeklyHours),
+      overtimeReference: form.overtimeReference,
       displayColor: form.displayColor,
       displayOrder: Number.parseInt(form.displayOrder, 10) || 0,
       hireDate: form.hireDate || null,
@@ -246,6 +254,30 @@ export function EmployeeFormDialog({ open, mode, employee, onClose }: Props) {
                 onChange={(e) => set("weeklyHours", e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="overtimeReference">Décompte des heures sup</Label>
+            <Select
+              value={form.overtimeReference}
+              onValueChange={(v) =>
+                set("overtimeReference", v as OvertimeReference)
+              }
+            >
+              <SelectTrigger id="overtimeReference">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="WEEKLY">À la semaine</SelectItem>
+                <SelectItem value="BIWEEKLY">
+                  Lissé sur 2 semaines (quinzaine)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              « Quinzaine » : le contrat module sur 2 semaines — ex. 40 h + 30 h
+              = 0 heure sup (seuil 2× le contrat).
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -35,6 +35,8 @@ export const employeeInput = z.object({
     .number({ message: "Heures hebdo requises" })
     .min(0, "Doit être ≥ 0")
     .max(80, "Max 80h"),
+  // Période de référence des heures supplémentaires (semaine ou quinzaine).
+  overtimeReference: z.enum(["WEEKLY", "BIWEEKLY"]).default("WEEKLY"),
   displayColor: hexColor.default("#6366f1"),
   displayOrder: z.number().int().min(0).default(0),
   hireDate: dateStr,

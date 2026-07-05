@@ -39,10 +39,18 @@ type Line = {
   hourlyGrossRate: number | null;
   monthlyGrossSalary: number | null;
   effectiveHourlyRate: number | null;
+  effectiveMonthlySalary: number | null;
   coefficient: number | null;
   taskHoursRegular: number;
   overtimeHours25: number;
   overtimeHours50: number;
+  overtimeReference: "WEEKLY" | "BIWEEKLY";
+  overtimePeriods: {
+    weekStart: string;
+    hours: number;
+    overtime25: number;
+    overtime50: number;
+  }[];
   paidLeaveHours: number;
   trainingHours: number;
   sickHoursEmployerPaid: number;
@@ -53,9 +61,29 @@ type Line = {
   socialContributionsEmployee: number;
   netEstimated: number;
   socialContributionsEmployer: number;
+  reductionGenerale: number;
   totalEmployerCost: number;
   overtimePremiumCost: number;
 };
+
+/** Tooltip listant les heures sup période par période (semaine ou quinzaine). */
+function overtimePeriodsTitle(line: {
+  overtimeReference: "WEEKLY" | "BIWEEKLY";
+  overtimePeriods: { weekStart: string; overtime25: number; overtime50: number }[];
+}): string {
+  const label = line.overtimeReference === "BIWEEKLY" ? "Quinzaine du" : "Semaine du";
+  const fmt = (iso: string) => {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+  const rows = line.overtimePeriods
+    .filter((p) => p.overtime25 + p.overtime50 > 0)
+    .map(
+      (p) =>
+        `${label} ${fmt(p.weekStart)} : +25% ${p.overtime25.toFixed(1)}h · +50% ${p.overtime50.toFixed(1)}h`
+    );
+  return rows.join("\n");
+}
 
 const REGION_KEY = "pp_payroll_region";
 const REGIONS: Region[] = [
@@ -419,9 +447,8 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
                   <th className="text-right px-3 py-2.5">H sup</th>
                   <th className="text-right px-3 py-2.5">Congés</th>
                   <th className="text-right px-3 py-2.5">Maladie *</th>
-                  <th className="text-right px-3 py-2.5">Brut</th>
-                  <th className="text-right px-3 py-2.5">Net est.</th>
-                  <th className="text-right px-3 py-2.5">Coût total</th>
+                  <th className="text-right px-3 py-2.5">Brut / Net</th>
+                  <th className="text-right px-3 py-2.5">Coût officine</th>
                   <th className="text-center px-3 py-2.5">Marché</th>
                 </tr>
               </thead>
@@ -905,7 +932,14 @@ function PayrollRow({
             }
           >
             {belowMin && <AlertTriangle className="h-3 w-3 text-red-600" />}
-            {compLabel(line)}
+            <span className="inline-flex flex-col items-end leading-tight">
+              <span>{compLabel(line)}</span>
+              {compSecondary(line) && (
+                <span className="text-[10px] font-normal text-zinc-500">
+                  {compSecondary(line)}
+                </span>
+              )}
+            </span>
             <Pencil className="h-3 w-3 opacity-50" />
           </button>
         )}
@@ -915,11 +949,26 @@ function PayrollRow({
       </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums">
         {overtime > 0 ? (
-          <span title={`+25% : ${line.overtimeHours25.toFixed(1)}h, +50% : ${line.overtimeHours50.toFixed(1)}h`}>
-            +{overtime.toFixed(1)} h
+          <span
+            title={overtimePeriodsTitle(line)}
+            className="inline-flex flex-col items-end leading-tight"
+          >
+            <span>+{overtime.toFixed(1)} h</span>
+            <span className="text-[10px] font-normal text-zinc-500">
+              +25% {line.overtimeHours25.toFixed(1)} · +50%{" "}
+              {line.overtimeHours50.toFixed(1)}
+              {line.overtimeReference === "BIWEEKLY" ? " · /quinz." : ""}
+            </span>
           </span>
         ) : (
-          <span className="text-zinc-400">—</span>
+          <span className="text-zinc-400">
+            —
+            {line.overtimeReference === "BIWEEKLY" && (
+              <span className="ml-1 text-[9px] uppercase tracking-wide">
+                quinz.
+              </span>
+            )}
+          </span>
         )}
       </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums">
@@ -934,14 +983,33 @@ function PayrollRow({
           </span>
         ) : <span className="text-zinc-400">—</span>}
       </td>
-      <td className="px-3 py-2 text-right font-mono tabular-nums font-medium">
-        {fmt(line.grossEmployer)}
-      </td>
-      <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-700">
-        {fmt(line.netEstimated)}
+      <td className="px-3 py-2 text-right font-mono tabular-nums">
+        {line.grossEmployer > 0 ? (
+          <div className="inline-flex flex-col items-end leading-tight">
+            <span className="font-medium text-zinc-900" title="Salaire brut">
+              {fmt(line.grossEmployer)}
+            </span>
+            <span
+              className="text-[11px] text-emerald-700"
+              title="Net estimé — ce que touche réellement le salarié (à montrer au collaborateur)"
+            >
+              net {fmt(line.netEstimated)}
+            </span>
+          </div>
+        ) : (
+          <span className="text-zinc-400">—</span>
+        )}
       </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold text-violet-900">
-        {fmt(line.totalEmployerCost)}
+        <span
+          title={
+            line.reductionGenerale > 0
+              ? `Charges patronales : ${fmt(line.socialContributionsEmployer)} (après réduction générale de ${fmt(line.reductionGenerale)}). Coût = brut + charges.`
+              : `Charges patronales : ${fmt(line.socialContributionsEmployer)}. Coût = brut + charges.`
+          }
+        >
+          {fmt(line.totalEmployerCost)}
+        </span>
       </td>
       <td className="px-3 py-2 text-center">
         {benchmark ? <BenchmarkChip benchmark={benchmark} /> : <span className="text-zinc-400">—</span>}
@@ -1026,4 +1094,16 @@ function compLabel(line: Line): string {
   return line.hourlyGrossRate != null
     ? `${line.hourlyGrossRate.toFixed(2)} €/h`
     : "—";
+}
+
+/** Équivalent dans l'AUTRE unité (€/h saisi → €/mois, et inversement). */
+function compSecondary(line: Line): string | null {
+  if (line.payMode === "MONTHLY") {
+    return line.effectiveHourlyRate != null
+      ? `≈ ${line.effectiveHourlyRate.toFixed(2)} €/h`
+      : null;
+  }
+  return line.effectiveMonthlySalary != null
+    ? `≈ ${new Intl.NumberFormat("fr-FR").format(Math.round(line.effectiveMonthlySalary))} €/mois`
+    : null;
 }

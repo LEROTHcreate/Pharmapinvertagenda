@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Lightbulb, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "@/components/layout/AvatarImage";
 import { pickRandomGreeting } from "@/lib/daily-greeting";
 import type { PlanningTip } from "@/lib/planning-tips";
 
-/** Délai avant auto-hide de la bulle de tip à l'ouverture du site (ms). */
-const BUBBLE_AUTO_HIDE_MS = 9000;
+/** Clé localStorage : signature des conseils déjà consultés (stoppe le pulse). */
+const TIPS_SEEN_KEY = "pp_tips_seen";
 
 /**
  * Bandeau "Bonjour [prénom]" + phrase du jour, affiché en haut du planning.
@@ -16,6 +17,11 @@ const BUBBLE_AUTO_HIDE_MS = 9000;
  * Interactif : tape sur l'avatar pour tirer une nouvelle phrase + petit bounce.
  * Easter egg : 5 clicks rapides (≤ 600 ms entre chaque) → message spécial +
  * bounce dramatique avec sparkles supplémentaires.
+ *
+ * Ampoule "conseils" : raccourci vers la page « Infos & conseils » (/infos)
+ * qui regroupe tout le contextuel (à valider, sous-effectif, conseils,
+ * fériés). Elle pulse tant que les conseils du moment n'ont pas été consultés
+ * (signature mémorisée en localStorage).
  */
 
 /** Phrases spéciales débloquées en spammant l'avatar 5× rapide */
@@ -57,36 +63,33 @@ export function WelcomeBanner({
   const lastClickTimeRef = useRef(0);
   const clickStreakRef = useRef(0);
 
-  // ─── Bulle de tip ─────────────────────────────────────────────────
-  // À l'arrivée sur la page, si on a au moins un tip, on ouvre la bulle
-  // automatiquement. Elle s'efface seule après BUBBLE_AUTO_HIDE_MS, ou
-  // immédiatement si l'utilisateur clique dessus / sur l'ampoule. Un
-  // re-clic sur l'ampoule la ré-ouvre (sans timer cette fois — c'est
-  // intentionnel, l'utilisateur l'a demandée).
-  const [bubbleOpen, setBubbleOpen] = useState(false);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ─── Ampoule "conseils" ───────────────────────────────────────────
+  // Signature du lot de conseils courant : quand elle change (nouvelle
+  // semaine, nouveaux tips), l'ampoule se remet à pulser pour signaler qu'il
+  // y a du nouveau. Une fois le panneau ouvert, on mémorise la signature →
+  // plus de pulse tant que les conseils ne changent pas.
+  const tipsSig = useMemo(
+    () => tips.map((t) => `${t.date}:${t.level}`).join("|"),
+    [tips]
+  );
+  const [seen, setSeen] = useState(true); // true par défaut → pas de flash au SSR
 
   useEffect(() => {
-    if (tips.length === 0) return;
-    setBubbleOpen(true);
-    hideTimerRef.current = setTimeout(() => {
-      setBubbleOpen(false);
-    }, BUBBLE_AUTO_HIDE_MS);
-    return () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, [tips.length]);
-
-  function dismissBubble() {
-    setBubbleOpen(false);
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
+    if (!tipsSig) return;
+    try {
+      setSeen(window.localStorage.getItem(TIPS_SEEN_KEY) === tipsSig);
+    } catch {
+      setSeen(false);
     }
-  }
-  function toggleBubble() {
-    if (bubbleOpen) dismissBubble();
-    else setBubbleOpen(true);
+  }, [tipsSig]);
+
+  function markSeen() {
+    setSeen(true);
+    try {
+      window.localStorage.setItem(TIPS_SEEN_KEY, tipsSig);
+    } catch {
+      /* stockage indisponible (mode privé) → on ignore */
+    }
   }
 
   function handleAvatarClick() {
@@ -129,7 +132,7 @@ export function WelcomeBanner({
       // droit, indépendamment du flux flex — comme ça le contenu (avatar +
       // texte) peut grandir/rétrécir sans jamais décaler l'ampoule.
       // `pr-14` réserve 56px à droite pour que le texte ne passe pas dessous.
-      className="no-print relative rounded-2xl border border-border bg-card md:bg-card/80 md:backdrop-blur-sm px-4 py-2.5 pr-14 sm:px-5 sm:py-3 sm:pr-16 flex items-center gap-3 sm:gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
+      className="no-print relative rounded-2xl border border-border bg-card px-4 py-2.5 pr-14 sm:px-5 sm:py-3 sm:pr-16 flex items-center gap-3 sm:gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
     >
       {/* Avatar cliquable — wrapper button pour le focus + accessibilité,
           relative pour positionner les sparkles autour.
@@ -209,113 +212,36 @@ export function WelcomeBanner({
         </p>
       </div>
 
-      {/* Ampoule pinnée en position absolue au coin droit du bandeau.
-          Indépendante du flux flex → l'avatar et le texte peuvent
-          grandir/rétrécir, l'ampoule ne bouge plus jamais. */}
-      {tips.length > 0 ? (
-        <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2">
-          <button
-            type="button"
-            onClick={toggleBubble}
-            aria-label={`${tips.length} info${tips.length > 1 ? "s" : ""} à venir`}
-            aria-expanded={bubbleOpen}
-            className="relative inline-flex h-8 w-8 items-center justify-center rounded-full text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-            title={`${tips.length} info${tips.length > 1 ? "s" : ""} à venir`}
+      {/* Ampoule "conseils" pinnée au coin droit → raccourci vers /infos.
+          Pulse tant que les conseils du moment n'ont pas été consultés. */}
+      <Link
+        href="/infos"
+        onClick={markSeen}
+        aria-label={
+          tips.length > 0
+            ? `Infos & conseils — ${tips.length} à voir`
+            : "Infos & conseils"
+        }
+        title="Infos & conseils"
+        className={cn(
+          "absolute right-3 sm:right-4 top-1/2 -translate-y-1/2",
+          "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+          "text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+          tips.length === 0 && "text-amber-500/50 hover:text-amber-500"
+        )}
+      >
+        <Lightbulb className="h-4 w-4" />
+        {tips.length > 0 && !seen && (
+          <span
+            aria-hidden
+            className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5"
           >
-            <Lightbulb className="h-4 w-4" />
-            {!bubbleOpen && (
-              <span
-                className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"
-                aria-hidden
-              />
-            )}
-          </button>
-
-          {bubbleOpen && (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={dismissBubble}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
-                  e.preventDefault();
-                  dismissBubble();
-                }
-              }}
-              className={cn(
-                "comic-bubble",
-                // right-0 = on aligne le bord droit de la bulle avec le bord
-                // droit du conteneur de l'ampoule. Combiné aux nouvelles
-                // valeurs CSS du triangle, la flèche pointe pile sur l'ampoule.
-                "absolute right-0 top-full mt-3 z-30 w-[300px] sm:w-[360px] max-w-[calc(100vw-2rem)]",
-                "rounded-2xl border-2 border-amber-300 dark:border-amber-700",
-                "bg-card px-4 py-3 pr-8 text-left shadow-[0_8px_28px_-6px_rgba(0,0,0,0.18)]",
-                "animate-bubble-pop cursor-pointer select-none",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-              )}
-              aria-label="Tips à prévoir cette semaine. Cliquer pour fermer."
-            >
-              {/* Croix de fermeture en coin — purement visuelle, le clic se
-                  fait sur toute la bulle pour rester accessible au tap. */}
-              <span
-                aria-hidden
-                className="absolute top-1.5 right-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/60 hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-              </span>
-
-              <div className="flex items-center gap-1.5 mb-2">
-                <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-                <p className="text-[11px] uppercase tracking-[0.06em] font-semibold text-amber-700 dark:text-amber-400">
-                  À prévoir
-                </p>
-                {tips.length > 1 && (
-                  <span className="ml-auto rounded-full bg-amber-100 dark:bg-amber-950/50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300 tabular-nums">
-                    {tips.length}
-                  </span>
-                )}
-              </div>
-
-              {/* Liste scrollable : avec les tips saisonniers, on peut en avoir
-                  plusieurs → hauteur plafonnée + défilement pour rester lisible
-                  sans déborder de l'écran. */}
-              <ul className="space-y-2.5 max-h-[52vh] overflow-y-auto overscroll-contain pr-1 -mr-1 scrollbar-thin">
-                {tips.map((tip, i) => (
-                  <li
-                    key={`${tip.date}-${i}`}
-                    className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5"
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "mt-1 inline-flex h-1.5 w-1.5 shrink-0 rounded-full",
-                        tip.level === "warning"
-                          ? "bg-amber-500"
-                          : "bg-violet-500"
-                      )}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12.5px] font-semibold text-foreground leading-tight">
-                        {tip.title}
-                      </p>
-                      <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed">
-                        {tip.description}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      ) : (
-        // Ampoule "inactive" (sans tips) — pinnée au même endroit pour
-        // garantir une position visuelle stable peu importe l'état.
-        <Lightbulb
-          className="hidden sm:block absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-amber-500/40"
-          aria-hidden
-        />
-      )}
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card" />
+          </span>
+        )}
+      </Link>
     </section>
   );
 }

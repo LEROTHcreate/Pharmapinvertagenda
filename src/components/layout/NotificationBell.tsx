@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bell,
+  CalendarClock,
   CalendarOff,
   Check,
   RefreshCcw,
@@ -23,7 +24,8 @@ type NotificationItem = {
     | "absence-pending"
     | "absence-decided"
     | "swap-pending"
-    | "user-pending";
+    | "user-pending"
+    | "availability-wish";
   title: string;
   description: string;
   href: string;
@@ -77,15 +79,23 @@ export function NotificationBell() {
   }
 
   useEffect(() => {
-    fetchNotifications();
-    fetchTimer.current = setInterval(fetchNotifications, 60_000);
-    function onFocus() {
+    // PERF : on ne poll PAS quand l'onglet est masqué (inutile de solliciter
+    // /api/notifications en arrière-plan). Au retour au premier plan (focus ou
+    // visibilitychange), on rafraîchit immédiatement.
+    function refresh() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
       fetchNotifications();
     }
-    window.addEventListener("focus", onFocus);
+    refresh();
+    fetchTimer.current = setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       if (fetchTimer.current) clearInterval(fetchTimer.current);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, []);
 
@@ -238,6 +248,11 @@ function NotifIcon({ kind }: { kind: NotificationItem["kind"] }) {
       icon: UserPlus,
       bg: "bg-violet-50 dark:bg-violet-950/40",
       fg: "text-violet-700 dark:text-violet-400",
+    },
+    "availability-wish": {
+      icon: CalendarClock,
+      bg: "bg-teal-50 dark:bg-teal-950/40",
+      fg: "text-teal-700 dark:text-teal-400",
     },
   };
   const { icon: Icon, bg, fg } = map[kind];

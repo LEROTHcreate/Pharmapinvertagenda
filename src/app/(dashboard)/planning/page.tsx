@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
+import { startOfWeek, toIsoDate } from "@/lib/planning-utils";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import { PlanningView } from "@/components/planning/PlanningView";
 import { WelcomeBanner } from "@/components/planning/WelcomeBanner";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/daily-greeting";
 import { upcomingTips } from "@/lib/planning-tips";
 import { seasonalTips } from "@/lib/seasonal-staffing";
+import { getCachedWeekEntries } from "@/lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
 
@@ -57,9 +58,7 @@ export default async function PlanningPage({
     ? new Date(`${searchParams.week}T00:00:00`)
     : startOfWeek(new Date());
   const monday = startOfWeek(initialWeekStart);
-  const days = weekDays(monday);
   const weekStartIso = toIsoDate(monday);
-  const weekEndIso = toIsoDate(days[5]);
 
   // Jour ciblé (?day=0..5 = lundi..samedi). Si absent ou hors range, on
   // laissera PlanningView basculer sur "aujourd'hui" automatiquement.
@@ -83,15 +82,9 @@ export default async function PlanningPage({
         displayOrder: true,
       },
     }),
-    prisma.scheduleEntry.findMany({
-      where: {
-        pharmacyId: session.user.pharmacyId,
-        date: {
-          gte: new Date(`${weekStartIso}T00:00:00Z`),
-          lte: new Date(`${weekEndIso}T00:00:00Z`),
-        },
-      },
-    }),
+    // Lecture CACHÉE (partagée avec /api/planning, invalidée par les mutations)
+    // → plus de requête Postgres à chaque navigation sur cette page.
+    getCachedWeekEntries(session.user.pharmacyId, weekStartIso),
     prisma.pharmacy.findUnique({
       where: { id: session.user.pharmacyId },
       select: { name: true, minStaff: true },

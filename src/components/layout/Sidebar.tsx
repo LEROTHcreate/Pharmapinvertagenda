@@ -12,9 +12,11 @@ import {
   LogOut,
   UserCog,
   LayoutTemplate,
+  Lightbulb,
   MessageCircle,
   Settings,
   StickyNote,
+  ShieldCheck,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { cn } from "@/lib/utils";
@@ -26,6 +28,7 @@ import type { UserRole } from "@prisma/client";
 
 type NavKey =
   | "planning"
+  | "infos"
   | "gabarits"
   | "employes"
   | "absences"
@@ -33,6 +36,7 @@ type NavKey =
   | "notes"
   | "stats"
   | "remuneration"
+  | "gardes"
   | "utilisateurs"
   | "parametres";
 type NavItem = {
@@ -45,6 +49,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
+  { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true },
   { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
@@ -52,6 +57,7 @@ const NAV: NavItem[] = [
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
   { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
+  { key: "gardes", href: "/gardes", label: "Gardes", icon: ShieldCheck, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
   { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },
 ];

@@ -167,7 +167,7 @@ export function WeekOverview({
       <RolesLegend employees={employees} />
 
       {/* En-tête sticky : jours de la semaine */}
-      <div className="sticky top-0 z-10 -mx-4 bg-gradient-to-b from-white via-white/95 to-transparent px-4 pb-2 pt-1 backdrop-blur md:-mx-6 md:px-6">
+      <div className="sticky top-0 z-10 -mx-4 bg-gradient-to-b from-white via-white/95 to-transparent px-4 pb-2 pt-1 md:-mx-6 md:px-6">
         <div
           className="grid items-center gap-1 text-[11px] font-medium text-muted-foreground"
           style={{ gridTemplateColumns: COL_TEMPLATE }}

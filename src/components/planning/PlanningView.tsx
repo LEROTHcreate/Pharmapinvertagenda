@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3, Trash2 } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
-import { ABSENCE_LABELS, WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
+import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import {
   computeOvertimeCells,
@@ -17,7 +17,7 @@ import {
   weekTypeFor,
 } from "@/lib/planning-utils";
 import { TIME_SLOTS } from "@/types";
-import { PlanningGrid, type CellKey, type ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
+import type { CellKey, ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
 import { MyDayView } from "@/components/planning/MyDayView";
 import { MobileTeamGantt } from "@/components/planning/MobileTeamGantt";
 import { MobileWeekView } from "@/components/planning/MobileWeekView";
@@ -27,11 +27,8 @@ import type { ApplyScope } from "@/components/planning/ApplyScopeSelector";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
 import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
 import type { EmployeeStatus } from "@prisma/client";
-import { CoverageWarnings } from "@/components/planning/CoverageWarnings";
-import { analyzeCoverage } from "@/lib/coverage-analysis";
 import { ViewModeSelector } from "@/components/planning/ViewModeSelector";
 import { PrintButton } from "@/components/planning/PrintButton";
-import { ExportXlsxButton } from "@/components/planning/ExportXlsxButton";
 import { useToast } from "@/components/ui/toast";
 import { holidaysIndexForDates } from "@/lib/holidays-fr";
 import type { AbsenceConflict } from "@/components/planning/AbsenceConflictDialog";
@@ -55,6 +52,19 @@ const AbsenceConflictDialog = dynamic(
       (m) => m.AbsenceConflictDialog
     ),
   { ssr: false }
+);
+
+// Grille desktop (~1300 lignes + dnd-kit) : chargée à la demande UNIQUEMENT sur
+// desktop (cf. gate `isDesktopWidth`) → le mobile ne télécharge/parse plus ce
+// gros chunk, allègement majeur du bundle initial de /planning sur mobile.
+const PlanningGrid = dynamic(
+  () => import("@/components/planning/PlanningGrid").then((m) => m.PlanningGrid),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 animate-pulse rounded-2xl bg-muted/60" />
+    ),
+  }
 );
 
 type Selection = {
@@ -593,46 +603,11 @@ export function PlanningView({
   );
   const selectedDayHoliday = holidaysIndex.get(selectedDay) ?? null;
 
-  /**
-   * Manquements aux règles de couverture sur la semaine en cours :
-   *  - Toujours ≥ 1 pharmacien sur chaque créneau ouvert
-   *  - Toujours ≥ 2 préparateurs
-   *  - Notifier si le livreur est absent (titulaires assurent les livraisons)
-   */
-  const coverageWarnings = useMemo(() => {
-    // Créneaux d'ouverture standard (08:30 → 21:00) — exclut tôt matin
-    // Horaires d'ouverture au public : 08:30 → 20:00
-    const openSlots = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
-    return analyzeCoverage(employees, dayDates, index, openSlots, minStaff);
-  }, [employees, dayDates, index, minStaff]);
-
-  // Filtre selon le jour sélectionné : le lundi on garde la vue d'ensemble
-  // de la semaine (utile en début de semaine pour repérer les trous), les
-  // autres jours on n'affiche que les warnings du jour pour ne pas surcharger.
-  const visibleCoverageWarnings = useMemo(() => {
-    if (dayIndex === 0) return coverageWarnings;
-    return coverageWarnings.filter((w) => w.date === selectedDay);
-  }, [coverageWarnings, dayIndex, selectedDay]);
-
-  const absentToday = useMemo(() => {
-    return employees
-      .filter((emp) => {
-        const day = index.get(emp.id)?.get(selectedDay);
-        if (!day) return false;
-        return Array.from(day.values()).some((e) => e.type === "ABSENCE");
-      })
-      .map((emp) => {
-        const day = index.get(emp.id)?.get(selectedDay);
-        const sample = day
-          ? Array.from(day.values()).find((e) => e.type === "ABSENCE")
-          : null;
-        return {
-          id: emp.id,
-          name: `${emp.firstName} ${emp.lastName.charAt(0)}.`,
-          absenceCode: sample?.absenceCode ?? null,
-        };
-      });
-  }, [employees, index, selectedDay]);
+  // NB : l'analyse de couverture (sous-effectif, pas de pharmacien…) et la
+  // liste des absents ont été déplacées dans la page « Infos & conseils »
+  // (/infos) — elles ne sont donc plus recalculées à chaque modification du
+  // planning. Le repère d'effectif reste porté par les pastilles par créneau
+  // (grille) et la ligne « Eff. mini » (vue Semaine).
 
   // Navigation semaine : un seul round-trip via router.replace (le serveur
   // re-fetch la nouvelle semaine et l'effet sur initialEntries/initialWeekStart
@@ -1388,6 +1363,18 @@ export function PlanningView({
       /* localStorage indispo (mode privé Safari) — on ignore silencieusement */
     }
   }, [isAdmin]);
+
+  // La grille desktop n'est MONTÉE qu'au-delà de md (768px) → mobile ne charge
+  // pas le chunk dnd-kit + grille. Aligné sur le `hidden md:block` du wrapper.
+  const [isDesktopWidth, setIsDesktopWidth] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktopWidth(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   const toggleAdminLock = useCallback(() => {
     setAdminLocked((prev) => {
       const next = !prev;
@@ -1486,7 +1473,6 @@ export function PlanningView({
                 onApplied={() => refetchWeek(weekStart)}
               />
             )}
-            {isAdmin && <ExportXlsxButton weekStart={weekStart} />}
             <EmployeeStatusFilter
               selected={statusFilter}
               onChange={setStatusFilter}
@@ -1651,48 +1637,6 @@ export function PlanningView({
         </div>
       </div>
 
-      {/* Bulle "Statut équipe" — admin uniquement (les collaborateurs ne
-          gèrent pas la couverture, on évite de leur afficher des alertes
-          sur lesquelles ils ne peuvent pas agir). `no-print` car en
-          impression on veut juste la grille, pas les alertes manquements
-          d'effectif (qui prendraient une page entière inutilement).
-          Masquée sur mobile (`hidden md:block`) pour alléger l'écran : l'info
-          est déjà portée par la vue Jour (bandeau absents + pastilles
-          d'effectif) et la vue Semaine (ligne "Eff. mini"). */}
-      {isAdmin && (absentToday.length > 0 || visibleCoverageWarnings.length > 0) && (
-        <div className="hidden md:block no-print rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
-            <span className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-foreground/70">
-              Statut équipe — {dayIndex === 0 ? "semaine en cours" : "jour sélectionné"}
-            </span>
-          </div>
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-6 sm:gap-y-2.5">
-            {absentToday.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                <span className="text-[10.5px] uppercase tracking-[0.08em] font-medium text-muted-foreground/70">
-                  Absents
-                </span>
-                {absentToday.map((a) => (
-                  <span
-                    key={a.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-800 px-2.5 py-0.5 tracking-tight"
-                  >
-                    {a.name}
-                    {a.absenceCode && (
-                      <span className="text-amber-600/70 text-[10px]">
-                        · {ABSENCE_LABELS[a.absenceCode]}
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            )}
-            <CoverageWarnings warnings={visibleCoverageWarnings} />
-          </div>
-        </div>
-      )}
-
       {/* Bandeau "jour férié" — badge "FR" stylé (pas d'emoji drapeau qui
           rend mal sur Windows), alignement centré, design Apple-épuré. */}
       {selectedDayHoliday && (
@@ -1817,26 +1761,28 @@ export function PlanningView({
       {/* ─── Grille équipe ─────────────────────────────────────────
           Sur desktop : toujours affichée. Sur mobile : remplacée par les
           vues dédiées ci-dessus (frise / semaine / moi), donc masquée. */}
-      <div className="hidden md:block">
-        <PlanningGrid
-          employees={visibleEmployees}
-          date={selectedDay}
-          weekDates={dayDates}
-          index={index}
-          canEdit={effectiveCanEdit}
-          minStaff={minStaff}
-          selection={multiSelection}
-          onSelectionChange={setMultiSelection}
-          onCellClick={handleCellClick}
-          overtimeCells={overtimeCells}
-          recentlySaved={recentlySaved}
-          currentEmployeeId={currentEmployeeId ?? null}
-          onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
-          onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
-          onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
-          density={density}
-        />
-      </div>
+      {isDesktopWidth && (
+        <div className="hidden md:block">
+          <PlanningGrid
+            employees={visibleEmployees}
+            date={selectedDay}
+            weekDates={dayDates}
+            index={index}
+            canEdit={effectiveCanEdit}
+            minStaff={minStaff}
+            selection={multiSelection}
+            onSelectionChange={setMultiSelection}
+            onCellClick={handleCellClick}
+            overtimeCells={overtimeCells}
+            recentlySaved={recentlySaved}
+            currentEmployeeId={currentEmployeeId ?? null}
+            onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
+            onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
+            onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
+            density={density}
+          />
+        </div>
+      )}
 
       {/* (Le FAB "+" de création rapide d'absence a été retiré sur mobile :
           la barre d'onglets + la page Accueil couvrent déjà l'accès aux
@@ -1880,7 +1826,7 @@ export function PlanningView({
 
       {/* Barre d'action flottante (sélection multi) — glass Apple-style */}
       {effectiveCanEdit && multiSelection.size > 0 && (
-        <div className="no-print fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/85 backdrop-blur-xl shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
+        <div className="no-print fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
           <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
           <span className="text-[12.5px] tracking-tight">
             <span className="font-semibold tabular-nums">{multiSelection.size}</span>{" "}
@@ -1893,6 +1839,17 @@ export function PlanningView({
             className="ml-1 h-7 px-3 rounded-full bg-zinc-900 text-white text-[12px] font-medium hover:bg-zinc-800 transition-colors"
           >
             Appliquer un poste
+          </button>
+          {/* Poubelle : vide directement les cases sélectionnées (cette
+              semaine), sans passer par le sélecteur. Annulable via Ctrl+Z
+              (handleBulkClear pousse un snapshot d'undo). */}
+          <button
+            onClick={() => void handleBulkClear({ scope: "1" })}
+            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
+            aria-label={`Vider ${multiSelection.size} case${multiSelection.size > 1 ? "s" : ""} sélectionnée${multiSelection.size > 1 ? "s" : ""}`}
+            title="Vider les cases sélectionnées"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => setMultiSelection(new Set())}

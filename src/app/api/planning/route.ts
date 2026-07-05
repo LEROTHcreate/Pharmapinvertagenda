@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
-import { revalidateTag, unstable_cache } from "next/cache";
+import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
 import { bulkPlanningInput, weekQuery } from "@/validators/planning";
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import type { ScheduleEntryDTO } from "@/types";
 import { toIsoDate } from "@/lib/planning-utils";
-import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
+import {
+  DASHBOARD_CACHE_TAGS,
+  getCachedWeekEntries,
+} from "@/lib/dashboard-data";
 import { withErrorHandling } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
@@ -17,43 +20,8 @@ export const GET = withErrorHandling(getPlanning);
 export const POST = withErrorHandling(postPlanning);
 export const DELETE = withErrorHandling(deletePlanning);
 
-/** Lecture cached du planning d'une semaine. Invalidée sur POST/DELETE. */
-const getCachedPlanning = (pharmacyId: string, weekStart: string) =>
-  unstable_cache(
-    async () => {
-      const start = new Date(`${weekStart}T00:00:00Z`);
-      const end = new Date(start);
-      end.setUTCDate(end.getUTCDate() + 6);
-      return prisma.scheduleEntry.findMany({
-        where: { pharmacyId, date: { gte: start, lte: end } },
-        orderBy: [{ date: "asc" }, { timeSlot: "asc" }],
-        // Ne récupère que les champs du DTO (pas pharmacyId/previousTaskCode/
-        // createdAt/updatedAt inutiles) → payload + entrée de cache plus légers.
-        select: {
-          id: true,
-          employeeId: true,
-          date: true,
-          timeSlot: true,
-          type: true,
-          taskCode: true,
-          absenceCode: true,
-          notes: true,
-        },
-      });
-    },
-    ["planning-week", pharmacyId, weekStart],
-    {
-      // Double tag : invalidation fine (par semaine) ET globale
-      // (toutes les semaines de la pharmacie, ex. après apply-batch).
-      tags: [
-        DASHBOARD_CACHE_TAGS.planningWeek(pharmacyId, weekStart),
-        DASHBOARD_CACHE_TAGS.planningAll(pharmacyId),
-      ],
-      // Le planning change pendant les sessions admin → court TTL
-      // (10 sec) en complément de l'invalidation explicite par tag.
-      revalidate: 10,
-    }
-  )();
+// Lecture cachée du planning : `getCachedWeekEntries` (dans dashboard-data),
+// partagée avec la page /planning et invalidée sur POST/DELETE via les tags.
 
 /** GET /api/planning?weekStart=YYYY-MM-DD — entrées de la semaine */
 async function getPlanning(req: Request) {
@@ -66,7 +34,7 @@ async function getPlanning(req: Request) {
     return NextResponse.json({ error: "weekStart invalide" }, { status: 400 });
   }
 
-  const entries = await getCachedPlanning(
+  const entries = await getCachedWeekEntries(
     session.user.pharmacyId,
     parsed.data.weekStart
   );

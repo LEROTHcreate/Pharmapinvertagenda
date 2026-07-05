@@ -75,7 +75,11 @@ export function MobileTabBar({
       aria-label="Navigation principale"
       className={cn(
         "no-print md:hidden fixed bottom-0 left-0 right-0 z-40",
-        "bg-card/95 backdrop-blur-xl border-t border-border",
+        // PERF : fond opaque au lieu de backdrop-blur-xl. La barre est FIXE
+        // au-dessus du contenu qui défile → un backdrop-blur y recompose le
+        // flou à chaque frame de scroll (coûteux sur mobile/tablette). Le fond
+        // était déjà à 95 % d'opacité : le flou n'apportait quasi rien.
+        "bg-card border-t border-border",
         // Padding bottom = safe-area iOS (home bar). Sur Android et iPhones
         // sans notch ça vaut 0, donc pas de surcoût.
         "pb-[env(safe-area-inset-bottom,0px)]"

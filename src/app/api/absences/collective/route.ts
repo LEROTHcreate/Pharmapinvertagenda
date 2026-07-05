@@ -118,6 +118,8 @@ async function createCollectiveAbsence(req: Request) {
   );
 
   revalidateTag(DASHBOARD_CACHE_TAGS.absencesPending(session.user.pharmacyId));
+  // Conversion en masse de cellules planning → invalider le cache planning.
+  revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));
 
   return NextResponse.json(
     {
