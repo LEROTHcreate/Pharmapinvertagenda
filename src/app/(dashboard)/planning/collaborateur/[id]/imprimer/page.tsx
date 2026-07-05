@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { canEditPlanning } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import {
@@ -46,7 +47,7 @@ export default async function PrintCollaboratorPage({
 
   // Garde-fou : un EMPLOYEE ne peut imprimer que SA fiche (pas celle d'un collègue)
   if (
-    session.user.role !== "ADMIN" &&
+    !canEditPlanning(session.user.role) &&
     session.user.employeeId !== collaborator.id
   ) {
     redirect("/profil");

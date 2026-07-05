@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { computeStats, type StatsPeriod } from "@/lib/stats";
 import { StatsView } from "@/components/stats/StatsView";
@@ -15,7 +16,7 @@ export default async function StatsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/planning");
+  if (!isAdminLevel(session.user.role)) redirect("/planning");
 
   const requested = searchParams.period as StatsPeriod | undefined;
   const period: StatsPeriod = VALID_PERIODS.includes(requested ?? "semester" as StatsPeriod)

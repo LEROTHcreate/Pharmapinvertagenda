@@ -6,10 +6,11 @@ import { ChangePasswordForm } from "@/components/profil/ChangePasswordForm";
 import { AvatarPicker } from "@/components/profil/AvatarPicker";
 import { CalendarSyncCard } from "@/components/profil/CalendarSyncCard";
 import { TitulairePayModeCard } from "@/components/profil/TitulairePayModeCard";
+import { roleLabel, isAdminLevel } from "@/lib/permissions";
 import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
 import { computeStats } from "@/lib/stats";
 import { ABSENCE_LABELS, STATUS_LABELS } from "@/types";
-import { ArrowRight, Printer } from "lucide-react";
+import { ArrowRight, Printer, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -164,9 +165,7 @@ export default async function ProfilPage() {
           <div>
             <p className="text-muted-foreground text-[11.5px] mb-0.5">Rôle</p>
             <p className="font-medium text-foreground">
-              {session.user.role === "ADMIN"
-                ? "Administrateur"
-                : "Collaborateur"}
+              {roleLabel(session.user.role)}
             </p>
           </div>
           <div>
@@ -211,6 +210,28 @@ export default async function ProfilPage() {
           )}
         </div>
       </section>
+
+      {/* ─── Gestion des accès (admin) — raccourci vers Utilisateurs ── */}
+      {isAdminLevel(session.user.role) && (
+        <Link
+          href="/utilisateurs"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/40"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+            <ShieldCheck className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold text-foreground">
+              Rôles &amp; accès de l&apos;équipe
+            </p>
+            <p className="text-[12.5px] text-muted-foreground">
+              Attribuez Titulaire / Manageur / Collaborateur et gérez qui accède
+              à quoi.
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+        </Link>
+      )}
 
       {/* ─── Heures et solde (si profil métier) ────────────────────── */}
       {employee && (

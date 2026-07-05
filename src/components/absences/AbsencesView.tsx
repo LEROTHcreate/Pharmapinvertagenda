@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ABSENCE_LABELS } from "@/types";
 import type { AbsenceCode, AbsenceRequestStatus, UserRole } from "@prisma/client";
+import { isAdminLevel } from "@/lib/permissions";
 import { AbsenceRequestForm } from "@/components/absences/AbsenceRequestForm";
 import { CollectiveAbsenceDialog } from "@/components/absences/CollectiveAbsenceDialog";
 import { NotePromptDialog } from "@/components/ui/note-prompt-dialog";
@@ -54,7 +55,7 @@ export function AbsencesView({ currentUser, embedded = false }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = currentUser.role === "ADMIN";
+  const isAdmin = isAdminLevel(currentUser.role);
   const canSubmit = !!currentUser.employeeId;
 
   // ID de la demande dont on est en train de saisir le motif de refus

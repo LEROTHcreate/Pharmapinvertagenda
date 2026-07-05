@@ -22,6 +22,7 @@ import {
 import { compressImage, type CompressedImage } from "@/lib/compress-image";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
+import { isAdminLevel } from "@/lib/permissions";
 
 type PayrollNoteDTO = {
   id: string;
@@ -67,7 +68,7 @@ function formatDate(iso: string): string {
 }
 
 export function PayrollNotesView({ currentUser }: Props) {
-  const isAdmin = currentUser.role === "ADMIN";
+  const isAdmin = isAdminLevel(currentUser.role);
   const [notes, setNotes] = useState<PayrollNoteDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);

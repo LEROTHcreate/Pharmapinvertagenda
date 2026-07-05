@@ -19,7 +19,7 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import type { UserRole } from "@prisma/client";
-import { roleLabel as roleLabelFr } from "@/lib/permissions";
+import { roleLabel as roleLabelFr, isAdminLevel } from "@/lib/permissions";
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
@@ -363,7 +363,7 @@ export async function sendApprovalEmail(params: {
       p(
         `Ton compte ${roleLabel} pour la ${params.pharmacyName} vient d'être validé. Tu peux maintenant te connecter.`
       ),
-      params.role === "ADMIN"
+      isAdminLevel(params.role)
         ? p(
             "En tant qu'admin, tu peux gérer le planning, les gabarits S1/S2, les collaborateurs et valider les demandes d'inscription."
           )

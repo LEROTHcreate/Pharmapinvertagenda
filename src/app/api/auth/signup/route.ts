@@ -146,7 +146,7 @@ async function processSignup(req: Request): Promise<NextResponse> {
     const adminCount = await prisma.user.count({
       where: {
         pharmacyId: pharmacy.id,
-        role: "ADMIN",
+        role: { in: ["ADMIN", "CREATEUR"] },
         isActive: true,
         status: "APPROVED",
       },
@@ -169,7 +169,7 @@ async function processSignup(req: Request): Promise<NextResponse> {
           hashedPassword,
           authUserId,
           pharmacyId: pharmacy.id,
-          role: "EMPLOYEE",
+          role: "COLLABORATEUR",
           status: "PENDING",
           isActive: false,
         },
@@ -214,8 +214,8 @@ async function processSignup(req: Request): Promise<NextResponse> {
   }
 
   // ─── Mode "Créer une nouvelle officine" ──────────────────────────
-  // Le créateur devient automatiquement ADMIN APPROVED actif (titulaire).
-  // Il pourra ensuite valider les futures demandes des collaborateurs.
+  // Le créateur devient automatiquement CREATEUR APPROVED actif (rôle le plus
+  // élevé, indéracinable, transférable). Il pourra valider les futures demandes.
   // On vérifie que le SIRET n'est pas déjà pris.
   const existingPharmacy = await prisma.pharmacy.findUnique({
     where: { siret: data.pharmacySiret },
@@ -252,7 +252,7 @@ async function processSignup(req: Request): Promise<NextResponse> {
           hashedPassword,
           authUserId,
           pharmacyId: pharmacy.id,
-          role: "ADMIN",
+          role: "CREATEUR",
           status: "APPROVED",
           isActive: true,
           reviewedAt: new Date(),

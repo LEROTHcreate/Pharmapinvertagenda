@@ -10,6 +10,7 @@ import type {
   MessageDTO,
 } from "@/types/messaging";
 import type { UserRole } from "@prisma/client";
+import { isAdminLevel } from "@/lib/permissions";
 import { ConversationList } from "@/components/messages/ConversationList";
 import { ConversationPanel } from "@/components/messages/ConversationPanel";
 import { NewConversationDialog } from "@/components/messages/NewConversationDialog";
@@ -37,7 +38,7 @@ export function MessagesView({ currentUser, contacts }: Props) {
   const [shadowMode, setShadowMode] = useState(false);
   const [activeShadow, setActiveShadow] = useState(false);
 
-  const isAdmin = currentUser.role === "ADMIN";
+  const isAdmin = isAdminLevel(currentUser.role);
 
   // Mémorise le `createdAt` du dernier message connu par conv pour les polls
   // incrémentaux (?since=…). Évite de re-télécharger toute la conv toutes les 5s.

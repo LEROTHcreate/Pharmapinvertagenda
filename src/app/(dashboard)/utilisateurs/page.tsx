@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   UsersAdmin,
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function UtilisateursPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/planning");
+  if (!isAdminLevel(session.user.role)) redirect("/planning");
 
   const [users, employees] = await Promise.all([
     prisma.user.findMany({
@@ -97,7 +98,11 @@ export default async function UtilisateursPage() {
         </p>
       </header>
 
-      <UsersAdmin users={rows} employees={employeeOptions} />
+      <UsersAdmin
+        users={rows}
+        employees={employeeOptions}
+        currentUserRole={session.user.role}
+      />
     </div>
   );
 }

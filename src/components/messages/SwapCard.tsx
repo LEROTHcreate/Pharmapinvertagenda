@@ -21,6 +21,7 @@ import type {
   SwapStatusDTO,
 } from "@/types/messaging";
 import type { UserRole } from "@prisma/client";
+import { isAdminLevel } from "@/lib/permissions";
 
 type Props = {
   message: MessageDTO;
@@ -217,7 +218,7 @@ export function SwapCard({ message, currentUser, otherMembers, onUpdated }: Prop
           </p>
         )}
 
-        {currentUser.role === "ADMIN" && swap.status === "PENDING_ADMIN" && (
+        {isAdminLevel(currentUser.role) && swap.status === "PENDING_ADMIN" && (
           <div className="mt-3 rounded-lg bg-card border border-amber-200 p-2.5">
             <p className="text-[11.5px] font-semibold text-amber-800 mb-2">
               Validation admin requise

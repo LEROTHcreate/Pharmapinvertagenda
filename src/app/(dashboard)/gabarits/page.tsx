@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canApplyTemplates } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { GabaritsList, type GabaritRow } from "@/components/templates/GabaritsList";
 
@@ -9,7 +10,7 @@ export const metadata = { title: "Gabarits · PharmaPlanning" };
 export default async function GabaritsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/planning");
+  if (!canApplyTemplates(session.user.role)) redirect("/planning");
 
   const templates = await prisma.weekTemplate.findMany({
     where: { pharmacyId: session.user.pharmacyId },

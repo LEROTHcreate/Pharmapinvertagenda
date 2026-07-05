@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canApplyTemplates } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { TemplateView } from "@/components/templates/TemplateView";
 import type { EmployeeDTO } from "@/types";
@@ -13,7 +14,7 @@ export default async function NewTemplatePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/planning");
+  if (!canApplyTemplates(session.user.role)) redirect("/planning");
 
   const weekType = params.weekType.toUpperCase();
   if (weekType !== "S1" && weekType !== "S2") redirect("/gabarits");

@@ -22,6 +22,7 @@ import { MyDayView } from "@/components/planning/MyDayView";
 import { MobileTeamGantt } from "@/components/planning/MobileTeamGantt";
 import { MobileWeekView } from "@/components/planning/MobileWeekView";
 import { isTaskAllowed } from "@/lib/role-task-rules";
+import { canEditPlanning } from "@/lib/permissions";
 import { TASK_LABELS, STATUS_LABELS } from "@/types";
 import type { ApplyScope } from "@/components/planning/ApplyScopeSelector";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
@@ -668,7 +669,7 @@ export function PlanningView({
   // Stable pour ne pas casser le memo de PlanningGrid
   const handleCellClick = useCallback(
     (employeeId: string, date: string, timeSlot: string) => {
-      if (role !== "ADMIN") return;
+      if (!canEditPlanning(role)) return;
       setSelection({ employeeId, date, timeSlot });
     },
     [role]
@@ -1327,7 +1328,8 @@ export function PlanningView({
     [multiSelection]
   );
 
-  const isAdmin = role === "ADMIN";
+  // « isAdmin » ici = peut ÉDITER le planning (titulaire, créateur OU manageur).
+  const isAdmin = canEditPlanning(role);
 
   // Mode "lecture" admin : protège des modifs accidentelles sur tactile.
   // L'admin a le droit d'éditer (canEdit conceptuellement vrai) MAIS s'il

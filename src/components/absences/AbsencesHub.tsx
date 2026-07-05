@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CalendarCheck, CalendarOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
+import { isAdminLevel } from "@/lib/permissions";
 import { AbsencesView } from "@/components/absences/AbsencesView";
 import { AvailabilityWishesView } from "@/components/disponibilites/AvailabilityWishesView";
 
@@ -21,7 +22,7 @@ type Props = {
  */
 export function AbsencesHub({ currentUser, initialTab = "absences" }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
-  const isAdmin = currentUser.role === "ADMIN";
+  const isAdmin = isAdminLevel(currentUser.role);
 
   const tabs: { key: Tab; label: string; icon: typeof CalendarOff }[] = [
     { key: "absences", label: "Absences", icon: CalendarOff },

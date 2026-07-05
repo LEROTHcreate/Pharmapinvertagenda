@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canEditPlanning } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { startOfWeek, toIsoDate } from "@/lib/planning-utils";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
@@ -154,7 +155,7 @@ export default async function PlanningPage({
       {employeesDTO.length === 0 ? (
         // Officine sans aucun collaborateur (juste après création) → onboarding
         // guidé plutôt qu'une grille vide déroutante.
-        <OnboardingEmptyState isAdmin={session.user.role === "ADMIN"} />
+        <OnboardingEmptyState isAdmin={canEditPlanning(session.user.role)} />
       ) : (
         <PlanningView
           initialWeekStart={weekStartIso}
