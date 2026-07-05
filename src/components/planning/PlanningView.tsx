@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3, Trash2 } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
@@ -1839,6 +1839,17 @@ export function PlanningView({
             className="ml-1 h-7 px-3 rounded-full bg-zinc-900 text-white text-[12px] font-medium hover:bg-zinc-800 transition-colors"
           >
             Appliquer un poste
+          </button>
+          {/* Poubelle : vide directement les cases sélectionnées (cette
+              semaine), sans passer par le sélecteur. Annulable via Ctrl+Z
+              (handleBulkClear pousse un snapshot d'undo). */}
+          <button
+            onClick={() => void handleBulkClear({ scope: "1" })}
+            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
+            aria-label={`Vider ${multiSelection.size} case${multiSelection.size > 1 ? "s" : ""} sélectionnée${multiSelection.size > 1 ? "s" : ""}`}
+            title="Vider les cases sélectionnées"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => setMultiSelection(new Set())}
