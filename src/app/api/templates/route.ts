@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
+import { canApplyTemplates } from "@/lib/permissions";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { prisma, prismaDirect } from "@/lib/prisma";
@@ -46,7 +47,7 @@ const getCachedTemplates = (pharmacyId: string) =>
 async function GET__impl() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
+  if (!canApplyTemplates(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -62,7 +63,7 @@ async function GET__impl() {
 async function POST__impl(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
+  if (!canApplyTemplates(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

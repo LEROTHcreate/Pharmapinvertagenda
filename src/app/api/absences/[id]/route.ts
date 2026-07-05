@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { reviewAbsenceInput } from "@/validators/absence";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
@@ -31,7 +32,7 @@ async function reviewAbsence(
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -225,7 +226,7 @@ async function cancelAbsence(
     return NextResponse.json({ error: "Demande introuvable" }, { status: 404 });
   }
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
   const isOwner = request.employeeId === session.user.employeeId;
 
   if (request.status === "PENDING") {

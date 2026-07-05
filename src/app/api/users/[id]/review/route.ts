@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
+import { isAdminLevel, assignableRoles, normalizeRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { reviewUserSchema } from "@/validators/auth";
@@ -22,7 +23,7 @@ async function POST__impl(
   if (!session?.user) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
@@ -66,6 +67,13 @@ async function POST__impl(
       );
     }
 
+    // Le rôle attribué doit faire partie de ceux que l'acteur a le droit de
+    // donner (jamais CREATEUR, jamais au-dessus de son propre rang).
+    const targetRole = normalizeRole(role);
+    if (!assignableRoles(session.user.role).includes(targetRole)) {
+      return NextResponse.json({ error: "ROLE_FORBIDDEN" }, { status: 403 });
+    }
+
     // Validation du lien collaborateur optionnel
     if (employeeId) {
       const employee = await prisma.employee.findFirst({
@@ -84,7 +92,7 @@ async function POST__impl(
       where: { id: target.id },
       data: {
         status: "APPROVED",
-        role,
+        role: targetRole,
         isActive: true,
         reviewedAt: new Date(),
         reviewedById: session.user.id,
@@ -99,7 +107,7 @@ async function POST__impl(
     await sendApprovalEmail({
       to: target.email,
       name: target.name,
-      role,
+      role: targetRole,
       pharmacyName: target.pharmacy.name,
     });
 

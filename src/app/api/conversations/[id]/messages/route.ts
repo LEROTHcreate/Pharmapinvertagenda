@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { sendMessageInput } from "@/validators/messaging";
 import { uploadImageIfDataUrl, signedAttachmentUrl } from "@/lib/storage";
@@ -42,7 +43,7 @@ async function checkAccess(conversationId: string, userId: string) {
   // Shadow access admin : seulement pour les admins de la pharmacie de la conv
   const isAdminShadow =
     !isMember &&
-    session.user.role === "ADMIN" &&
+    isAdminLevel(session.user.role) &&
     conv.pharmacyId === session.user.pharmacyId;
 
   if (!isMember && !isAdminShadow) {

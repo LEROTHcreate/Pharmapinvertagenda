@@ -21,8 +21,13 @@ datasource db {
 // ─── ENUMS ───────────────────────────────────────────────────────
 
 enum UserRole {
-  ADMIN    // Dirigeant / Titulaire — accès complet (peut gérer le planning)
-  EMPLOYEE // Personnel — lecture + demandes (ne peut pas gérer le planning)
+  // Rôles de PERMISSION (distincts du statut métier EmployeeStatus).
+  // Du plus puissant au moins puissant. Cf. src/lib/permissions.ts.
+  CREATEUR     // Créateur de l'officine — tous pouvoirs, indéracinable, transférable
+  ADMIN        // Titulaire — tous pouvoirs sauf gérer le créateur
+  MANAGEUR     // Édite le planning + gabarits + équipe (pas absences/paie/réglages)
+  COLLABORATEUR // Personnel — lecture + ses propres demandes
+  EMPLOYEE     // (legacy) — alias historique de COLLABORATEUR, normalisé en code
 }
 
 enum UserStatus {

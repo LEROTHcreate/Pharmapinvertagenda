@@ -78,6 +78,17 @@ export const DEFAULT_PAYROLL_RATES = {
    * lieu de 42 %. 0 = désactive la réduction.
    */
   reductionGeneraleMaxCoef: 0.3194,
+  /** Surcoût de cotisations SALARIALES pour un cadre (prévoyance, APEC,
+   *  retraite complémentaire T2…) — pharmaciens/titulaires. En points de brut. */
+  cadreEmployeeSurcharge: 0.03,
+  /** Surcoût de cotisations PATRONALES pour un cadre (prévoyance 1,5 %, APEC…). */
+  cadreEmployerSurcharge: 0.015,
+  /** Réduction de cotisations SALARIALES sur les heures sup (loi TEPA) : ~11,31 %
+   *  de la rémunération des HS → le salarié touche davantage de net. */
+  hsEmployeeReductionRate: 0.1131,
+  /** Déduction forfaitaire PATRONALE par heure sup (entreprises < 20 salariés :
+   *  1,50 € ; 20-249 : 0,50 €). Officines : 1,50 € par défaut. */
+  hsEmployerDeductionPerHour: 1.5,
 } as const;
 
 export type PayrollRates = {
@@ -89,6 +100,10 @@ export type PayrollRates = {
   sickEmployerMaintenance: number;
   sickMaintenanceMinSeniorityMonths: number;
   reductionGeneraleMaxCoef: number;
+  cadreEmployeeSurcharge: number;
+  cadreEmployerSurcharge: number;
+  hsEmployeeReductionRate: number;
+  hsEmployerDeductionPerHour: number;
 };
 
 export type EmployeeForPayroll = {
@@ -172,8 +187,14 @@ export type PayrollLine = {
   /** Brut payé par l'employeur (heures travaillées + congés + formation +
    *  maintien maladie) — sans les IJSS CPAM */
   grossEmployer: number;
-  /** Cotisations salariales (déductions du brut) */
+  /** Statut cadre (pharmacien/titulaire) → cotisations un peu plus élevées. */
+  isCadre: boolean;
+  /** Cotisations salariales (déductions du brut, après réduction HS) */
   socialContributionsEmployee: number;
+  /** Réduction de cotisations salariales sur les HS (loi TEPA) — net en plus. */
+  hsEmployeeReduction: number;
+  /** Déduction forfaitaire patronale sur les HS — coût employeur en moins. */
+  hsEmployerDeduction: number;
   /** Net approximatif (brut - cotisations salariales) */
   netEstimated: number;
   /** Cotisations patronales NETTES (après réduction générale), à charge de
@@ -390,12 +411,33 @@ export function computePayrollLine(
       grossSickEmployer;
   }
 
-  const socialContributionsEmployee =
-    grossEmployer * rates.socialContributionsEmployee;
+  // ─── Statut cadre (pharmacien/titulaire) → taux un peu plus élevés ──
+  const isCadre =
+    employee.status === "PHARMACIEN" || employee.status === "TITULAIRE";
+  const employeeRate =
+    rates.socialContributionsEmployee +
+    (isCadre ? rates.cadreEmployeeSurcharge : 0);
+  const employerRate =
+    rates.socialContributionsEmployer +
+    (isCadre ? rates.cadreEmployerSurcharge : 0);
+
+  // ─── Exonérations heures sup (loi TEPA) ─────────────────────────────
+  // Salarié : réduction de cotisations salariales sur la rému des HS.
+  // Employeur : déduction forfaitaire par heure sup (< 20 salariés : 1,50 €).
+  const grossOvertime = grossOT25 + grossOT50;
+  const hsEmployeeReduction = grossOvertime * rates.hsEmployeeReductionRate;
+  const hsEmployerDeduction =
+    (overtimeHours25 + overtimeHours50) * rates.hsEmployerDeductionPerHour;
+
+  const socialContributionsEmployee = Math.max(
+    0,
+    grossEmployer * employeeRate - hsEmployeeReduction
+  );
   // Net calculé à partir des montants ARRONDIS (brut, cotisations) pour que la
   // colonne réconcilie exactement : net affiché = brut affiché − cotis affichées.
   const netEstimated =
     round2(grossEmployer) - round2(socialContributionsEmployee);
+
   // ─── Réduction générale des cotisations patronales (ex-« Fillon ») ──
   // Coefficient dégressif : maximal au SMIC, nul à partir de 1,6 SMIC. On
   // proratise le SMIC de référence aux heures contractuelles (temps partiel).
@@ -410,13 +452,12 @@ export function computePayrollLine(
       Math.max(0, (T / 0.6) * ((1.6 * smicRef) / grossEmployer - 1))
     );
     // La réduction ne peut excéder les cotisations patronales elles-mêmes.
-    reductionGenerale = Math.min(
-      coef * grossEmployer,
-      grossEmployer * rates.socialContributionsEmployer
-    );
+    reductionGenerale = Math.min(coef * grossEmployer, grossEmployer * employerRate);
   }
-  const socialContributionsEmployer =
-    grossEmployer * rates.socialContributionsEmployer - reductionGenerale;
+  const socialContributionsEmployer = Math.max(
+    0,
+    grossEmployer * employerRate - reductionGenerale - hsEmployerDeduction
+  );
   const totalEmployerCost = grossEmployer + socialContributionsEmployer;
 
   return {
@@ -446,7 +487,10 @@ export function computePayrollLine(
     sickHoursCpam: sickCpamSlots * SLOT_HOURS,
     unpaidAbsenceHours: unpaidAbsenceSlots * SLOT_HOURS,
     grossEmployer: round2(grossEmployer),
+    isCadre,
     socialContributionsEmployee: round2(socialContributionsEmployee),
+    hsEmployeeReduction: round2(hsEmployeeReduction),
+    hsEmployerDeduction: round2(hsEmployerDeduction),
     netEstimated: round2(netEstimated),
     socialContributionsEmployer: round2(socialContributionsEmployer),
     reductionGenerale: round2(reductionGenerale),

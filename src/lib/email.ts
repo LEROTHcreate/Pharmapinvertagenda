@@ -18,6 +18,8 @@
  */
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
+import type { UserRole } from "@prisma/client";
+import { roleLabel as roleLabelFr } from "@/lib/permissions";
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
@@ -350,10 +352,10 @@ export async function sendSignupConfirmation(params: {
 export async function sendApprovalEmail(params: {
   to: string;
   name: string;
-  role: "ADMIN" | "EMPLOYEE";
+  role: UserRole;
   pharmacyName: string;
 }): Promise<void> {
-  const roleLabel = params.role === "ADMIN" ? "administrateur" : "collaborateur";
+  const roleLabel = roleLabelFr(params.role).toLowerCase();
   const html = layout({
     title: "Ton compte est activé",
     bodyHtml: [

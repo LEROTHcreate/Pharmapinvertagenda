@@ -87,9 +87,9 @@ export function GardesView(data: GardesData) {
   const noPharmacists = pharmacists.length === 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 pb-16">
-      {/* En-tête */}
-      <header className="flex items-start gap-3">
+    <div className="p-3 md:p-4 lg:p-6 pb-16">
+      {/* En-tête (pleine largeur) */}
+      <header className="mb-5 flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
           <ShieldCheck className="h-5 w-5" />
         </span>
@@ -98,24 +98,27 @@ export function GardesView(data: GardesData) {
             Pharmacie de garde
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Rotation des gardes, équité et indemnités des pharmaciens.
+            Rotation des gardes, équité et indemnités — pharmaciens et titulaires.
           </p>
         </div>
       </header>
 
       {noPharmacists ? (
-        <Section title="Aucun pharmacien" icon={<ShieldCheck className="h-4 w-4" />}>
+        <Section
+          title="Aucun pharmacien ni titulaire"
+          icon={<ShieldCheck className="h-4 w-4" />}
+        >
           <p className="text-[13px] text-muted-foreground">
-            Ajoutez des collaborateurs de statut « Pharmacien » pour organiser
-            les gardes.
+            Ajoutez des collaborateurs de statut « Pharmacien » ou « Titulaire »
+            pour organiser les gardes.
           </p>
         </Section>
       ) : (
         <>
-          {/* Suggestion prochaine garde */}
-          <div className="rounded-2xl border border-indigo-200/70 bg-indigo-50/60 px-4 py-3 dark:border-indigo-900/50 dark:bg-indigo-950/25">
+          {/* Suggestion prochaine garde (pleine largeur, en tête d'affiche) */}
+          <div className="mb-5 rounded-2xl border border-indigo-200/70 bg-indigo-50/60 px-4 py-3 dark:border-indigo-900/50 dark:bg-indigo-950/25">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              <Sparkles className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
               <p className="text-[13px] text-indigo-900 dark:text-indigo-200">
                 {suggestion.length > 0 ? (
                   <>
@@ -132,8 +135,16 @@ export function GardesView(data: GardesData) {
             </div>
           </div>
 
-          {isAdmin && <AddGardeForm pharmacists={pharmacists} onDone={() => router.refresh()} />}
+          {isAdmin && (
+            <AddGardeForm
+              pharmacists={pharmacists}
+              onDone={() => router.refresh()}
+            />
+          )}
 
+          {/* Grille masonry : les 3 panneaux d'info se répartissent sur la
+              largeur (1 / 2 / 3 colonnes selon l'écran), sans être coupés. */}
+          <div className="columns-1 gap-5 md:columns-2 xl:columns-3">
           {/* Gardes à venir */}
           <Section
             title="Gardes à venir"
@@ -180,7 +191,7 @@ export function GardesView(data: GardesData) {
             icon={<Scale className="h-4 w-4" />}
           >
             <p className="mb-2 text-[12px] text-muted-foreground">
-              Moyenne {equity.average.toFixed(1)} garde·s / pharmacien · écart
+              Moyenne {equity.average.toFixed(1)} garde·s / personne · écart
               max {equity.spread}
               {equity.leastLoaded.length > 0 && (
                 <> · à rattraper : {equity.leastLoaded.join(", ")}</>
@@ -247,6 +258,7 @@ export function GardesView(data: GardesData) {
               </p>
             )}
           </Section>
+          </div>
         </>
       )}
     </div>
@@ -470,7 +482,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]">
+    <section className="mb-5 break-inside-avoid rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]">
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
           {icon}

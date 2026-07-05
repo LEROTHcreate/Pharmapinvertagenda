@@ -21,6 +21,7 @@ import {
 } from "@/components/shared/ImageAttachmentInput";
 import { compressImage, type CompressedImage } from "@/lib/compress-image";
 import { cn } from "@/lib/utils";
+import type { UserRole } from "@prisma/client";
 
 type PayrollNoteDTO = {
   id: string;
@@ -45,7 +46,7 @@ type PayrollNoteDTO = {
 type Props = {
   currentUser: {
     id: string;
-    role: "ADMIN" | "EMPLOYEE";
+    role: UserRole;
   };
 };
 

@@ -287,6 +287,14 @@ export function isTaskAllowed(status: EmployeeStatus, task: TaskCode): boolean {
 - **Responsive** : Mobile-first. La grille planning doit scroller horizontalement sur mobile avec la colonne heure sticky.
 - **Accessibilité** : Labels ARIA sur les cellules du planning, navigation clavier possible.
 
+### Contrôle d'accès (RBAC) — `src/lib/permissions.ts`
+Source unique des droits : les helpers `can…(role)` (4 rôles : Collaborateur < Manageur < Titulaire (ADMIN) < Créateur). **Toujours** gater l'écriture côté serveur (jamais uniquement l'UI).
+
+**Règle page Paramètres (`/parametres`) — décision produit validée :**
+- **Visible par TOUT LE MONDE** en lecture (retirer `adminOnly` de l'entrée nav ; ne PAS rediriger les non-titulaires).
+- **Modifiable UNIQUEMENT par les titulaires+** (`canEditSettings` = Titulaire + Créateur ; Manageur et Collaborateur = lecture seule). Les forms reçoivent une prop `canEdit` → inputs désactivés + boutons masqués quand false.
+- **Bloc « Rémunération » (région + taux de cotisations) MASQUÉ** aux non-autorisés (config paie sensible) : gardé derrière `canSeePayrollSettings` / `canEditPayroll` (titulaire autorisé au module paie). Ne jamais l'afficher, même en lecture, à un collaborateur.
+
 ### Style et UI
 - Palette principale : tons violets/indigo (cohérent avec le prototype).
 - Les cellules de tâches ont un code couleur fixe (voir constante `TASK_COLORS` dans `types/index.ts`).

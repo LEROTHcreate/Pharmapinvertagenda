@@ -7,6 +7,7 @@ import { ScheduleType, type WeekTemplate, type WeekTemplateEntry } from "@prisma
 import { isTaskAllowed } from "@/lib/role-task-rules";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { withErrorHandling } from "@/lib/api-handler";
+import { canApplyTemplates } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
@@ -49,7 +50,7 @@ async function applyBatch(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!canApplyTemplates(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

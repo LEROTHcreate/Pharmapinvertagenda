@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
+import { canApplyTemplates } from "@/lib/permissions";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/auth";
@@ -36,7 +37,7 @@ async function POST__impl(
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!canApplyTemplates(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

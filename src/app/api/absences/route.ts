@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { createAbsenceInput } from "@/validators/absence";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
@@ -92,7 +93,7 @@ async function createAbsence(req: Request) {
     );
   }
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
   const wantsAdminMode =
     !!parsed.data.targetEmployeeId || parsed.data.autoApprove === true;
   if (wantsAdminMode && !isAdmin) {

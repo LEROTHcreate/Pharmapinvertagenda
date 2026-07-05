@@ -36,7 +36,13 @@ export default async function GardesPage() {
 
   const [pharmacists, rawGardes, pharmacy] = await Promise.all([
     prisma.employee.findMany({
-      where: { pharmacyId, isActive: true, status: "PHARMACIEN" },
+      // Pharmaciens ET titulaires : dans beaucoup d'officines, ce sont les
+      // titulaires qui assurent tout ou partie des gardes.
+      where: {
+        pharmacyId,
+        isActive: true,
+        status: { in: ["PHARMACIEN", "TITULAIRE"] },
+      },
       orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
       select: { id: true, firstName: true, lastName: true, displayColor: true },
     }),

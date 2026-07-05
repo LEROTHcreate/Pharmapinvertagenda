@@ -17,6 +17,7 @@ import { seasonalTips } from "@/lib/seasonal-staffing";
 import { analyzeCoverage } from "@/lib/coverage-analysis";
 import { analyzeCcnCompliance } from "@/lib/ccn-compliance";
 import { getHolidaysFR } from "@/lib/holidays-fr";
+import { getPharmacyNews, getMedicineAlerts } from "@/lib/pharmacy-news";
 import { TIME_SLOTS, ABSENCE_LABELS } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import {
@@ -85,6 +86,11 @@ export default async function InfosPage() {
   const todayStart = new Date(`${todayIso}T00:00:00.000Z`);
   const horizon = new Date(todayStart);
   horizon.setUTCDate(horizon.getUTCDate() + 14);
+
+  // Actu pharmacie (flux externes, cachés 1 h) — lancés en parallèle des
+  // lectures BDD, awaited plus bas. Si un flux échoue → [] (section masquée).
+  const newsPromise = getPharmacyNews();
+  const alertsPromise = getMedicineAlerts();
 
   // Données de base (parallélisées). Les compteurs de validation ne concernent
   // que les admins → on évite les requêtes inutiles pour un collaborateur.
@@ -310,6 +316,8 @@ export default async function InfosPage() {
     month: "long",
   })}`;
 
+  const [news, alerts] = await Promise.all([newsPromise, alertsPromise]);
+
   return (
     <InfosView
       isAdmin={isAdmin}
@@ -324,6 +332,8 @@ export default async function InfosPage() {
       upcomingGardes={upcomingGardes}
       anniversaries={anniversaries}
       overtime={overtime}
+      news={news}
+      alerts={alerts}
     />
   );
 }

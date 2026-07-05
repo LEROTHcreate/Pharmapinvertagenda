@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
 import { z } from "zod";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ async function GET__impl(req: Request) {
   // l'éditeur de cellule du planning pour avertir l'admin s'il planifie
   // quelqu'un ayant déclaré une indisponibilité ce jour-là.
   if (scope === "cell") {
-    if (session.user.role !== "ADMIN") {
+    if (!isAdminLevel(session.user.role)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     const employeeId = sp.get("employeeId");
@@ -56,7 +57,7 @@ async function GET__impl(req: Request) {
   }
 
   if (scope === "all") {
-    if (session.user.role !== "ADMIN") {
+    if (!isAdminLevel(session.user.role)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     const wishes = await prisma.availabilityWish.findMany({

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { reviewPayrollNoteInput } from "@/validators/payroll-note";
 
@@ -19,7 +20,7 @@ async function PATCH__impl(
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (!isAdminLevel(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -94,7 +95,7 @@ async function DELETE__impl(
     return NextResponse.json({ error: "Note introuvable" }, { status: 404 });
   }
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
   const isOwner = note.authorId === session.user.id;
   const ownerCanDelete = isOwner && note.status === "PENDING";
   if (!isAdmin && !ownerCanDelete) {

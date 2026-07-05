@@ -135,6 +135,39 @@ describe("computePayrollLine — heures sup à la QUINZAINE (BIWEEKLY)", () => {
   });
 });
 
+describe("computePayrollLine — cadre & exonérations heures sup", () => {
+  it("un pharmacien (cadre) cotise plus qu'un préparateur au même brut", () => {
+    const work = taskHours(100); // 25h/sem → pas d'HS, même brut
+    const prep = computePayrollLine(
+      emp({ status: "PREPARATEUR", payMode: "HOURLY", hourlyGrossRate: 20, weeklyHours: 35 }),
+      work,
+      MONTH
+    );
+    const pharm = computePayrollLine(
+      emp({ status: "PHARMACIEN", payMode: "HOURLY", hourlyGrossRate: 20, weeklyHours: 35 }),
+      work,
+      MONTH
+    );
+    expect(pharm.isCadre).toBe(true);
+    expect(prep.isCadre).toBe(false);
+    expect(pharm.socialContributionsEmployee).toBeGreaterThan(
+      prep.socialContributionsEmployee
+    );
+  });
+
+  it("les HS ouvrent une déduction patronale (1,50 €/h) + une réduction salariale", () => {
+    const line = computePayrollLine(
+      emp({ payMode: "HOURLY", hourlyGrossRate: 20, weeklyHours: 35 }),
+      tasksOn([{ date: "2026-06-01", hours: 46 }]), // 11h sup
+      MONTH
+    );
+    const totalHS = line.overtimeHours25 + line.overtimeHours50;
+    expect(totalHS).toBeGreaterThan(0);
+    expect(line.hsEmployerDeduction).toBeCloseTo(totalHS * 1.5, 5);
+    expect(line.hsEmployeeReduction).toBeGreaterThan(0);
+  });
+});
+
 describe("computePayrollLine — réduction générale (charges selon salaire)", () => {
   it("bas salaire (proche SMIC) : charges patronales réduites (< 42 %)", () => {
     const line = computePayrollLine(

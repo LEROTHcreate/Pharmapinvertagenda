@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import type { AppSession } from "@/types/session";
 import { withErrorHandling } from "@/lib/api-handler";
+import { isAdminLevel, type RoleInput } from "@/lib/permissions";
 
 /**
  * Helpers pour les routes API : factorisent le pattern répété
@@ -53,16 +54,31 @@ export function withAuth<P = unknown>(handler: Handler<P>) {
 }
 
 /**
- * Wrap un handler en exigeant une session ADMIN.
+ * Wrap un handler en exigeant une session de niveau ADMIN (titulaire OU
+ * créateur). Le MANAGEUR est refusé — utiliser `withRoleAuth(capacité)` pour
+ * les routes qu'un manageur doit pouvoir appeler (planning, gabarits, équipe).
  */
 export function withAdminAuth<P = unknown>(handler: Handler<P>) {
+  return withRoleAuth(isAdminLevel, handler);
+}
+
+/**
+ * Wrap un handler en exigeant que le rôle de session satisfasse `check`
+ * (une capacité de `src/lib/permissions.ts`, ex. `canEditPlanning`).
+ *
+ *   export const POST = withRoleAuth(canEditPlanning, async (req, { session }) => { … });
+ */
+export function withRoleAuth<P = unknown>(
+  check: (role: RoleInput) => boolean,
+  handler: Handler<P>
+) {
   return withErrorHandling(
     async (req: Request, ctx: { params: P }): Promise<NextResponse | Response> => {
       const session = await auth();
       if (!session?.user) {
         return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
       }
-      if (session.user.role !== "ADMIN") {
+      if (!check(session.user.role)) {
         return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
       }
       return handler(req, {
@@ -73,7 +89,10 @@ export function withAdminAuth<P = unknown>(handler: Handler<P>) {
   );
 }
 
-/** Helper de lecture pour les checks ad-hoc dans le code applicatif. */
+/**
+ * Helper de lecture pour les checks ad-hoc : niveau ADMIN (titulaire OU
+ * créateur). Normalise le rôle brut (dont l'alias legacy EMPLOYEE).
+ */
 export function isAdmin(session: { user?: { role?: string } } | null | undefined) {
-  return session?.user?.role === "ADMIN";
+  return isAdminLevel(session?.user?.role);
 }

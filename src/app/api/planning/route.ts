@@ -11,6 +11,7 @@ import {
   getCachedWeekEntries,
 } from "@/lib/dashboard-data";
 import { withErrorHandling } from "@/lib/api-handler";
+import { canEditPlanning } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,7 @@ async function getPlanning(req: Request) {
 async function postPlanning(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
+  if (!canEditPlanning(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -215,7 +216,7 @@ async function postPlanning(req: Request) {
 async function deletePlanning(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
+  if (!canEditPlanning(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

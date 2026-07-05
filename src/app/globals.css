@@ -594,6 +594,11 @@
   .success-check-path { stroke-dashoffset: 0; }
 }
 
+/* Masqué à l'écran, révélé uniquement à l'impression (cf. @media print). */
+.print-only {
+  display: none;
+}
+
 /* ─── Impression / PDF ─────────────────────────────────────────── */
 @media print {
   @page {
@@ -608,6 +613,12 @@
   nav,
   .no-print {
     display: none !important;
+  }
+
+  /* Éléments réservés à l'impression (ex. titre de synthèse paie, masqué à
+     l'écran car l'en-tête interactif est caché en print). */
+  .print-only {
+    display: block !important;
   }
 
   /* Anti page blanche : sans hauteur explicite, le navigateur ne réserve

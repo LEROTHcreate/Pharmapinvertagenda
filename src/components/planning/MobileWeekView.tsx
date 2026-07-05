@@ -375,22 +375,21 @@ export function MobileWeekView({
                     );
                   })}
 
-                  {/* Total semaine + delta vs contrat */}
+                  {/* Heures faites cette semaine — un seul chiffre coloré :
+                      noir = pile le contrat · rouge = au-dessus · vert = en dessous. */}
                   <td className="px-1 py-1.5 text-center">
-                    <div className="font-mono text-[12px] font-semibold tabular-nums text-foreground leading-none">
+                    <div
+                      className={cn(
+                        "font-mono text-[12px] font-semibold tabular-nums leading-none",
+                        Math.abs(delta) < 0.5
+                          ? "text-foreground"
+                          : delta > 0
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                      )}
+                    >
                       {weekly % 1 === 0 ? weekly : weekly.toFixed(1)}
                     </div>
-                    {Math.abs(delta) >= 0.5 && (
-                      <div
-                        className={cn(
-                          "mt-0.5 text-[10px] font-medium leading-none tabular-nums",
-                          delta > 0 ? "text-rose-600" : "text-amber-600"
-                        )}
-                      >
-                        {delta > 0 ? "+" : ""}
-                        {delta % 1 === 0 ? delta : delta.toFixed(1)}
-                      </div>
-                    )}
                   </td>
                 </tr>
               );

@@ -16,9 +16,12 @@ const MAX_BYTES = 200 * 1024;
 export function PharmacyLogoForm({
   initialLogoUrl,
   pharmacyName,
+  canEdit = true,
 }: {
   initialLogoUrl: string | null;
   pharmacyName: string;
+  /** Autorise l'import/retrait du logo (titulaire+). False → aperçu seul. */
+  canEdit?: boolean;
 }) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -117,41 +120,49 @@ export function PharmacyLogoForm({
           )}
         </div>
 
-        {/* Actions */}
+        {/* Actions — masquées en lecture seule (non-titulaire) */}
         <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml"
-            onChange={handleFile}
-            className="hidden"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handlePick}
-            disabled={isPending}
-          >
-            {isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4" />
-            )}
-            {logoUrl ? "Changer" : "Importer"}
-          </Button>
-          {logoUrl && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleRemove}
-              disabled={isPending}
-              className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-            >
-              <Trash2 className="h-4 w-4" />
-              Retirer
-            </Button>
+          {canEdit ? (
+            <>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={handleFile}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handlePick}
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                {logoUrl ? "Changer" : "Importer"}
+              </Button>
+              {logoUrl && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRemove}
+                  disabled={isPending}
+                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Retirer
+                </Button>
+              )}
+            </>
+          ) : (
+            <span className="text-[12px] text-muted-foreground">
+              Lecture seule
+            </span>
           )}
         </div>
       </div>

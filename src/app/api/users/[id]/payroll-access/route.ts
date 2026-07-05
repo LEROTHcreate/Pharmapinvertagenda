@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canGrantPayrollAccess } from "@/lib/payroll-permissions";
+import { isAdminLevel } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
@@ -60,7 +61,7 @@ async function PATCH__impl(
   if (!target) {
     return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
   }
-  if (target.role !== "ADMIN") {
+  if (!isAdminLevel(target.role)) {
     return NextResponse.json(
       { error: "Cet utilisateur n'est pas administrateur" },
       { status: 400 }

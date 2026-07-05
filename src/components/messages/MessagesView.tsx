@@ -9,6 +9,7 @@ import type {
   ContactDTO,
   MessageDTO,
 } from "@/types/messaging";
+import type { UserRole } from "@prisma/client";
 import { ConversationList } from "@/components/messages/ConversationList";
 import { ConversationPanel } from "@/components/messages/ConversationPanel";
 import { NewConversationDialog } from "@/components/messages/NewConversationDialog";
@@ -22,7 +23,7 @@ function isPageHidden() {
 }
 
 type Props = {
-  currentUser: { id: string; name: string; role: "ADMIN" | "EMPLOYEE" };
+  currentUser: { id: string; name: string; role: UserRole };
   contacts: ContactDTO[];
 };
 

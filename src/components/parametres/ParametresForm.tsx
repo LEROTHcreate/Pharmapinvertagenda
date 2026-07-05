@@ -18,9 +18,12 @@ type Initial = {
 
 export function ParametresForm({
   initial,
+  canEdit = true,
   canEditSiret = false,
 }: {
   initial: Initial;
+  /** Autorise toute modification (titulaire+). False → formulaire en lecture seule. */
+  canEdit?: boolean;
   /**
    * Autorise la modification du SIRET. True uniquement pour le super-admin
    * (compte créateur de l'officine, admin sans fiche Employee). Pour les
@@ -77,7 +80,7 @@ export function ParametresForm({
             id="name"
             value={form.name}
             onChange={(e) => set("name", e.target.value)}
-            disabled={isPending}
+            disabled={isPending || !canEdit}
             required
             maxLength={120}
           />
@@ -87,7 +90,7 @@ export function ParametresForm({
             id="address"
             value={form.address}
             onChange={(e) => set("address", e.target.value)}
-            disabled={isPending}
+            disabled={isPending || !canEdit}
             placeholder="12 avenue du Prado, 13006 Marseille"
             maxLength={200}
           />
@@ -97,7 +100,7 @@ export function ParametresForm({
             id="phone"
             value={form.phone}
             onChange={(e) => set("phone", e.target.value)}
-            disabled={isPending}
+            disabled={isPending || !canEdit}
             placeholder="04 91 00 00 00"
             inputMode="tel"
             maxLength={40}
@@ -111,7 +114,7 @@ export function ParametresForm({
               id="siret"
               value={form.siret}
               onChange={(e) => set("siret", e.target.value)}
-              disabled={isPending}
+              disabled={isPending || !canEdit}
               placeholder="14 chiffres (ex. 798 898 599 00013)"
               maxLength={20}
               inputMode="numeric"
@@ -149,7 +152,7 @@ export function ParametresForm({
             max={50}
             value={form.minStaff}
             onChange={(e) => set("minStaff", Number(e.target.value) || 0)}
-            disabled={isPending}
+            disabled={isPending || !canEdit}
             className="max-w-[120px]"
           />
         </Field>
@@ -161,16 +164,18 @@ export function ParametresForm({
         </div>
       )}
 
-      <div className="flex justify-end pt-2">
-        <Button type="submit" disabled={isPending}>
-          {isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Enregistrer
-        </Button>
-      </div>
+      {canEdit && (
+        <div className="flex justify-end pt-2">
+          <Button type="submit" disabled={isPending}>
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Enregistrer
+          </Button>
+        </div>
+      )}
     </form>
   );
 }
