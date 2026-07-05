@@ -246,6 +246,11 @@ model Employee {
   //  - BIWEEKLY : lissé sur 2 semaines (modulation contractuelle) — seuil =
   //    2×weeklyHours sur la quinzaine (ex. 40h + 30h = 0 heure sup).
   overtimeReference OvertimeReference @default(WEEKLY)
+  // Pour les TITULAIRE uniquement : compter leurs heures supplémentaires dans
+  // les stats ? Par défaut FALSE — un titulaire rémunéré en dividendes / salaire
+  // fixe travaille « quoi qu'il arrive », ses HS ne sont donc pas
+  // comptabilisées. Ignoré pour les autres statuts (leurs HS comptent toujours).
+  titulaireCountsOvertime Boolean @default(false)
   displayColor String         @default("#6366f1") // Couleur dans le planning
   displayOrder Int            @default(0)      // Ordre d'affichage dans la grille
   isActive     Boolean        @default(true)

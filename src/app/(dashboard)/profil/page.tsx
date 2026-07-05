@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ChangePasswordForm } from "@/components/profil/ChangePasswordForm";
 import { AvatarPicker } from "@/components/profil/AvatarPicker";
 import { CalendarSyncCard } from "@/components/profil/CalendarSyncCard";
+import { TitulairePayModeCard } from "@/components/profil/TitulairePayModeCard";
 import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
 import { computeStats } from "@/lib/stats";
 import { ABSENCE_LABELS, STATUS_LABELS } from "@/types";
@@ -39,6 +40,7 @@ export default async function ProfilPage() {
           weeklyHours: true,
           displayColor: true,
           hireDate: true,
+          titulaireCountsOvertime: true,
         },
       })
     : null;
@@ -271,6 +273,13 @@ export default async function ProfilPage() {
             )}
           </div>
         </section>
+      )}
+
+      {/* ─── Titulaire : comptage des heures sup (dividendes vs classique) ── */}
+      {employee?.status === "TITULAIRE" && (
+        <TitulairePayModeCard
+          initialCountsOvertime={employee.titulaireCountsOvertime}
+        />
       )}
 
       {/* ─── Prochaines absences ──────────────────────────────────── */}
