@@ -642,9 +642,11 @@ export const PlanningGrid = memo(function PlanningGrid({
               // Zebra : alternance demi-heure → fond blanc / fond gris léger.
               // Une cellule TASK / ABSENCE pose son propre fond par-dessus,
               // donc seules les cases vides montrent l'alternance.
+              // Zebra plus marqué : blanc franc ↔ gris nettement visible, pour
+              // qu'on distingue les demi-heures d'un coup d'œil (retour user).
               const zebraClass = slotIdx % 2 === 0
                 ? "[&>td:not(.has-content)]:bg-card dark:[&>td:not(.has-content)]:bg-zinc-900"
-                : "[&>td:not(.has-content)]:bg-muted/40 dark:[&>td:not(.has-content)]:bg-zinc-800/50";
+                : "[&>td:not(.has-content)]:bg-zinc-200/70 dark:[&>td:not(.has-content)]:bg-zinc-800";
               return (
                 <tr
                   key={slot}
