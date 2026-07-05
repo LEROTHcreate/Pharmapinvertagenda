@@ -1276,27 +1276,20 @@ const HeaderCell = memo(function HeaderCell({
         <span className="text-[9px] uppercase tracking-[0.04em] text-muted-foreground/70 font-medium text-center truncate">
           {STATUS_LABELS[employee.status]}
         </span>
-        {/* Stats compactes : jour · cumul (delta) */}
-        <div className="mt-0.5 flex items-center justify-center gap-0.5 font-mono text-[9.5px] text-muted-foreground truncate tabular-nums">
-          <span className="text-foreground/85">{dailyH.toFixed(1)}</span>
-          <span className="text-muted-foreground/40 mx-0.5">›</span>
+        {/* Heures faites cette semaine — un seul chiffre, coloré :
+            noir = pile le contrat · rouge = au-dessus · vert = en dessous.
+            (Le détail jour + écart reste dans l'infobulle au survol.) */}
+        <div className="mt-0.5 flex items-center justify-center font-mono text-[11px] font-semibold tabular-nums">
           <span
             className={cn(
-              "font-medium",
               Math.abs(delta) < 0.5
-                ? "text-foreground/85"
+                ? "text-foreground"
                 : delta > 0
-                  ? "text-rose-600"
-                  : "text-amber-600"
+                  ? "text-rose-600 dark:text-rose-400"
+                  : "text-emerald-600 dark:text-emerald-400"
             )}
           >
             {weeklyH.toFixed(1)}
-            {Math.abs(delta) >= 0.5 && (
-              <span className="ml-0.5">
-                {delta > 0 ? "+" : ""}
-                {delta.toFixed(1)}
-              </span>
-            )}
           </span>
         </div>
       </Link>
