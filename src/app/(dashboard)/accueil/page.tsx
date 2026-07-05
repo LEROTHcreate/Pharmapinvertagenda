@@ -97,12 +97,23 @@ export default async function AccueilPage() {
 
   const unreadMessages = unread.swap + unread.text;
 
-  // Présents = employés distincts avec au moins une TÂCHE aujourd'hui.
+  // Présents = employés distincts avec au moins une TÂCHE aujourd'hui (total jour).
   const presentSet = new Set<string>();
+  // Présents PAR CRÉNEAU → décompte "en poste en ce moment" côté client.
+  const slotSets = new Map<string, Set<string>>();
   for (const e of todayEntries as Entry[]) {
-    if (e.type === "TASK") presentSet.add(e.employeeId);
+    if (e.type !== "TASK") continue;
+    presentSet.add(e.employeeId);
+    let set = slotSets.get(e.timeSlot);
+    if (!set) {
+      set = new Set();
+      slotSets.set(e.timeSlot, set);
+    }
+    set.add(e.employeeId);
   }
   const teamPresent = presentSet.size;
+  const presentBySlot: Record<string, number> = {};
+  for (const [slot, set] of slotSets) presentBySlot[slot] = set.size;
 
   // Ma journée : blocs contigus (même tâche/absence) compactés.
   let myDay: {
@@ -210,6 +221,7 @@ export default async function AccueilPage() {
       myWeek={myWeek}
       nextSlot={nextSlot}
       teamPresent={teamPresent}
+      presentBySlot={presentBySlot}
       pendingAbsences={pendingAbsences}
       unreadMessages={unreadMessages}
     />

@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { MyDayCard } from "@/components/accueil/MyDayCard";
 import { MyWeekCard } from "@/components/accueil/MyWeekCard";
+import { TeamNowCard } from "@/components/accueil/TeamNowCard";
 import { QuickAbsenceButton } from "@/components/accueil/QuickAbsenceButton";
 
 /**
@@ -34,6 +35,7 @@ export function AccueilView({
   myWeek,
   nextSlot,
   teamPresent,
+  presentBySlot,
   pendingAbsences,
   unreadMessages,
 }: {
@@ -44,6 +46,7 @@ export function AccueilView({
   myWeek: { done: number; contract: number } | null;
   nextSlot: { when: string; from: string; label: string } | null;
   teamPresent: number;
+  presentBySlot: Record<string, number>;
   pendingAbsences: number;
   unreadMessages: number;
 }) {
@@ -126,22 +129,8 @@ export function AccueilView({
       {/* Action rapide */}
       <QuickAbsenceButton isAdmin={isAdmin} />
 
-      {/* L'équipe aujourd'hui */}
-      <Link
-        href="/planning"
-        className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] active:scale-[0.99] transition-transform"
-      >
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-50 dark:bg-violet-950/40">
-          <Users className="h-5 w-5 text-violet-600 dark:text-violet-300" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-semibold text-foreground">
-            <span className="tabular-nums">{teamPresent}</span> au travail aujourd'hui
-          </p>
-          <p className="text-[12px] text-muted-foreground">Voir le planning de l'équipe</p>
-        </div>
-        <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-      </Link>
+      {/* L'équipe en poste MAINTENANT (créneau en cours), total jour en secondaire */}
+      <TeamNowCard presentBySlot={presentBySlot} dayTotal={teamPresent} />
 
       {/* Accès rapides */}
       <section>
