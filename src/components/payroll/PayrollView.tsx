@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { STATUS_LABELS } from "@/types";
 import type { EmployeeStatus } from "@prisma/client";
 import { computeBenchmark, type Benchmark } from "@/lib/payroll-benchmark";
 import { computeInsights, type Insight } from "@/lib/payroll-insights";
@@ -103,6 +104,49 @@ type Totals = {
   totalEmployerCost: number;
 };
 
+type SortMode = "order" | "cost" | "gross" | "name";
+
+const SORT_LABELS: Record<SortMode, string> = {
+  order: "Ordre équipe",
+  cost: "Coût ↓",
+  gross: "Brut ↓",
+  name: "Nom A→Z",
+};
+
+/** Trie une COPIE des lignes selon le mode choisi (l'ordre "équipe" = API). */
+function sortLines(lines: Line[], mode: SortMode): Line[] {
+  if (mode === "order") return lines;
+  const copy = [...lines];
+  if (mode === "cost")
+    copy.sort((a, b) => b.totalEmployerCost - a.totalEmployerCost);
+  else if (mode === "gross")
+    copy.sort((a, b) => b.grossEmployer - a.grossEmployer);
+  else if (mode === "name")
+    copy.sort((a, b) => a.employeeName.localeCompare(b.employeeName, "fr"));
+  return copy;
+}
+
+/** Sous-totaux (coût officine + net) par statut, triés par coût décroissant. */
+function subtotalsByStatus(
+  lines: Line[]
+): Array<{ status: EmployeeStatus; count: number; cost: number; net: number }> {
+  const map = new Map<
+    EmployeeStatus,
+    { count: number; cost: number; net: number }
+  >();
+  for (const l of lines) {
+    if (l.totalEmployerCost <= 0) continue; // ignore les rému non saisies
+    const cur = map.get(l.status) ?? { count: 0, cost: 0, net: 0 };
+    cur.count += 1;
+    cur.cost += l.totalEmployerCost;
+    cur.net += l.netEstimated;
+    map.set(l.status, cur);
+  }
+  return Array.from(map.entries())
+    .map(([status, v]) => ({ status, ...v }))
+    .sort((a, b) => b.cost - a.cost);
+}
+
 const MONTHS_FR = [
   "janvier", "février", "mars", "avril", "mai", "juin",
   "juillet", "août", "septembre", "octobre", "novembre", "décembre",
@@ -146,6 +190,12 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
   }, []);
   const [exporting, setExporting] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("order");
+
+  // Lignes triées pour l'affichage (l'ordre "équipe" respecte l'API).
+  const displayLines = useMemo(() => sortLines(lines, sortMode), [lines, sortMode]);
+  // Sous-totaux par statut (coût officine + net) pour la vue titulaire.
+  const statusSubtotals = useMemo(() => subtotalsByStatus(lines), [lines]);
 
   const handleExportCsv = useCallback(async () => {
     setExportingCsv(true);
@@ -480,6 +530,24 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         </div>
       )}
 
+      {/* Barre outils tableau : tri */}
+      {!loading && lines.length > 1 && (
+        <div className="flex items-center justify-end gap-2 text-[12px] text-muted-foreground">
+          <span>Trier :</span>
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="rounded-lg border border-border bg-background px-2 py-1 text-[12px] text-foreground"
+          >
+            {(Object.keys(SORT_LABELS) as SortMode[]).map((m) => (
+              <option key={m} value={m}>
+                {SORT_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Tableau des lignes */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         {loading ? (
@@ -507,7 +575,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l) => (
+                {displayLines.map((l) => (
                   <PayrollRow
                     key={l.employeeId}
                     line={l}
@@ -520,6 +588,41 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
           </div>
         )}
       </div>
+
+      {/* Sous-totaux par statut (coût officine) — vue titulaire */}
+      {!loading && statusSubtotals.length > 1 && (
+        <div className="rounded-2xl border border-border bg-card p-3">
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+            Coût par statut
+          </h3>
+          <ul className="space-y-1">
+            {statusSubtotals.map((s) => (
+              <li
+                key={s.status}
+                className="flex items-center justify-between gap-3 text-[12.5px]"
+              >
+                <span className="text-zinc-700 dark:text-foreground">
+                  {STATUS_LABELS[s.status]}{" "}
+                  <span className="text-[11px] text-muted-foreground">
+                    ({s.count})
+                  </span>
+                </span>
+                <span className="flex items-baseline gap-3 font-mono tabular-nums">
+                  <span className="text-emerald-700" title="Net total du statut">
+                    net {fmt(s.net)}
+                  </span>
+                  <span
+                    className="font-semibold text-violet-900 dark:text-violet-300"
+                    title="Coût officine total du statut"
+                  >
+                    {fmt(s.cost)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <p className="text-[11px] text-muted-foreground italic">
         * Maladie = heures payées par l'employeur après 3 jours de carence (sous condition d'ancienneté ≥ 1 an,
@@ -792,6 +895,7 @@ function PayrollRow({
   const [val, setVal] = useState("");
   const [coeff, setCoeff] = useState("");
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false); // détail brut→net déplié
 
   function startEdit() {
     setMode(line.payMode);
@@ -871,8 +975,29 @@ function PayrollRow({
   const belowMin = benchmark?.legal === "below_min";
 
   return (
+    <>
     <tr className="border-t border-border hover:bg-zinc-50/40 transition-colors">
-      <td className="px-3 py-2 font-medium text-zinc-900">{line.employeeName}</td>
+      <td className="px-3 py-2 font-medium text-zinc-900">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="inline-flex items-center gap-1 hover:text-violet-700"
+          title="Voir le détail (brut → net, charges)"
+        >
+          <ChevronRight
+            className={cn(
+              "h-3.5 w-3.5 text-zinc-400 transition-transform",
+              open && "rotate-90"
+            )}
+          />
+          {line.employeeName}
+          {line.isCadre && (
+            <span className="ml-1 rounded bg-zinc-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500">
+              cadre
+            </span>
+          )}
+        </button>
+      </td>
       <td className="px-3 py-2 text-right align-top">
         {editing ? (
           <div className="inline-flex flex-col items-stretch gap-1 text-left min-w-[150px]">
@@ -1036,6 +1161,14 @@ function PayrollRow({
         {benchmark ? <BenchmarkChip benchmark={benchmark} /> : <span className="text-zinc-400">—</span>}
       </td>
     </tr>
+    {open && (
+      <tr className="bg-zinc-50/60 dark:bg-muted/20">
+        <td colSpan={9} className="px-3 pb-3 pt-1">
+          <PayrollDetail line={line} />
+        </td>
+      </tr>
+    )}
+    </>
   );
 }
 
@@ -1106,6 +1239,116 @@ function fmt(n: number): string {
 }
 
 /** Libellé compact de la rémunération selon le mode (horaire / mensuel). */
+/** Panneau détail « brut → net » (salarié) et « brut → coût » (officine) —
+ *  affiché au clic sur une ligne. Utile au titulaire ET à montrer au salarié. */
+function PayrollDetail({ line }: { line: Line }) {
+  const rate =
+    line.effectiveHourlyRate != null
+      ? `${line.effectiveHourlyRate.toFixed(2)} €/h`
+      : "—";
+  const monthly =
+    line.effectiveMonthlySalary != null
+      ? `${new Intl.NumberFormat("fr-FR").format(Math.round(line.effectiveMonthlySalary))} €/mois`
+      : "—";
+  return (
+    <div className="rounded-xl bg-white p-3 text-[12px] ring-1 ring-zinc-200 dark:bg-card dark:ring-border">
+      <p className="mb-2 text-[11px] text-zinc-500">
+        Rémunération :{" "}
+        <strong className="text-zinc-700 dark:text-foreground">{rate}</strong> ·{" "}
+        {monthly}
+        {line.isCadre && " · statut cadre"}
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="mb-1 font-semibold text-emerald-700">
+            Ce que touche le salarié
+          </p>
+          <Kv label="Salaire brut" value={fmt(line.grossEmployer)} />
+          <Kv
+            label="− Cotisations salariales"
+            value={fmt(line.socialContributionsEmployee)}
+          />
+          {line.hsEmployeeReduction > 0 && (
+            <Kv
+              label="dont exonération heures sup"
+              value={`+${fmt(line.hsEmployeeReduction)} de net`}
+              sub
+            />
+          )}
+          <Kv
+            label="= Net estimé"
+            value={fmt(line.netEstimated)}
+            strong
+            tone="emerald"
+          />
+        </div>
+        <div>
+          <p className="mb-1 font-semibold text-violet-800">
+            Ce que paie l&apos;officine
+          </p>
+          <Kv label="Salaire brut" value={fmt(line.grossEmployer)} />
+          <Kv
+            label="+ Charges patronales"
+            value={fmt(line.socialContributionsEmployer)}
+          />
+          {line.reductionGenerale > 0 && (
+            <Kv
+              label="dont réduction générale"
+              value={`−${fmt(line.reductionGenerale)}`}
+              sub
+            />
+          )}
+          {line.hsEmployerDeduction > 0 && (
+            <Kv
+              label="dont déduction HS"
+              value={`−${fmt(line.hsEmployerDeduction)}`}
+              sub
+            />
+          )}
+          <Kv
+            label="= Coût total"
+            value={fmt(line.totalEmployerCost)}
+            strong
+            tone="violet"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Kv({
+  label,
+  value,
+  strong,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  sub?: boolean;
+  tone?: "emerald" | "violet";
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-baseline justify-between gap-3 py-0.5",
+        sub && "pl-3 text-[11px] text-zinc-400",
+        strong &&
+          "mt-1 border-t border-zinc-200 pt-1 font-semibold dark:border-border",
+        tone === "emerald" && strong && "text-emerald-700",
+        tone === "violet" && strong && "text-violet-800"
+      )}
+    >
+      <span className={cn(!sub && "text-zinc-600 dark:text-muted-foreground")}>
+        {label}
+      </span>
+      <span className="font-mono tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 function compLabel(line: Line): string {
   if (line.payMode === "MONTHLY") {
     return line.monthlyGrossSalary != null
