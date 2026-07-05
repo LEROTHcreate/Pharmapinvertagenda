@@ -57,7 +57,10 @@ type Line = {
   sickHoursCpam: number;
   unpaidAbsenceHours: number;
   grossEmployer: number;
+  isCadre: boolean;
   socialContributionsEmployee: number;
+  hsEmployeeReduction: number;
+  hsEmployerDeduction: number;
   netEstimated: number;
   socialContributionsEmployer: number;
   reductionGenerale: number;
