@@ -386,6 +386,30 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         </div>
       </div>
 
+      {/* Complétude des données — évite de lire des totaux partiels */}
+      {!loading &&
+        lines.length > 0 &&
+        (() => {
+          const missing = lines.filter(
+            (l) => l.hourlyGrossRate == null && l.monthlyGrossSalary == null
+          ).length;
+          if (missing === 0) return null;
+          const filled = lines.length - missing;
+          return (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-300/70 bg-amber-50/70 px-3.5 py-2.5 text-[12.5px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p>
+                <strong>
+                  Rémunération saisie pour {filled}/{lines.length} salariés.
+                </strong>{" "}
+                Les totaux ne comptent que ces {filled}. Renseignez les {missing}{" "}
+                manquant{missing > 1 ? "s" : ""} (colonne Rémunération) pour une
+                masse salariale complète.
+              </p>
+            </div>
+          );
+        })()}
+
       {/* Récap totaux */}
       {totals && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
@@ -393,6 +417,39 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
           <TotalCard label="Net estimé total" value={totals.netEstimated} tone="emerald" />
           <TotalCard label="Charges patronales" value={totals.socialContributionsEmployer} tone="amber" />
           <TotalCard label="Coût total officine" value={totals.totalEmployerCost} tone="violet" big />
+        </div>
+      )}
+
+      {/* Projection annuelle (#5) + coût marginal des HS (#4) */}
+      {totals && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl bg-zinc-50 px-3.5 py-2 text-[12px] text-zinc-600 dark:bg-muted/30 dark:text-muted-foreground">
+          <span>
+            Projection annuelle ≈{" "}
+            <strong className="tabular-nums text-zinc-800 dark:text-foreground">
+              {fmt(totals.totalEmployerCost * 12)}
+            </strong>{" "}
+            <span className="opacity-70">
+              (coût du mois × 12, hors variations de congés)
+            </span>
+          </span>
+          {(() => {
+            const hsCost = lines.reduce(
+              (s, l) => s + l.overtimePremiumCost,
+              0
+            );
+            if (hsCost < 1) return null;
+            return (
+              <span>
+                Majorations heures sup ce mois :{" "}
+                <strong className="tabular-nums text-amber-700 dark:text-amber-400">
+                  {fmt(hsCost)}
+                </strong>{" "}
+                <span className="opacity-70">
+                  — économisables en contractualisant les heures récurrentes
+                </span>
+              </span>
+            );
+          })()}
         </div>
       )}
 
