@@ -13,7 +13,8 @@ export const runtime = "nodejs";
  *  DELETE ?id=…                                                   → supprime une garde
  *  PATCH  { rateNuit?, rateDimanche?, rateJourFerie? }            → règle les indemnités
  *
- * Seuls les employés de statut PHARMACIEN peuvent être affectés à une garde.
+ * Seuls les employés de statut PHARMACIEN ou TITULAIRE peuvent être affectés à
+ * une garde (dans beaucoup d'officines, les titulaires assurent les gardes).
  * La logique d'équité / rotation / indemnités vit dans src/lib/gardes.ts et est
  * calculée côté page (server component).
  */
@@ -46,7 +47,8 @@ async function POST__impl(req: Request) {
     );
   }
 
-  // Le pharmacien doit appartenir à l'officine ET être de statut PHARMACIEN.
+  // Le collaborateur doit appartenir à l'officine ET pouvoir assurer une garde
+  // (pharmacien ou titulaire).
   const pharmacist = await prisma.employee.findFirst({
     where: {
       id: parsed.data.pharmacistId,
@@ -57,9 +59,9 @@ async function POST__impl(req: Request) {
   if (!pharmacist) {
     return NextResponse.json({ error: "collaborateur inconnu" }, { status: 400 });
   }
-  if (pharmacist.status !== "PHARMACIEN") {
+  if (pharmacist.status !== "PHARMACIEN" && pharmacist.status !== "TITULAIRE") {
     return NextResponse.json(
-      { error: "Seuls les pharmaciens peuvent assurer une garde." },
+      { error: "Seuls les pharmaciens et titulaires peuvent assurer une garde." },
       { status: 400 }
     );
   }
