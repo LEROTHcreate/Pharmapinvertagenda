@@ -42,6 +42,13 @@ type Line = {
   taskHoursRegular: number;
   overtimeHours25: number;
   overtimeHours50: number;
+  overtimeReference: "WEEKLY" | "BIWEEKLY";
+  overtimePeriods: {
+    weekStart: string;
+    hours: number;
+    overtime25: number;
+    overtime50: number;
+  }[];
   paidLeaveHours: number;
   trainingHours: number;
   sickHoursEmployerPaid: number;
@@ -55,6 +62,25 @@ type Line = {
   totalEmployerCost: number;
   overtimePremiumCost: number;
 };
+
+/** Tooltip listant les heures sup période par période (semaine ou quinzaine). */
+function overtimePeriodsTitle(line: {
+  overtimeReference: "WEEKLY" | "BIWEEKLY";
+  overtimePeriods: { weekStart: string; overtime25: number; overtime50: number }[];
+}): string {
+  const label = line.overtimeReference === "BIWEEKLY" ? "Quinzaine du" : "Semaine du";
+  const fmt = (iso: string) => {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+  const rows = line.overtimePeriods
+    .filter((p) => p.overtime25 + p.overtime50 > 0)
+    .map(
+      (p) =>
+        `${label} ${fmt(p.weekStart)} : +25% ${p.overtime25.toFixed(1)}h · +50% ${p.overtime50.toFixed(1)}h`
+    );
+  return rows.join("\n");
+}
 
 const REGION_KEY = "pp_payroll_region";
 const REGIONS: Region[] = [
@@ -876,11 +902,26 @@ function PayrollRow({
       </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums">
         {overtime > 0 ? (
-          <span title={`+25% : ${line.overtimeHours25.toFixed(1)}h, +50% : ${line.overtimeHours50.toFixed(1)}h`}>
-            +{overtime.toFixed(1)} h
+          <span
+            title={overtimePeriodsTitle(line)}
+            className="inline-flex flex-col items-end leading-tight"
+          >
+            <span>+{overtime.toFixed(1)} h</span>
+            <span className="text-[10px] font-normal text-zinc-500">
+              +25% {line.overtimeHours25.toFixed(1)} · +50%{" "}
+              {line.overtimeHours50.toFixed(1)}
+              {line.overtimeReference === "BIWEEKLY" ? " · /quinz." : ""}
+            </span>
           </span>
         ) : (
-          <span className="text-zinc-400">—</span>
+          <span className="text-zinc-400">
+            —
+            {line.overtimeReference === "BIWEEKLY" && (
+              <span className="ml-1 text-[9px] uppercase tracking-wide">
+                quinz.
+              </span>
+            )}
+          </span>
         )}
       </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums">

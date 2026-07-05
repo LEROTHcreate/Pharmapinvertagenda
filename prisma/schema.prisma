@@ -229,12 +229,23 @@ enum PayMode {
   MONTHLY // Mensualisé : salaire brut mensuel fixe (heures sup payées en plus)
 }
 
+/// Période de référence pour le décompte des heures supplémentaires.
+enum OvertimeReference {
+  WEEKLY   // À la semaine (Art. L3121-28) — seuil = contrat/sem.
+  BIWEEKLY // Lissé sur 2 semaines (modulation) — seuil = 2× contrat / quinzaine.
+}
+
 model Employee {
   id           String         @id @default(cuid())
   firstName    String
   lastName     String
   status       EmployeeStatus
   weeklyHours  Float                          // Heures contractuelles hebdomadaires
+  // Période de référence pour le décompte des heures supplémentaires :
+  //  - WEEKLY   : à la semaine (défaut) — seuil = weeklyHours/sem.
+  //  - BIWEEKLY : lissé sur 2 semaines (modulation contractuelle) — seuil =
+  //    2×weeklyHours sur la quinzaine (ex. 40h + 30h = 0 heure sup).
+  overtimeReference OvertimeReference @default(WEEKLY)
   displayColor String         @default("#6366f1") // Couleur dans le planning
   displayOrder Int            @default(0)      // Ordre d'affichage dans la grille
   isActive     Boolean        @default(true)

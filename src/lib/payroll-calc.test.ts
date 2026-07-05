@@ -54,6 +54,7 @@ function emp(partial: Partial<EmployeeForPayroll>): EmployeeForPayroll {
     lastName: "Employé",
     status: "PREPARATEUR",
     weeklyHours: 35,
+    overtimeReference: "WEEKLY",
     payMode: "HOURLY",
     hourlyGrossRate: null,
     monthlyGrossSalary: null,
@@ -62,6 +63,77 @@ function emp(partial: Partial<EmployeeForPayroll>): EmployeeForPayroll {
     ...partial,
   };
 }
+
+/** Génère `slotsPerDay` créneaux TASK sur une liste de dates ISO (pour tester
+ *  des semaines de volumes différents). */
+function tasksOn(dates: Array<{ date: string; hours: number }>): ScheduleEntryDTO[] {
+  const out: ScheduleEntryDTO[] = [];
+  dates.forEach(({ date, hours }, di) => {
+    const slots = Math.round(hours * 2);
+    for (let s = 0; s < slots; s++) {
+      out.push({
+        id: `w${di}-${s}`,
+        employeeId: "e",
+        date,
+        timeSlot: "08:00",
+        type: ScheduleType.TASK,
+        taskCode: "COMPTOIR" as TaskCode,
+        absenceCode: null,
+        notes: null,
+      });
+    }
+  });
+  return out;
+}
+
+describe("computePayrollLine — heures sup à la QUINZAINE (BIWEEKLY)", () => {
+  // 40 h une semaine + 30 h la suivante = 70 h sur 2 semaines = contrat (35×2).
+  const work = tasksOn([
+    { date: "2026-06-01", hours: 40 }, // semaine 1 (lundi)
+    { date: "2026-06-08", hours: 30 }, // semaine 2 (lundi)
+  ]);
+
+  it("en HEBDO : la semaine à 40 h génère 5 h sup à +25 %", () => {
+    const line = computePayrollLine(
+      emp({
+        payMode: "HOURLY",
+        hourlyGrossRate: 15,
+        weeklyHours: 35,
+        overtimeReference: "WEEKLY",
+      }),
+      work,
+      MONTH
+    );
+    expect(line.overtimeHours25).toBeCloseTo(5, 5);
+    expect(line.overtimeHours50).toBe(0);
+  });
+
+  it("en QUINZAINE : 40 h + 30 h = 0 heure sup (lissé sur 2 semaines)", () => {
+    const line = computePayrollLine(
+      emp({
+        payMode: "HOURLY",
+        hourlyGrossRate: 15,
+        weeklyHours: 35,
+        overtimeReference: "BIWEEKLY",
+      }),
+      work,
+      MONTH
+    );
+    expect(line.overtimeHours25 + line.overtimeHours50).toBe(0);
+    expect(line.overtimeReference).toBe("BIWEEKLY");
+  });
+
+  it("en QUINZAINE : une semaine à 75 h dépasse le seuil quinzaine (70 h) → 5 h sup", () => {
+    const line = computePayrollLine(
+      emp({ payMode: "HOURLY", hourlyGrossRate: 15, weeklyHours: 35, overtimeReference: "BIWEEKLY" }),
+      tasksOn([{ date: "2026-06-01", hours: 75 }]),
+      MONTH
+    );
+    // 75 − 70 (2×35) = 5 h, sous le plafond +25 % (16 h) → tout à +25 %.
+    expect(line.overtimeHours25).toBeCloseTo(5, 5);
+    expect(line.overtimeHours50).toBe(0);
+  });
+});
 
 describe("computePayrollLine — mode HORAIRE", () => {
   it("paie les heures travaillées au taux (sous le contrat = pas d'heures sup)", () => {

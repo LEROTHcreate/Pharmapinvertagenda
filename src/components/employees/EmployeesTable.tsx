@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { MoreHorizontal, Pencil, Plus, Power, Trash2 } from "lucide-react";
-import type { ContractType, EmployeeStatus } from "@prisma/client";
+import type {
+  ContractType,
+  EmployeeStatus,
+  OvertimeReference,
+} from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +30,7 @@ export type EmployeeRowData = {
   lastName: string;
   status: EmployeeStatus;
   weeklyHours: number;
+  overtimeReference: OvertimeReference;
   displayColor: string;
   displayOrder: number;
   isActive: boolean;

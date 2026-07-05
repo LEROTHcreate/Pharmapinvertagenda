@@ -15,6 +15,8 @@ const line: PayrollLine = {
   taskHoursRegular: 151.7,
   overtimeHours25: 4,
   overtimeHours50: 0,
+  overtimeReference: "WEEKLY",
+  overtimePeriods: [],
   paidLeaveHours: 0,
   trainingHours: 0,
   sickHoursEmployerPaid: 0,
