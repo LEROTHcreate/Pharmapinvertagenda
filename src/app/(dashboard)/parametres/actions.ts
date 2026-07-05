@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { updatePharmacyInput, type UpdatePharmacyInput } from "@/validators/pharmacy";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
@@ -15,7 +16,7 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 export async function updatePharmacy(input: UpdatePharmacyInput): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Non authentifié" };
-  if (session.user.role !== "ADMIN") return { ok: false, error: "Accès admin requis" };
+  if (!isAdminLevel(session.user.role)) return { ok: false, error: "Accès admin requis" };
 
   const parsed = updatePharmacyInput.safeParse(input);
   if (!parsed.success) {
@@ -162,7 +163,7 @@ export async function setPharmacyLogo(
 ): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Non authentifié" };
-  if (session.user.role !== "ADMIN") return { ok: false, error: "Accès admin requis" };
+  if (!isAdminLevel(session.user.role)) return { ok: false, error: "Accès admin requis" };
 
   if (dataUrl !== null) {
     // Format attendu : "data:<mime>;base64,<payload>"

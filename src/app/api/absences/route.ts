@@ -34,7 +34,9 @@ async function getAbsences(req: Request) {
   if (status === "PENDING" || status === "APPROVED" || status === "REJECTED") {
     where.status = status;
   }
-  if (session.user.role === "EMPLOYEE") {
+  // Non-admin (collaborateur ou manageur) : ne voit que SES propres demandes.
+  // Seul le niveau admin (titulaire/créateur) voit toute l'officine.
+  if (!isAdminLevel(session.user.role)) {
     if (!session.user.employeeId) {
       return NextResponse.json({ requests: [] });
     }

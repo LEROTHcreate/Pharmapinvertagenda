@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canApplyTemplates } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { TemplateView } from "@/components/templates/TemplateView";
 import type { EmployeeDTO } from "@/types";
@@ -14,7 +15,7 @@ export default async function EditTemplatePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/planning");
+  if (!canApplyTemplates(session.user.role)) redirect("/planning");
 
   const template = await prisma.weekTemplate.findFirst({
     where: { id: params.id, pharmacyId: session.user.pharmacyId },

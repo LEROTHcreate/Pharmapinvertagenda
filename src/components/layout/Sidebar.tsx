@@ -26,6 +26,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { UserRole } from "@prisma/client";
+import { isAdminLevel, canEditPlanning } from "@/lib/permissions";
 
 type NavKey =
   | "accueil"
@@ -47,14 +48,16 @@ type NavItem = {
   label: string;
   icon: typeof Calendar;
   adminOnly?: boolean;
+  /** Item admin que le MANAGEUR peut aussi voir (planning : gabarits, équipe). */
+  manager?: boolean;
 };
 
 const NAV: NavItem[] = [
   { key: "accueil", href: "/accueil", label: "Accueil", icon: Home },
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
-  { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true },
-  { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true },
+  { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true, manager: true },
+  { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true, manager: true },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
@@ -92,7 +95,9 @@ export function Sidebar({
   canViewPayroll?: boolean;
 }) {
   const pathname = usePathname();
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = isAdminLevel(userRole);
+  // MANAGEUR : accès aux items de construction du planning (gabarits, équipe).
+  const isManager = canEditPlanning(userRole);
 
   // Pour le badge Messages : on combine côté admin la file
   // « swaps en attente de validation admin » avec les SWAP_REQUEST non lus
@@ -131,7 +136,7 @@ export function Sidebar({
           // Rémunération : visible UNIQUEMENT si l'utilisateur a explicitement
           // canViewPayroll=true (super-admin OU admin titulaire autorisé).
           if (n.key === "remuneration") return canViewPayroll;
-          return !n.adminOnly || isAdmin;
+          return !n.adminOnly || isAdmin || (n.manager === true && isManager);
         }).map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;

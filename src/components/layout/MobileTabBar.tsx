@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
+import { isAdminLevel } from "@/lib/permissions";
 
 /**
  * Barre de navigation principale en bas d'écran sur mobile.
@@ -61,7 +62,7 @@ export function MobileTabBar({
   pendingSwapsCount?: number;
 }) {
   const pathname = usePathname();
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = isAdminLevel(userRole);
 
   // Badge messages : même logique que la sidebar — priorité au rouge (swap)
   // sur le bleu (texte) si les deux sont présents.

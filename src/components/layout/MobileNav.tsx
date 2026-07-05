@@ -32,6 +32,7 @@ import { NotificationBell } from "@/components/layout/NotificationBell";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
+import { isAdminLevel, canEditPlanning } from "@/lib/permissions";
 
 type NavKey =
   | "planning"
@@ -52,13 +53,15 @@ type NavItem = {
   label: string;
   icon: typeof Calendar;
   adminOnly?: boolean;
+  /** Item admin que le MANAGEUR peut aussi voir (gabarits, équipe). */
+  manager?: boolean;
 };
 
 const NAV: NavItem[] = [
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
-  { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true },
-  { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true },
+  { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true, manager: true },
+  { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true, manager: true },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
@@ -93,7 +96,8 @@ export function MobileNav({
   canViewPayroll?: boolean;
 }) {
   const pathname = usePathname();
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = isAdminLevel(userRole);
+  const isManager = canEditPlanning(userRole);
   const swapBadge = isAdmin
     ? Math.max(pendingSwapsCount, unreadSwapMessages)
     : unreadSwapMessages;
@@ -118,7 +122,7 @@ export function MobileNav({
             <nav className="mt-6 space-y-1">
               {NAV.filter((n) => {
                 if (n.key === "remuneration") return canViewPayroll;
-                return !n.adminOnly || isAdmin;
+                return !n.adminOnly || isAdmin || (n.manager === true && isManager);
               }).map((item) => {
                 const active = pathname.startsWith(item.href);
                 const Icon = item.icon;

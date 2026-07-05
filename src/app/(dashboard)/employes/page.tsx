@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canManageTeam } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { EmployeesTable } from "@/components/employees/EmployeesTable";
 import type { EmployeeRowData } from "@/components/employees/EmployeesTable";
@@ -16,7 +17,7 @@ const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 export default async function EmployesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/planning");
+  if (!canManageTeam(session.user.role)) redirect("/planning");
 
   const employees = await prisma.employee.findMany({
     where: { pharmacyId: session.user.pharmacyId },

@@ -16,6 +16,13 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { EmployeeStatus, UserRole } from "@prisma/client";
+import {
+  assignableRoles,
+  canManageUser,
+  isCreator,
+  roleLabel,
+  type AppRole,
+} from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/types";
 import { AvatarImage } from "@/components/layout/AvatarImage";
@@ -61,11 +68,15 @@ export type EmployeeOption = EmployeeRef & {
 export function UsersAdmin({
   users,
   employees,
+  currentUserRole,
 }: {
   users: UserRow[];
   employees: EmployeeOption[];
+  currentUserRole: UserRole;
 }) {
   const router = useRouter();
+  // Rôles que l'acteur a le droit d'attribuer (jamais CREATEUR).
+  const assignable = assignableRoles(currentUserRole);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -107,7 +118,7 @@ export function UsersAdmin({
     return { pending: p, members: m, rejected: r };
   }, [users]);
 
-  async function approve(user: UserRow, role: UserRole) {
+  async function approve(user: UserRow, role: AppRole) {
     setError(null);
     setBusyId(user.id);
     const employeeId = selectedEmployee[user.id] || null;
@@ -121,6 +132,25 @@ export function UsersAdmin({
       startTransition(() => router.refresh());
     } catch (e) {
       setError((e as Error).message || "Erreur lors de l'approbation");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Change le rôle de permission d'un membre déjà approuvé. */
+  async function changeRole(user: UserRow, role: AppRole) {
+    setError(null);
+    setBusyId(user.id);
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setError((e as Error).message || "Erreur lors du changement de rôle");
     } finally {
       setBusyId(null);
     }
@@ -209,7 +239,7 @@ export function UsersAdmin({
               action === "APPROVE_EMPLOYEE"
                 ? {
                     decision: "APPROVE",
-                    role: "EMPLOYEE",
+                    role: "COLLABORATEUR",
                     employeeId: selectedEmployee[id] || null,
                   }
                 : { decision: "REJECT" }
@@ -364,8 +394,8 @@ export function UsersAdmin({
                     setSelectedEmployee((prev) => ({ ...prev, [u.id]: empId }))
                   }
                   busy={busyId === u.id || bulkBusy}
-                  onApproveAdmin={() => approve(u, "ADMIN")}
-                  onApproveEmployee={() => approve(u, "EMPLOYEE")}
+                  assignable={assignable}
+                  onApprove={(role) => approve(u, role)}
                   onReject={() => {
                     setRejectTarget(u);
                     setRejectNote("");
@@ -392,6 +422,13 @@ export function UsersAdmin({
               <MemberCard
                 key={u.id}
                 user={u}
+                busy={busyId === u.id}
+                assignable={assignable}
+                canManage={
+                  !u.isCurrentUser &&
+                  canManageUser(currentUserRole, u.role)
+                }
+                onChangeRole={(role) => changeRole(u, role)}
                 onDelete={u.isCurrentUser ? undefined : () => setDeleteTarget(u)}
                 onEditLink={() => {
                   setEditLinkTarget(u);
@@ -602,8 +639,8 @@ function PendingCard({
   selectedEmployeeId,
   onSelectEmployee,
   busy,
-  onApproveAdmin,
-  onApproveEmployee,
+  assignable,
+  onApprove,
   onReject,
 }: {
   user: UserRow;
@@ -613,10 +650,14 @@ function PendingCard({
   selectedEmployeeId: string;
   onSelectEmployee: (employeeId: string) => void;
   busy: boolean;
-  onApproveAdmin: () => void;
-  onApproveEmployee: () => void;
+  assignable: AppRole[];
+  onApprove: (role: AppRole) => void;
   onReject: () => void;
 }) {
+  // Rôle par défaut proposé à l'approbation : Collaborateur si disponible.
+  const [role, setRole] = useState<AppRole>(
+    assignable.includes("COLLABORATEUR") ? "COLLABORATEUR" : assignable[0]
+  );
   return (
     <li
       className={cn(
@@ -657,24 +698,37 @@ function PendingCard({
           disabled={busy}
         />
 
-        {/* Actions */}
+        {/* Actions : choix du rôle + approuver / refuser */}
         <div className="flex flex-wrap items-center gap-2">
-          <ApproveButton
+          <label className="inline-flex items-center gap-1.5 rounded-xl bg-muted/40 px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground ring-1 ring-inset ring-border">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Rôle
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as AppRole)}
+              disabled={busy}
+              className="bg-transparent text-[13px] font-medium text-foreground outline-none"
+            >
+              {assignable.map((r) => (
+                <option key={r} value={r}>
+                  {roleLabel(r)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
             disabled={busy}
-            onClick={onApproveAdmin}
-            icon={<Crown className="h-4 w-4" />}
-            label="Approuver comme administrateur"
-            sub="Peut gérer le planning"
-            tone="violet"
-          />
-          <ApproveButton
-            disabled={busy}
-            onClick={onApproveEmployee}
-            icon={<UserIcon className="h-4 w-4" />}
-            label="Approuver comme collaborateur"
-            sub="Lecture + demandes"
-            tone="emerald"
-          />
+            onClick={() => onApprove(role)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 px-3.5 text-[13px] font-medium text-white shadow-sm shadow-violet-600/20 transition-all hover:shadow-md hover:shadow-violet-600/30 disabled:opacity-60"
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+            Approuver
+          </button>
           <button
             type="button"
             disabled={busy}
@@ -739,65 +793,40 @@ function EmployeeSelect({
   );
 }
 
-function ApproveButton({
-  onClick,
-  disabled,
-  icon,
-  label,
-  sub,
-  tone,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-  icon: React.ReactNode;
-  label: string;
-  sub: string;
-  tone: "violet" | "emerald";
-}) {
-  const styles = {
-    violet:
-      "bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm shadow-violet-600/20 hover:shadow-md hover:shadow-violet-600/30",
-    emerald:
-      "bg-card text-foreground/90 ring-1 ring-inset ring-border hover:ring-emerald-300 hover:bg-emerald-50",
-  }[tone];
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "group inline-flex flex-col items-start gap-0 rounded-xl px-3.5 py-2 text-left transition-all duration-200 disabled:opacity-60",
-        styles
-      )}
-    >
-      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium">
-        {icon}
-        {label}
-      </span>
-      <span
-        className={cn(
-          "text-[11px] tracking-tight",
-          tone === "violet" ? "text-white/75" : "text-muted-foreground"
-        )}
-      >
-        {sub}
-      </span>
-    </button>
-  );
+/**
+ * Valeur du <select> de rôle : le rôle courant normalisé s'il fait partie des
+ * rôles attribuables, sinon le premier attribuable (repli défensif).
+ */
+function roleValueForSelect(role: UserRole, assignable: AppRole[]): AppRole {
+  const normalized: AppRole =
+    role === "ADMIN"
+      ? "ADMIN"
+      : role === "MANAGEUR"
+        ? "MANAGEUR"
+        : "COLLABORATEUR";
+  return assignable.includes(normalized) ? normalized : assignable[0];
 }
 
 function MemberCard({
   user,
+  busy,
+  assignable,
+  canManage,
+  onChangeRole,
   onDelete,
   onEditLink,
 }: {
   user: UserRow;
+  busy?: boolean;
+  assignable: AppRole[];
+  /** L'acteur a-t-il le droit de changer le rôle de ce membre ? */
+  canManage?: boolean;
+  onChangeRole?: (role: AppRole) => void;
   onDelete?: () => void;
   /** Ouvre la dialog de rattachement / modification du lien collaborateur. */
   onEditLink?: () => void;
 }) {
-  const isAdmin = user.role === "ADMIN";
+  const creator = isCreator(user.role);
   return (
     <li className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-4">
       <div className="flex items-center justify-between gap-3">
@@ -816,26 +845,46 @@ function MemberCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
-              isAdmin
-                ? "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-100"
-                : "bg-muted text-foreground/85"
-            )}
-          >
-            {isAdmin ? (
-              <>
-                <ShieldCheck className="h-3 w-3" />
-                Administrateur
-              </>
-            ) : (
-              <>
+          {/* Le rôle est modifiable (select) si l'acteur peut gérer ce membre ;
+              sinon badge en lecture seule. Le créateur est toujours en lecture. */}
+          {canManage && onChangeRole && !creator ? (
+            <label className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/85 ring-1 ring-inset ring-border">
+              <ShieldCheck className="h-3 w-3" />
+              <select
+                value={roleValueForSelect(user.role, assignable)}
+                onChange={(e) => onChangeRole(e.target.value as AppRole)}
+                disabled={busy}
+                aria-label={`Rôle de ${user.name}`}
+                className="bg-transparent text-[11px] font-medium text-foreground outline-none"
+              >
+                {assignable.map((r) => (
+                  <option key={r} value={r}>
+                    {roleLabel(r)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
+                creator
+                  ? "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-100"
+                  : user.role === "ADMIN"
+                    ? "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-100"
+                    : "bg-muted text-foreground/85"
+              )}
+            >
+              {creator ? (
+                <Crown className="h-3 w-3" />
+              ) : user.role === "COLLABORATEUR" || user.role === "EMPLOYEE" ? (
                 <UserIcon className="h-3 w-3" />
-                Collaborateur
-              </>
-            )}
-          </span>
+              ) : (
+                <ShieldCheck className="h-3 w-3" />
+              )}
+              {roleLabel(user.role)}
+            </span>
+          )}
           {onDelete && (
             <button
               type="button"
@@ -993,6 +1042,14 @@ function mapErrorCode(code?: string): string {
       return "Collaborateur introuvable dans votre pharmacie.";
     case "EMPLOYEE_TAKEN":
       return "Ce collaborateur est déjà rattaché à un autre compte.";
+    case "ROLE_FORBIDDEN":
+      return "Vous n'avez pas le droit d'attribuer ce rôle.";
+    case "CANNOT_MANAGE_CREATOR":
+      return "Le créateur de l'officine ne peut pas être modifié.";
+    case "CANNOT_CHANGE_OWN_ROLE":
+      return "Vous ne pouvez pas changer votre propre rôle.";
+    case "CANNOT_DELETE_CREATOR":
+      return "Le créateur de l'officine ne peut pas être supprimé.";
     default:
       return "Erreur inattendue. Réessayez.";
   }

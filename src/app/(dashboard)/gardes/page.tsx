@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { toIsoDate } from "@/lib/planning-utils";
 import {
@@ -22,7 +23,7 @@ export default async function GardesPage() {
   const session = await auth();
   if (!session?.user) return null;
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
   const pharmacyId = session.user.pharmacyId;
 
   // Fenêtre glissante : 6 mois en arrière → 12 mois en avant (bornée).

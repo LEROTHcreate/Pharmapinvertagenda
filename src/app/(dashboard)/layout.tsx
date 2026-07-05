@@ -10,6 +10,7 @@ import {
   getPharmacyHeader,
 } from "@/lib/dashboard-data";
 import { canViewPayroll } from "@/lib/payroll-permissions";
+import { isAdminLevel } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -63,7 +64,7 @@ export default async function DashboardLayout({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
 
   const [
     pharmacy,

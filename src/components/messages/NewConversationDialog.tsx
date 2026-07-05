@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ContactDTO } from "@/types/messaging";
+import { isAdminLevel } from "@/lib/permissions";
 
 type Props = {
   open: boolean;
@@ -205,7 +206,7 @@ export function NewConversationDialog({
                         <span className="text-[10px] uppercase tracking-wide font-medium text-emerald-700 bg-emerald-50 ring-1 ring-emerald-100 rounded-full px-1.5 py-0.5">
                           Support
                         </span>
-                      ) : c.role === "ADMIN" ? (
+                      ) : isAdminLevel(c.role) ? (
                         <span className="text-[10px] uppercase tracking-wide font-medium text-violet-600 bg-violet-50 rounded-full px-1.5 py-0.5">
                           Admin
                         </span>

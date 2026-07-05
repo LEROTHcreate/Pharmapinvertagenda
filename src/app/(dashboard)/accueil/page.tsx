@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { AccueilView } from "@/components/accueil/AccueilView";
 import {
@@ -34,7 +35,7 @@ function labelFor(e: Entry): { label: string; isAbsence: boolean } {
 export default async function AccueilPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = isAdminLevel(session.user.role);
 
   const today = new Date();
   const todayIso = toIsoDate(today);
