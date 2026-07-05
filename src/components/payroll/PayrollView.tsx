@@ -13,6 +13,7 @@ import {
   MapPin,
   Minus,
   Pencil,
+  Printer,
   Save,
   TrendingDown,
   TrendingUp,
@@ -419,8 +420,30 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
             )}
             CSV
           </button>
+          {/* Export PDF — impression navigateur (Enregistrer au format PDF) */}
+          <button
+            onClick={() => window.print()}
+            disabled={lines.length === 0}
+            title="Imprimer / enregistrer en PDF la synthèse du mois"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 h-9 text-[12.5px] font-medium text-foreground/80 hover:bg-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            PDF
+          </button>
         </div>
       </header>
+
+      {/* Titre réservé à l'impression (l'en-tête interactif est masqué en PDF) */}
+      <div className="print-only mb-2">
+        <h1 className="text-lg font-bold">Rémunération — synthèse</h1>
+        <p className="text-sm">
+          {new Date(`${month}-01T00:00:00`).toLocaleDateString("fr-FR", {
+            month: "long",
+            year: "numeric",
+          })}
+          {" · estimation indicative (pas un bulletin de paie légal)"}
+        </p>
+      </div>
 
       {/* Avertissement légal */}
       <div className="rounded-2xl border border-amber-200/60 bg-amber-50/60 p-3 sm:p-4 flex items-start gap-3">
@@ -532,7 +555,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
 
       {/* Barre outils tableau : tri */}
       {!loading && lines.length > 1 && (
-        <div className="flex items-center justify-end gap-2 text-[12px] text-muted-foreground">
+        <div className="no-print flex items-center justify-end gap-2 text-[12px] text-muted-foreground">
           <span>Trier :</span>
           <select
             value={sortMode}
