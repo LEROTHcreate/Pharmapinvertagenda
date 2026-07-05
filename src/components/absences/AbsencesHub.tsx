@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { CalendarCheck, CalendarOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { UserRole } from "@prisma/client";
 import { AbsencesView } from "@/components/absences/AbsencesView";
 import { AvailabilityWishesView } from "@/components/disponibilites/AvailabilityWishesView";
 
 type Tab = "absences" | "disponibilites";
 
 type Props = {
-  currentUser: { role: "ADMIN" | "EMPLOYEE"; employeeId: string | null };
+  currentUser: { role: UserRole; employeeId: string | null };
   initialTab?: Tab;
 };
 

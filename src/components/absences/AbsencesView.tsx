@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ABSENCE_LABELS } from "@/types";
-import type { AbsenceCode, AbsenceRequestStatus } from "@prisma/client";
+import type { AbsenceCode, AbsenceRequestStatus, UserRole } from "@prisma/client";
 import { AbsenceRequestForm } from "@/components/absences/AbsenceRequestForm";
 import { CollectiveAbsenceDialog } from "@/components/absences/CollectiveAbsenceDialog";
 import { NotePromptDialog } from "@/components/ui/note-prompt-dialog";
@@ -37,7 +37,7 @@ type AbsenceDTO = {
 
 type Props = {
   currentUser: {
-    role: "ADMIN" | "EMPLOYEE";
+    role: UserRole;
     employeeId: string | null;
   };
   /** Quand true, masque le titre/padding de page (rendu dans un hub à onglets). */

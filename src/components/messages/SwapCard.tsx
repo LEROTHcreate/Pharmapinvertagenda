@@ -20,10 +20,11 @@ import type {
   MessageDTO,
   SwapStatusDTO,
 } from "@/types/messaging";
+import type { UserRole } from "@prisma/client";
 
 type Props = {
   message: MessageDTO;
-  currentUser: { id: string; name: string; role: "ADMIN" | "EMPLOYEE" };
+  currentUser: { id: string; name: string; role: UserRole };
   otherMembers: ConversationMemberDTO[];
   onUpdated: () => void;
 };

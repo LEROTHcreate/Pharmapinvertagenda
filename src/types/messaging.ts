@@ -1,10 +1,11 @@
 // Types partagés client/serveur pour la messagerie
+import type { UserRole } from "@prisma/client";
 
 export type ConversationMemberDTO = {
   userId: string;
   name: string;
   email: string;
-  role: "ADMIN" | "EMPLOYEE";
+  role: UserRole;
   /** Avatar choisi (cf. src/lib/avatars.ts) — null = fallback initiale. */
   avatarId: string | null;
   /** Prénom isolé (depuis Employee.firstName) si lié, sinon null. */
@@ -85,7 +86,7 @@ export type ContactDTO = {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "EMPLOYEE";
+  role: UserRole;
   /** Compte "Support PharmaPlanning" — visible cross-pharmacy. Affiche un
    *  badge dédié dans la liste de contacts (ex. "Programmeur · Support"). */
   isGlobalSupport?: boolean;

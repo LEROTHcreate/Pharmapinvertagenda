@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { EmployeeStatus } from "@prisma/client";
+import type { EmployeeStatus, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/types";
 import { AvatarImage } from "@/components/layout/AvatarImage";
@@ -41,7 +41,7 @@ export type UserRow = {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "EMPLOYEE";
+  role: UserRole;
   status: "PENDING" | "APPROVED" | "REJECTED";
   isActive: boolean;
   /** Avatar choisi par l'utilisateur (cf. src/lib/avatars.ts). */
@@ -107,7 +107,7 @@ export function UsersAdmin({
     return { pending: p, members: m, rejected: r };
   }, [users]);
 
-  async function approve(user: UserRow, role: "ADMIN" | "EMPLOYEE") {
+  async function approve(user: UserRow, role: UserRole) {
     setError(null);
     setBusyId(user.id);
     const employeeId = selectedEmployee[user.id] || null;

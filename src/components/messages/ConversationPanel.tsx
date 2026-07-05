@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { ConversationDTO, MessageDTO } from "@/types/messaging";
+import type { UserRole } from "@prisma/client";
 import { SwapCard } from "@/components/messages/SwapCard";
 import { SwapProposalDialog } from "@/components/messages/SwapProposalDialog";
 import { AvatarImage } from "@/components/layout/AvatarImage";
@@ -26,7 +27,7 @@ type Props = {
   conversation: ConversationDTO;
   messages: MessageDTO[];
   loading: boolean;
-  currentUser: { id: string; name: string; role: "ADMIN" | "EMPLOYEE" };
+  currentUser: { id: string; name: string; role: UserRole };
   shadowAccess: boolean;
   onBack: () => void;
   onMessageSent: () => void;
