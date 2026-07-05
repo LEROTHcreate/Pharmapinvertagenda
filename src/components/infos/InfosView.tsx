@@ -4,24 +4,24 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Cake,
-  Calendar,
   CalendarClock,
   CalendarHeart,
   CalendarOff,
   CheckCircle2,
   ChevronRight,
   Clock,
+  ExternalLink,
   Flame,
-  LayoutTemplate,
   Lightbulb,
+  Newspaper,
   ShieldPlus,
   Truck,
   UserPlus,
   Users,
-  Zap,
 } from "lucide-react";
 import type { CoverageWarning } from "@/lib/coverage-analysis";
 import type { CcnViolation } from "@/lib/ccn-compliance";
+import type { NewsItem } from "@/lib/pharmacy-news";
 import type { PlanningTip } from "@/lib/planning-tips";
 import { CcnComplianceWarnings } from "@/components/planning/CcnComplianceWarnings";
 import { cn } from "@/lib/utils";
@@ -91,6 +91,8 @@ export type InfosData = {
   upcomingGardes: UpcomingGarde[];
   anniversaries: WorkAnniversary[];
   overtime: OvertimeItem[];
+  /** Actualité pharmacie (flux Google Actualités, liens externes). */
+  news: NewsItem[];
 };
 
 const WISH_LABELS: Record<UpcomingWish["kind"], string> = {
@@ -134,6 +136,7 @@ export function InfosView(data: InfosData) {
     upcomingGardes,
     anniversaries,
     overtime,
+    news,
   } = data;
 
   const totalAbsents = absentsByDay.reduce((n, d) => n + d.people.length, 0);
@@ -512,66 +515,52 @@ export function InfosView(data: InfosData) {
         </Section>
       )}
 
-      {/* ─── 5. Raccourcis (admin) ────────────────────────────────── */}
-      {isAdmin && (
+      {/* ─── Actu pharmacie (Google Actualités — liens externes) ──── */}
+      {news.length > 0 && (
         <Section
-          title="Raccourcis"
-          icon={<Zap className="h-4 w-4" />}
-          count={0}
-          tone="slate"
+          title="Actu pharmacie"
+          icon={<Newspaper className="h-4 w-4" />}
+          count={news.length}
+          tone="indigo"
         >
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <QuickLink
-              href="/planning"
-              icon={<Calendar className="h-4 w-4" />}
-              label="Bâtir le planning"
-            />
-            <QuickLink
-              href="/gabarits"
-              icon={<LayoutTemplate className="h-4 w-4" />}
-              label="Appliquer un gabarit"
-            />
-            <QuickLink
-              href="/employes"
-              icon={<Users className="h-4 w-4" />}
-              label="Gérer l'équipe"
-            />
-            <QuickLink
-              href="/absences"
-              icon={<CalendarOff className="h-4 w-4" />}
-              label="Absences & dispos"
-            />
-          </div>
+          <ul className="space-y-2">
+            {news.map((n) => (
+              <li key={n.link}>
+                <a
+                  href={n.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 transition-colors hover:bg-muted/50"
+                >
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                    <Newspaper className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12.5px] font-semibold leading-snug text-foreground group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
+                      {n.title}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="truncate">{n.source}</span>
+                      {n.dateLabel && (
+                        <>
+                          <span aria-hidden>·</span>
+                          <span className="shrink-0 tabular-nums">{n.dateLabel}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 px-1 text-[10.5px] text-muted-foreground/70">
+            Source : Google Actualités · liens externes
+          </p>
         </Section>
       )}
       </div>
     </div>
-  );
-}
-
-/** Raccourci compact vers une page clé (carte Raccourcis). */
-function QuickLink({
-  href,
-  icon,
-  label,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 transition-colors hover:bg-muted/50"
-    >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1 text-[13px] font-medium leading-tight text-foreground">
-        {label}
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
-    </Link>
   );
 }
 
