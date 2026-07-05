@@ -65,7 +65,9 @@ const NAV: NavItem[] = [
   { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
   { key: "gardes", href: "/gardes", label: "Gardes", icon: ShieldCheck, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
-  { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },
+  // Paramètres : visible par TOUS (lecture) ; édition gatée dans la page
+  // (canEditSettings) + serveur. Bloc paie masqué aux non-autorisés. Cf. CLAUDE.md.
+  { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings },
 ];
 
 export function Sidebar({
