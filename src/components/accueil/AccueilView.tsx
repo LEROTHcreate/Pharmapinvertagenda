@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { MyDayCard } from "@/components/accueil/MyDayCard";
 import { MyWeekCard } from "@/components/accueil/MyWeekCard";
 import { TeamNowCard } from "@/components/accueil/TeamNowCard";
+import { AccueilDesktop } from "@/components/accueil/AccueilDesktop";
 
 /**
  * Page Accueil — tableau de bord pensé pour le mobile.
@@ -80,7 +81,23 @@ export function AccueilView({
   const showMsgAlert = unreadMessages > 0;
 
   return (
-    <div className="p-4 md:px-6 md:py-5 space-y-4 max-w-2xl mx-auto">
+    <>
+    {/* Version desktop : tableau de bord large (masqué sous lg) */}
+    <AccueilDesktop
+      firstName={firstName}
+      dateLabel={dateLabel}
+      isAdmin={isAdmin}
+      myDay={myDay}
+      myWeek={myWeek}
+      nextSlot={nextSlot}
+      teamPresent={teamPresent}
+      presentBySlot={presentBySlot}
+      pendingAbsences={pendingAbsences}
+      unreadMessages={unreadMessages}
+    />
+
+    {/* Version mobile (inchangée) — masquée à partir de lg */}
+    <div className="lg:hidden p-4 md:px-6 md:py-5 space-y-4 max-w-2xl mx-auto">
       {/* Salutation */}
       <header>
         <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-foreground">
@@ -156,5 +173,6 @@ export function AccueilView({
         </div>
       </section>
     </div>
+    </>
   );
 }

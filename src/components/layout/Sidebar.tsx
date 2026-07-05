@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
 import {
+  Home,
   Calendar,
   Users,
   CalendarOff,
@@ -27,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import type { UserRole } from "@prisma/client";
 
 type NavKey =
+  | "accueil"
   | "planning"
   | "infos"
   | "gabarits"
@@ -48,6 +50,7 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
+  { key: "accueil", href: "/accueil", label: "Accueil", icon: Home },
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true },
