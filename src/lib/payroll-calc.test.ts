@@ -135,6 +135,33 @@ describe("computePayrollLine — heures sup à la QUINZAINE (BIWEEKLY)", () => {
   });
 });
 
+describe("computePayrollLine — réduction générale (charges selon salaire)", () => {
+  it("bas salaire (proche SMIC) : charges patronales réduites (< 42 %)", () => {
+    const line = computePayrollLine(
+      emp({ payMode: "HOURLY", hourlyGrossRate: 12, weeklyHours: 35 }),
+      taskHours(140), // 35h/sem → pas d'heures sup
+      MONTH
+    );
+    expect(line.reductionGenerale).toBeGreaterThan(0);
+    expect(line.socialContributionsEmployer).toBeLessThan(
+      line.grossEmployer * 0.42
+    );
+  });
+
+  it("salaire élevé (> 1,6 SMIC) : aucune réduction, ~42 %", () => {
+    const line = computePayrollLine(
+      emp({ payMode: "HOURLY", hourlyGrossRate: 30, weeklyHours: 35 }),
+      taskHours(140),
+      MONTH
+    );
+    expect(line.reductionGenerale).toBe(0);
+    expect(line.socialContributionsEmployer).toBeCloseTo(
+      line.grossEmployer * 0.42,
+      1
+    );
+  });
+});
+
 describe("computePayrollLine — mode HORAIRE", () => {
   it("paie les heures travaillées au taux (sous le contrat = pas d'heures sup)", () => {
     const line = computePayrollLine(

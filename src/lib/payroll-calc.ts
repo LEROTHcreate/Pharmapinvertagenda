@@ -52,6 +52,7 @@ import {
 } from "@prisma/client";
 import { type ScheduleEntryDTO, SLOT_HOURS } from "@/types";
 import { isWorkingDay } from "@/lib/planning-tips";
+import { smicHourlyAt } from "@/lib/payroll-reference";
 
 // Taux indicatifs par défaut — modifiables via la page paramètres pharmacie.
 export const DEFAULT_PAYROLL_RATES = {
@@ -69,6 +70,14 @@ export const DEFAULT_PAYROLL_RATES = {
   sickEmployerMaintenance: 0.9,
   /** Ancienneté minimale en mois pour bénéficier du maintien CC pharmacie */
   sickMaintenanceMinSeniorityMonths: 12,
+  /**
+   * Réduction générale des cotisations patronales (ex-« Fillon »).
+   * Coefficient MAX (au niveau du SMIC), dégressif jusqu'à 1,6 SMIC où il
+   * s'annule. Officines = entreprises < 50 salariés → T ≈ 0,3194 (valeur 2024,
+   * indicative). Met les charges patronales à ~10-15 % du brut près du SMIC au
+   * lieu de 42 %. 0 = désactive la réduction.
+   */
+  reductionGeneraleMaxCoef: 0.3194,
 } as const;
 
 export type PayrollRates = {
@@ -79,6 +88,7 @@ export type PayrollRates = {
   sickWaitingDays: number;
   sickEmployerMaintenance: number;
   sickMaintenanceMinSeniorityMonths: number;
+  reductionGeneraleMaxCoef: number;
 };
 
 export type EmployeeForPayroll = {
@@ -126,6 +136,9 @@ export type PayrollLine = {
   /** Taux horaire EFFECTIF utilisé (saisi en horaire, ou implicite =
    *  salaire mensuel / heures mensuelles contractuelles). Sert au benchmark. */
   effectiveHourlyRate: number | null;
+  /** Salaire mensuel brut ÉQUIVALENT (taux effectif × heures mensuelles
+   *  contractuelles) — pour afficher €/h ET €/mois quel que soit le mode. */
+  effectiveMonthlySalary: number | null;
   /** Coefficient saisi (null si estimé via ancienneté côté benchmark) */
   coefficient: number | null;
 
@@ -163,9 +176,13 @@ export type PayrollLine = {
   socialContributionsEmployee: number;
   /** Net approximatif (brut - cotisations salariales) */
   netEstimated: number;
-  /** Cotisations patronales (en plus, à charge de l'officine) */
+  /** Cotisations patronales NETTES (après réduction générale), à charge de
+   *  l'officine, en plus du brut. */
   socialContributionsEmployer: number;
-  /** Coût total pour l'officine (brut + patronales) */
+  /** Montant de la réduction générale des cotisations patronales appliquée
+   *  (0 si salaire ≥ 1,6 SMIC). Pour la transparence côté titulaire. */
+  reductionGenerale: number;
+  /** Coût total pour l'officine (brut + patronales nettes) */
   totalEmployerCost: number;
   /** Surcoût € dû AUX MAJORATIONS d'heures sup (part +25/+50 seule, hors base) */
   overtimePremiumCost: number;
@@ -379,8 +396,27 @@ export function computePayrollLine(
   // colonne réconcilie exactement : net affiché = brut affiché − cotis affichées.
   const netEstimated =
     round2(grossEmployer) - round2(socialContributionsEmployee);
+  // ─── Réduction générale des cotisations patronales (ex-« Fillon ») ──
+  // Coefficient dégressif : maximal au SMIC, nul à partir de 1,6 SMIC. On
+  // proratise le SMIC de référence aux heures contractuelles (temps partiel).
+  // Fait chuter les charges patronales des bas salaires (préparateurs,
+  // étudiants… proches du SMIC) bien en dessous de 42 %.
+  const smicRef = smicHourlyAt(month) * contractMonthlyHours;
+  const T = rates.reductionGeneraleMaxCoef;
+  let reductionGenerale = 0;
+  if (grossEmployer > 0 && smicRef > 0 && T > 0) {
+    const coef = Math.min(
+      T,
+      Math.max(0, (T / 0.6) * ((1.6 * smicRef) / grossEmployer - 1))
+    );
+    // La réduction ne peut excéder les cotisations patronales elles-mêmes.
+    reductionGenerale = Math.min(
+      coef * grossEmployer,
+      grossEmployer * rates.socialContributionsEmployer
+    );
+  }
   const socialContributionsEmployer =
-    grossEmployer * rates.socialContributionsEmployer;
+    grossEmployer * rates.socialContributionsEmployer - reductionGenerale;
   const totalEmployerCost = grossEmployer + socialContributionsEmployer;
 
   return {
@@ -392,6 +428,11 @@ export function computePayrollLine(
     hourlyGrossRate: rate,
     monthlyGrossSalary: employee.monthlyGrossSalary,
     effectiveHourlyRate: isMonthly ? round2(baseRate) : rate,
+    // Salaire mensuel équivalent (les deux modes) — null si aucune rému saisie.
+    effectiveMonthlySalary:
+      (isMonthly ? employee.monthlyGrossSalary != null : rate != null)
+        ? round2(baseRate * contractMonthlyHours)
+        : null,
     coefficient: employee.coefficient,
     taskHoursRegular,
     overtimeHours25,
@@ -408,6 +449,7 @@ export function computePayrollLine(
     socialContributionsEmployee: round2(socialContributionsEmployee),
     netEstimated: round2(netEstimated),
     socialContributionsEmployer: round2(socialContributionsEmployer),
+    reductionGenerale: round2(reductionGenerale),
     totalEmployerCost: round2(totalEmployerCost),
     overtimePremiumCost: round2(overtimePremiumCost),
   };

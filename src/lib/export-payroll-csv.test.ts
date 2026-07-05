@@ -11,6 +11,7 @@ const line: PayrollLine = {
   hourlyGrossRate: 14.5,
   monthlyGrossSalary: null,
   effectiveHourlyRate: 14.5,
+  effectiveMonthlySalary: 2199.2,
   coefficient: null,
   taskHoursRegular: 151.7,
   overtimeHours25: 4,
@@ -27,6 +28,7 @@ const line: PayrollLine = {
   socialContributionsEmployee: 501.71,
   netEstimated: 1778.79,
   socialContributionsEmployer: 957.81,
+  reductionGenerale: 0,
   totalEmployerCost: 3238.31,
   overtimePremiumCost: 14.5,
 };
