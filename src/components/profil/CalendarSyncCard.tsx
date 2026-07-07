@@ -22,9 +22,22 @@ export function CalendarSyncCard({ initialToken }: { initialToken: string | null
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Options d'abonnement (intégrées dans l'URL).
+  const [months, setMonths] = useState<1 | 2 | 3>(2);
+  const [includePast, setIncludePast] = useState(true);
+  const [includeAbsences, setIncludeAbsences] = useState(false);
+
+  const query = (() => {
+    const qs = new URLSearchParams();
+    qs.set("months", String(months));
+    if (!includePast) qs.set("past", "0");
+    if (includeAbsences) qs.set("absences", "1");
+    return qs.toString();
+  })();
+
   const feedUrl =
     token && typeof window !== "undefined"
-      ? `${window.location.origin}/api/ical/${token}`
+      ? `${window.location.origin}/api/ical/${token}?${query}`
       : null;
   // Schéma webcal:// → ouvre directement le dialogue d'abonnement sur
   // iPhone/Mac (Apple Calendrier) et la plupart des apps agenda.
@@ -98,6 +111,47 @@ export function CalendarSyncCard({ initialToken }: { initialToken: string | null
         </button>
       ) : (
         <div className="space-y-3">
+          {/* Réglages de l'abonnement (intégrés dans l'URL) */}
+          <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="ical-months" className="text-[12.5px] font-medium text-foreground">
+                Période à afficher
+              </label>
+              <select
+                id="ical-months"
+                value={months}
+                onChange={(e) => setMonths(Number(e.target.value) as 1 | 2 | 3)}
+                className="rounded-md border border-input bg-background px-2 py-1 text-[12.5px]"
+              >
+                <option value={1}>1 mois à venir</option>
+                <option value={2}>2 mois à venir</option>
+                <option value={3}>3 mois à venir</option>
+              </select>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-foreground/85">
+              <input
+                type="checkbox"
+                checked={includePast}
+                onChange={(e) => setIncludePast(e.target.checked)}
+                className="h-4 w-4 accent-violet-600"
+              />
+              Inclure les 2 dernières semaines (historique)
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-foreground/85">
+              <input
+                type="checkbox"
+                checked={includeAbsences}
+                onChange={(e) => setIncludeAbsences(e.target.checked)}
+                className="h-4 w-4 accent-violet-600"
+              />
+              Inclure mes absences (congés, maladie, formation)
+            </label>
+            <p className="text-[11px] text-muted-foreground">
+              Choisis avant d&apos;ajouter. Pour changer ensuite, ré-ajoute le lien
+              (bouton ou copie ci-dessous).
+            </p>
+          </div>
+
           {/* Ajout en 1 clic (iPhone / Mac / apps agenda gérant webcal://) */}
           {webcalUrl && (
             <a

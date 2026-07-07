@@ -15,9 +15,18 @@ export type IcalShift = {
   start: string;
   /** Fin "HH:MM" (exclu) */
   end: string;
+  /** Nature du bloc — sert à titrer/UID (travail vs absence). */
+  type: "TASK" | "ABSENCE";
+  /** Code d'absence si type = ABSENCE (Congé, Maladie…), sinon null. */
+  absenceCode: string | null;
 };
 
-type Entry = { date: string; timeSlot: string; type: string };
+type Entry = {
+  date: string;
+  timeSlot: string;
+  type: string;
+  absenceCode?: string | null;
+};
 
 const SLOT_MINUTES = 30;
 
@@ -29,39 +38,80 @@ function addMinutes(hhmm: string, minutes: number): string {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
+/** Clé de « même nature » pour décider si deux créneaux fusionnent. */
+function kindKey(type: string, absenceCode: string | null | undefined): string {
+  return type === "ABSENCE" ? `A:${absenceCode ?? ""}` : "T";
+}
+
 /**
- * Convertit les créneaux TASK en blocs continus (un VEVENT par bloc).
- * Fusionne les créneaux 30 min adjacents d'un même jour.
+ * Convertit les créneaux en blocs continus (un VEVENT par bloc). Fusionne les
+ * créneaux 30 min adjacents d'un même jour ET de même nature (même poste, ou
+ * même type d'absence). Par défaut : uniquement le travail (TASK). Passer
+ * `includeAbsences` pour émettre aussi les congés / maladies / formations.
  */
-export function entriesToShifts(entries: Entry[]): IcalShift[] {
-  const byDate = new Map<string, string[]>();
+export function entriesToShifts(
+  entries: Entry[],
+  includeAbsences = false
+): IcalShift[] {
+  const byDate = new Map<string, Entry[]>();
   for (const e of entries) {
-    if (e.type !== "TASK") continue;
+    const keep = e.type === "TASK" || (includeAbsences && e.type === "ABSENCE");
+    if (!keep) continue;
     const arr = byDate.get(e.date) ?? [];
-    arr.push(e.timeSlot);
+    arr.push(e);
     byDate.set(e.date, arr);
   }
 
   const shifts: IcalShift[] = [];
   for (const date of Array.from(byDate.keys()).sort()) {
-    const slots = Array.from(new Set(byDate.get(date)!)).sort();
-    let blockStart: string | null = null;
-    let prev: string | null = null;
-    for (const slot of slots) {
-      if (blockStart === null) {
-        blockStart = slot;
-      } else if (prev !== null && addMinutes(prev, SLOT_MINUTES) !== slot) {
-        // Rupture de continuité → on ferme le bloc précédent.
-        shifts.push({ date, start: blockStart, end: addMinutes(prev, SLOT_MINUTES) });
-        blockStart = slot;
+    // Tri par heure + dédup d'un même créneau (garde le premier).
+    const seen = new Set<string>();
+    const slots = byDate
+      .get(date)!
+      .slice()
+      .sort((a, b) => (a.timeSlot < b.timeSlot ? -1 : a.timeSlot > b.timeSlot ? 1 : 0))
+      .filter((s) => (seen.has(s.timeSlot) ? false : (seen.add(s.timeSlot), true)));
+
+    let cur:
+      | { start: string; prev: string; type: string; absenceCode: string | null }
+      | null = null;
+
+    for (const s of slots) {
+      const contiguous =
+        cur !== null &&
+        addMinutes(cur.prev, SLOT_MINUTES) === s.timeSlot &&
+        kindKey(cur.type, cur.absenceCode) === kindKey(s.type, s.absenceCode);
+      if (cur && !contiguous) {
+        shifts.push(closeBlock(date, cur));
+        cur = null;
       }
-      prev = slot;
+      if (!cur) {
+        cur = {
+          start: s.timeSlot,
+          prev: s.timeSlot,
+          type: s.type,
+          absenceCode: s.absenceCode ?? null,
+        };
+      } else {
+        cur.prev = s.timeSlot;
+      }
     }
-    if (blockStart !== null && prev !== null) {
-      shifts.push({ date, start: blockStart, end: addMinutes(prev, SLOT_MINUTES) });
-    }
+    if (cur) shifts.push(closeBlock(date, cur));
   }
   return shifts;
+}
+
+function closeBlock(
+  date: string,
+  cur: { start: string; prev: string; type: string; absenceCode: string | null }
+): IcalShift {
+  return {
+    date,
+    start: cur.start,
+    end: addMinutes(cur.prev, SLOT_MINUTES),
+    type: cur.type === "ABSENCE" ? "ABSENCE" : "TASK",
+    absenceCode: cur.type === "ABSENCE" ? cur.absenceCode : null,
+  };
 }
 
 function icsDateTime(dateIso: string, hhmm: string): string {
@@ -77,12 +127,20 @@ function esc(text: string): string {
     .replace(/\n/g, "\\n");
 }
 
-/** Construit le contenu .ics complet. `stamp` = DTSTAMP (YYYYMMDDTHHMMSSZ). */
+/**
+ * Construit le contenu .ics complet.
+ *  - `calName` : nom du calendrier + titre par défaut des créneaux de travail.
+ *  - `summaryFor(shift)` : titre d'un événement (permet de nommer les absences).
+ *  - `alarmMinutes` : si défini > 0, ajoute un rappel N min avant chaque créneau.
+ *  - `stamp` : DTSTAMP (YYYYMMDDTHHMMSSZ).
+ */
 export function buildICalendar(opts: {
   calName: string;
   location: string;
   shifts: IcalShift[];
   stamp: string;
+  summaryFor?: (s: IcalShift) => string;
+  alarmMinutes?: number;
 }): string {
   const lines: string[] = [
     "BEGIN:VCALENDAR",
@@ -95,16 +153,27 @@ export function buildICalendar(opts: {
   ];
 
   for (const s of opts.shifts) {
+    const summary = opts.summaryFor ? opts.summaryFor(s) : opts.calName;
+    const kind = s.type === "ABSENCE" ? `abs-${s.absenceCode ?? ""}` : "task";
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${s.date}-${s.start.replace(":", "")}@pharmaplanning`,
+      `UID:${s.date}-${s.start.replace(":", "")}-${kind}@pharmaplanning`,
       `DTSTAMP:${opts.stamp}`,
       `DTSTART:${icsDateTime(s.date, s.start)}`,
       `DTEND:${icsDateTime(s.date, s.end)}`,
-      `SUMMARY:${esc(opts.calName)}`,
-      `LOCATION:${esc(opts.location)}`,
-      "END:VEVENT"
+      `SUMMARY:${esc(summary)}`,
+      `LOCATION:${esc(opts.location)}`
     );
+    if (opts.alarmMinutes && opts.alarmMinutes > 0) {
+      lines.push(
+        "BEGIN:VALARM",
+        "ACTION:DISPLAY",
+        `DESCRIPTION:${esc(summary)}`,
+        `TRIGGER:-PT${Math.round(opts.alarmMinutes)}M`,
+        "END:VALARM"
+      );
+    }
+    lines.push("END:VEVENT");
   }
 
   lines.push("END:VCALENDAR");

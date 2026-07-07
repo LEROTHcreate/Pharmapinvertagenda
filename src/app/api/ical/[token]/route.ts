@@ -2,6 +2,8 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { prisma } from "@/lib/prisma";
 import { buildICalendar, entriesToShifts } from "@/lib/ical";
 import { toIsoDate } from "@/lib/planning-utils";
+import { ABSENCE_LABELS } from "@/types";
+import type { AbsenceCode } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,14 +11,17 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/ical/[token]
  *
- * Flux iCalendar PRIVÉ du planning d'un salarié. Le jeton (User.icalToken)
- * fait office d'authentification : il est non devinable et révocable. Pas de
- * session requise → un agenda (Google/Apple) peut s'y abonner directement.
+ * Flux iCalendar PRIVÉ du planning d'UN salarié (le jeton = son User.icalToken,
+ * lié à un seul employeeId → jamais les créneaux des collègues). Non devinable,
+ * révocable, pas de session requise → un agenda (Google/Apple) s'y abonne.
  *
- * Renvoie les créneaux travaillés de J-14 à J+60.
+ * Options (query, choisies à l'abonnement) :
+ *   months=1|2|3   fenêtre en avant (défaut 2)
+ *   past=0|1       inclure ~2 semaines d'historique (défaut 1)
+ *   absences=0|1   inclure aussi congés/maladie/formation (défaut 0)
  */
 async function GET__impl(
-  _req: Request,
+  req: Request,
   { params }: { params: { token: string } }
 ) {
   const token = params.token?.replace(/\.ics$/, "");
@@ -35,6 +40,13 @@ async function GET__impl(
     return new Response("Not found", { status: 404 });
   }
 
+  // ─── Options depuis l'URL d'abonnement ───────────────────────────
+  const sp = new URL(req.url).searchParams;
+  const monthsRaw = Number(sp.get("months"));
+  const months = [1, 2, 3].includes(monthsRaw) ? monthsRaw : 2;
+  const includePast = sp.get("past") !== "0"; // défaut : oui
+  const includeAbsences = sp.get("absences") === "1";
+
   const calName = `Planning — ${user.pharmacy?.name ?? "Pharmacie"}`;
   const location = user.pharmacy?.name ?? "Pharmacie";
 
@@ -42,30 +54,42 @@ async function GET__impl(
   if (user.employeeId) {
     const now = new Date();
     const from = new Date(now);
-    from.setUTCDate(from.getUTCDate() - 14);
+    from.setUTCDate(from.getUTCDate() - (includePast ? 14 : 0));
     const to = new Date(now);
-    to.setUTCDate(to.getUTCDate() + 60);
+    to.setUTCDate(to.getUTCDate() + months * 31);
 
     const entries = await prisma.scheduleEntry.findMany({
       where: {
         employeeId: user.employeeId,
-        type: "TASK",
         date: { gte: from, lte: to },
+        ...(includeAbsences ? {} : { type: "TASK" }),
       },
-      select: { date: true, timeSlot: true, type: true },
+      select: { date: true, timeSlot: true, type: true, absenceCode: true },
     });
     shifts = entriesToShifts(
       entries.map((e) => ({
         date: toIsoDate(e.date),
         timeSlot: e.timeSlot,
         type: e.type,
-      }))
+        absenceCode: e.absenceCode,
+      })),
+      includeAbsences
     );
   }
 
   const stamp =
     new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-  const ics = buildICalendar({ calName, location, shifts, stamp });
+  const ics = buildICalendar({
+    calName,
+    location,
+    shifts,
+    stamp,
+    // Titre : créneau de travail → nom du calendrier ; absence → son libellé.
+    summaryFor: (s) =>
+      s.type === "ABSENCE" && s.absenceCode
+        ? ABSENCE_LABELS[s.absenceCode as AbsenceCode] ?? "Absence"
+        : calName,
+  });
 
   return new Response(ics, {
     status: 200,
