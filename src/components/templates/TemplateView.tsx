@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft,
   Save,
   Loader2,
@@ -14,6 +21,7 @@ import {
   Redo2,
   ClipboardCopy,
   ClipboardPaste,
+  HelpCircle,
 } from "lucide-react";
 import type { AbsenceCode, ScheduleType, TaskCode } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -67,6 +75,17 @@ type ClipItem = {
     | { type: "TASK" | "ABSENCE"; taskCode: TaskCode | null; absenceCode: AbsenceCode | null }
     | null;
 };
+
+/** Liste des raccourcis affichés dans l'aide (touche « ? »). */
+const SHORTCUTS: Array<{ keys: string; label: string }> = [
+  { keys: "Ctrl / ⌘ + Z", label: "Annuler la dernière action" },
+  { keys: "Ctrl + Y  ·  Ctrl / ⌘ + Maj + Z", label: "Rétablir" },
+  { keys: "Ctrl / ⌘ + C", label: "Copier les cellules sélectionnées" },
+  { keys: "Ctrl / ⌘ + V", label: "Coller sur le jour affiché" },
+  { keys: "Suppr  ·  ⌫", label: "Vider les cellules sélectionnées" },
+  { keys: "Échap", label: "Annuler la sélection en cours" },
+  { keys: "?", label: "Afficher cette aide" },
+];
 
 type ParsedCell = { employeeId: string; date: string; timeSlot: string };
 function parseCellKey(k: CellKey): ParsedCell {
@@ -151,6 +170,10 @@ export function TemplateView({
   const [dirty, setDirty] = useState(false);
   // Confirmation avant de quitter le gabarit avec des modifs non enregistrées.
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // Destination en attente de confirmation (lien intercepté), ou null.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  // Panneau d'aide des raccourcis clavier.
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // ─── Historique annuler / rétablir ─────────────────────────────────────
   // Le gabarit vit en state local (pas dans le store Zustand du planning) : on
@@ -250,6 +273,18 @@ export function TemplateView({
     });
   }, [clipboard, dayIndex, commit, toast]);
 
+  /** Vide les cellules sélectionnées (Suppr / ⌫) — un seul pas d'historique. */
+  const deleteSelectedCells = useCallback(() => {
+    const cells = Array.from(multiSelection).map(parseCellKey);
+    if (cells.length === 0) return;
+    let next = entriesRef.current;
+    cells.forEach((c) => {
+      next = applyUpsert(next, c.employeeId, parseDayKey(c.date), c.timeSlot, null);
+    });
+    commit(next);
+    setMultiSelection(new Set());
+  }, [multiSelection, commit]);
+
   // Marque dirty au changement de nom (au-delà de l'init)
   useEffect(() => {
     if (name !== initialName) setDirty(true);
@@ -265,6 +300,30 @@ export function TemplateView({
     }
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
+  // Garde-fou navigation interne : tant qu'il reste des modifs non enregistrées,
+  // on intercepte (phase capture) tout clic sur un lien interne — barre latérale,
+  // bouton Retour, etc. — pour demander confirmation avant de quitter la page.
+  useEffect(() => {
+    if (!dirty) return;
+    function onClickCapture(e: MouseEvent) {
+      if (e.defaultPrevented) return;
+      // On laisse passer les clics « ouvrir dans un onglet » (Ctrl/⌘/Maj/clic milieu).
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as HTMLElement | null)?.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      // Liens internes uniquement (on ignore externes, ancres, target=_blank).
+      if (!href || !href.startsWith("/")) return;
+      if (anchor.getAttribute("target") === "_blank") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPendingHref(href);
+      setConfirmLeave(true);
+    }
+    document.addEventListener("click", onClickCapture, true);
+    return () => document.removeEventListener("click", onClickCapture, true);
   }, [dirty]);
 
   const dayDates = useMemo(() => [0, 1, 2, 3, 4, 5].map(dayKey), []);
@@ -337,6 +396,28 @@ export function TemplateView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [multiSelection.size, clipboard.length, copySelection, pasteToCurrentDay]);
+
+  // Suppr / ⌫ = vider la sélection ; « ? » = ouvrir/fermer l'aide raccourcis.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const inField =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (inField) return;
+      if ((e.key === "Delete" || e.key === "Backspace") && multiSelection.size > 0) {
+        e.preventDefault();
+        deleteSelectedCells();
+      } else if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [multiSelection.size, deleteSelectedCells]);
 
   // Reset selection quand on change de jour
   useEffect(() => {
@@ -554,17 +635,9 @@ export function TemplateView({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button asChild variant="outline" size="sm">
-            <Link
-              href="/gabarits"
-              onClick={(e) => {
-                // Modifs non enregistrées → on bloque la navigation et on
-                // demande confirmation pour éviter de perdre le travail.
-                if (dirty) {
-                  e.preventDefault();
-                  setConfirmLeave(true);
-                }
-              }}
-            >
+            {/* La confirmation « modifs non enregistrées » est gérée globalement
+                par l'intercepteur de clics (garde-fou navigation ci-dessus). */}
+            <Link href="/gabarits">
               <ArrowLeft className="h-4 w-4" />
               Retour
             </Link>
@@ -592,6 +665,17 @@ export function TemplateView({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Aide des raccourcis clavier (aussi via la touche « ? ») */}
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9"
+            onClick={() => setShowShortcuts(true)}
+            title="Raccourcis clavier (?)"
+            aria-label="Raccourcis clavier"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
           {/* Annuler / rétablir — raccourcis Ctrl+Z / Ctrl+Y (ou ⌘) */}
           <div className="flex items-center gap-1">
             <Button
@@ -763,11 +847,41 @@ export function TemplateView({
         confirmLabel="Quitter sans enregistrer"
         cancelLabel="Rester sur le gabarit"
         onConfirm={() => {
+          const href = pendingHref ?? "/gabarits";
           setConfirmLeave(false);
-          router.push("/gabarits");
+          setPendingHref(null);
+          router.push(href);
         }}
-        onClose={() => setConfirmLeave(false)}
+        onClose={() => {
+          setConfirmLeave(false);
+          setPendingHref(null);
+        }}
       />
+
+      {/* Aide-mémoire des raccourcis clavier (touche « ? ») */}
+      <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Raccourcis clavier</DialogTitle>
+            <DialogDescription>
+              Pour éditer le gabarit plus vite au clavier.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-1.5">
+            {SHORTCUTS.map((s) => (
+              <li
+                key={s.keys}
+                className="flex items-center justify-between gap-4 text-sm"
+              >
+                <span className="text-muted-foreground">{s.label}</span>
+                <kbd className="shrink-0 rounded-md border border-border bg-muted px-2 py-1 font-mono text-[11px] font-medium">
+                  {s.keys}
+                </kbd>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
 
       {/* Barre flottante multi-sélection */}
       {multiSelection.size > 0 && (
