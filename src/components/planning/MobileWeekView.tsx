@@ -73,7 +73,12 @@ export function MobileWeekView({
   const counterStaffIds = useMemo(
     () =>
       employees
-        .filter((e) => e.status === "PHARMACIEN" || e.status === "PREPARATEUR")
+        .filter(
+          (e) =>
+            e.status === "PHARMACIEN" ||
+            e.status === "PREPARATEUR" ||
+            e.status === "ETUDIANT"
+        )
         .map((e) => e.id),
     [employees]
   );

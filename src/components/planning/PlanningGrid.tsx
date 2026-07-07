@@ -366,13 +366,17 @@ export const PlanningGrid = memo(function PlanningGrid({
     selectionRef.current = selection;
   }, [selection]);
 
-  // Effectif comptoir : on ne compte QUE pharmaciens + préparateurs.
-  // Les livreurs, secrétaires, back-office, étudiants… ne couvrent pas le
-  // comptoir → exclus du compteur "min" affiché à droite de la grille.
+  // Effectif comptoir : pharmaciens + préparateurs + étudiants (les étudiants
+  // ne peuvent faire QUE du comptoir → ils y comptent). Les livreurs,
+  // secrétaires, back-office ne couvrent pas le comptoir → exclus du compteur
+  // "min" affiché à droite de la grille.
   const counterStaff = useMemo(
     () =>
       employees.filter(
-        (e) => e.status === "PHARMACIEN" || e.status === "PREPARATEUR"
+        (e) =>
+          e.status === "PHARMACIEN" ||
+          e.status === "PREPARATEUR" ||
+          e.status === "ETUDIANT"
       ),
     [employees]
   );
