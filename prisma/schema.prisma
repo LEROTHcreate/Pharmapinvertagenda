@@ -426,6 +426,8 @@ model WeekTemplate {
   id       String   @id @default(cuid())
   name     String                              // Ex: "Semaine type S1 standard"
   weekType WeekType                            // S1 ou S2
+  category String?                             // Classement libre selon les besoins (ex: "Vacances scolaires", "Renfort", "Été")
+  description String?                          // Note libre décrivant l'usage du gabarit
   isActive Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

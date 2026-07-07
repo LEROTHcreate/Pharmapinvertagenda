@@ -148,6 +148,8 @@ export function TemplateView({
   templateId,
   weekType,
   initialName,
+  initialCategory,
+  initialDescription,
   employees,
   initialEntries,
 }: {
@@ -155,6 +157,10 @@ export function TemplateView({
   templateId?: string;
   weekType: "S1" | "S2";
   initialName: string;
+  /** Classement libre (ex: "Vacances scolaires"). Null/absent = sans catégorie. */
+  initialCategory?: string | null;
+  /** Note libre décrivant l'usage du gabarit. */
+  initialDescription?: string | null;
   employees: EmployeeDTO[];
   initialEntries: TemplateEntryDTO[];
 }) {
@@ -162,6 +168,8 @@ export function TemplateView({
   const { toast } = useToast();
   const [entries, setEntries] = useState<TemplateEntryDTO[]>(initialEntries);
   const [name, setName] = useState(initialName);
+  const [category, setCategory] = useState(initialCategory ?? "");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [dayIndex, setDayIndex] = useState(0); // Lun par défaut
   const [selection, setSelection] = useState<Selection>(null);
   const [multiSelection, setMultiSelection] = useState<Set<CellKey>>(new Set());
@@ -285,10 +293,16 @@ export function TemplateView({
     setMultiSelection(new Set());
   }, [multiSelection, commit]);
 
-  // Marque dirty au changement de nom (au-delà de l'init)
+  // Marque dirty au changement de nom / catégorie / note (au-delà de l'init)
   useEffect(() => {
-    if (name !== initialName) setDirty(true);
-  }, [name, initialName]);
+    if (
+      name !== initialName ||
+      category !== (initialCategory ?? "") ||
+      description !== (initialDescription ?? "")
+    ) {
+      setDirty(true);
+    }
+  }, [name, category, description, initialName, initialCategory, initialDescription]);
 
   // Garde-fou navigateur : prévient à la fermeture / au rafraîchissement de
   // l'onglet tant qu'il reste des modifications non enregistrées.
@@ -538,6 +552,8 @@ export function TemplateView({
     // par le serveur pour rediriger → on garde le mode bloquant pour ce
     // cas seulement (rare, premier save uniquement).
     const isCreate = !templateId;
+    const trimmedCategory = category.trim();
+    const trimmedDescription = description.trim();
 
     if (isCreate) {
       // Création : mode bloquant car on a besoin de l'id retourné
@@ -546,7 +562,13 @@ export function TemplateView({
         const res = await fetch("/api/templates", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ weekType, name: trimmedName, entries }),
+          body: JSON.stringify({
+            weekType,
+            name: trimmedName,
+            category: trimmedCategory,
+            description: trimmedDescription,
+            entries,
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -584,7 +606,14 @@ export function TemplateView({
     fetch("/api/templates", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: templateId, weekType, name: trimmedName, entries }),
+      body: JSON.stringify({
+        id: templateId,
+        weekType,
+        name: trimmedName,
+        category: trimmedCategory,
+        description: trimmedDescription,
+        entries,
+      }),
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -659,9 +688,26 @@ export function TemplateView({
               maxLength={80}
               className="mt-1 h-9 max-w-md border-0 border-b border-zinc-200 bg-transparent px-0 text-xl font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-2xl"
             />
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Définis le planning idéal — il sera appliqué à la semaine de ton choix.
-            </p>
+            {/* Classement libre + note — servent à ranger le gabarit selon les
+                besoins et à décrire son usage (visibles sur sa carte). */}
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                maxLength={40}
+                placeholder="Catégorie (ex : Vacances scolaires)"
+                className="h-8 w-full max-w-[240px] rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              />
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={280}
+                placeholder="Note (à quoi sert ce gabarit ?)"
+                className="h-8 w-full max-w-md rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              />
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

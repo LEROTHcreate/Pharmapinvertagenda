@@ -22,13 +22,40 @@ export const templateEntryInput = z
 
 export const weekTypeEnum = z.enum(["S1", "S2"]);
 
+/** Classement libre + note — bornés pour rester compacts en base et à l'écran. */
+export const templateCategory = z.string().trim().max(40).nullish();
+export const templateDescription = z.string().trim().max(280).nullish();
+
 export const upsertTemplateInput = z.object({
   /** Si présent : update du gabarit existant. Sinon : nouveau gabarit. */
   id: z.string().min(1).optional(),
   weekType: weekTypeEnum,
   name: z.string().trim().min(1, "Nom requis").max(80),
+  category: templateCategory,
+  description: templateDescription,
   entries: z.array(templateEntryInput).max(2000),
 });
+
+/**
+ * Édition rapide des métadonnées d'un gabarit (nom / catégorie / note), SANS
+ * toucher aux créneaux — sert à l'édition inline depuis la liste des gabarits.
+ * Tous les champs sont optionnels : on n'applique que ceux fournis.
+ */
+export const patchTemplateMetaInput = z
+  .object({
+    name: z.string().trim().min(1, "Nom requis").max(80).optional(),
+    category: templateCategory,
+    description: templateDescription,
+    weekType: weekTypeEnum.optional(),
+  })
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.category !== undefined ||
+      v.description !== undefined ||
+      v.weekType !== undefined,
+    { message: "Aucune modification fournie" }
+  );
 
 export const applyTemplateInput = z.object({
   weekStart: isoDate,
@@ -67,4 +94,5 @@ export const applyBatchInput = z
 
 export type TemplateEntryInput = z.infer<typeof templateEntryInput>;
 export type UpsertTemplateInput = z.infer<typeof upsertTemplateInput>;
+export type PatchTemplateMetaInput = z.infer<typeof patchTemplateMetaInput>;
 export type ApplyBatchInput = z.infer<typeof applyBatchInput>;
