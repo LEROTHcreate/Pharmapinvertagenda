@@ -101,6 +101,16 @@ const TYPE_CONFIG: Record<
   },
 };
 
+/** Effets « jour J » par type : lueur de la carte + emojis qui flottent. */
+const TYPE_FX: Record<TeamEventType, { glow: string; emojis: string[] }> = {
+  REPAS: { glow: "rgba(245,158,11,0.55)", emojis: ["🍽️", "🥂", "🍷", "😋", "🎉"] },
+  ANIMATION_LABO: { glow: "rgba(168,85,247,0.55)", emojis: ["🧪", "✨", "💊", "🔬", "🎈"] },
+  REUNION_FOURNISSEUR: { glow: "rgba(14,165,233,0.5)", emojis: ["🤝", "📦", "📋", "✨"] },
+  ENTRETIEN: { glow: "rgba(16,185,129,0.5)", emojis: ["💬", "🌟", "✨"] },
+  FORMATION: { glow: "rgba(99,102,241,0.5)", emojis: ["🎓", "📚", "✏️", "✨"] },
+  AUTRE: { glow: "rgba(244,63,94,0.55)", emojis: ["🎉", "🎊", "🥳", "✨"] },
+};
+
 const WEEKDAYS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 const MONTHS = [
   "janv.", "févr.", "mars", "avr.", "mai", "juin",
@@ -148,8 +158,27 @@ export function TeamEventsPanel({
     }
   }
 
+  // Événements du JOUR → déclenche la fête (emojis flottants + bandeau).
+  const todayEvents = events.filter((e) => daysUntil(e.date) <= 0);
+  const todayEmojis = Array.from(
+    new Set(todayEvents.flatMap((e) => TYPE_FX[e.type].emojis))
+  );
+
   return (
-    <section className="rounded-2xl border border-border bg-card/60 p-4 shadow-sm">
+    <section className="relative overflow-hidden rounded-2xl border border-border bg-card/60 p-4 shadow-sm">
+      {/* Pluie d'emojis thématiques le jour d'un événement */}
+      {todayEvents.length > 0 && <TodayCelebration emojis={todayEmojis} />}
+
+      {/* Bandeau festif « c'est le jour ! » */}
+      {todayEvents.length > 0 && (
+        <div className="tev-today-banner relative mb-3 rounded-xl bg-gradient-to-r from-amber-200 via-rose-200 to-violet-200 px-3 py-2 text-center text-[12.5px] font-semibold text-foreground shadow-sm dark:from-amber-500/30 dark:via-rose-500/30 dark:to-violet-500/30">
+          <span className="tev-wiggle mr-1 inline-block">🎉</span>
+          {todayEvents.length === 1
+            ? `Aujourd'hui : ${todayEvents[0].title} !`
+            : `${todayEvents.length} événements aujourd'hui !`}
+        </div>
+      )}
+
       {/* En-tête festif */}
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -179,13 +208,14 @@ export function TeamEventsPanel({
       {events.length === 0 ? (
         <EmptyState canManage={canManage} />
       ) : (
-        <ul className="space-y-3">
+        <ul className="relative space-y-3">
           {events.map((ev) => (
             <EventCard
               key={ev.id}
               ev={ev}
               canManage={canManage}
               deleting={deleting === ev.id}
+              isToday={daysUntil(ev.date) <= 0}
               onEdit={() => {
                 setEditTarget(ev);
                 setFormOpen(true);
@@ -217,16 +247,19 @@ function EventCard({
   ev,
   canManage,
   deleting,
+  isToday,
   onEdit,
   onDelete,
 }: {
   ev: TeamEventRow;
   canManage: boolean;
   deleting: boolean;
+  isToday: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const cfg = TYPE_CONFIG[ev.type];
+  const fx = TYPE_FX[ev.type];
   const d = new Date(`${ev.date}T00:00:00`);
   const soon = daysUntil(ev.date) <= 2;
 
@@ -235,9 +268,17 @@ function EventCard({
       className={cn(
         "group/ev relative overflow-hidden rounded-2xl bg-gradient-to-br p-3 ring-1 transition-transform duration-200 hover:-translate-y-0.5",
         cfg.card,
+        isToday ? "tev-today-card ring-2" : "ring-1",
         cfg.ring
       )}
+      style={isToday ? ({ ["--glow"]: fx.glow } as React.CSSProperties) : undefined}
     >
+      {/* Ruban « c'est aujourd'hui » */}
+      {isToday && (
+        <div className="absolute right-0 top-0 z-10 rounded-bl-lg bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-foreground shadow-sm dark:bg-black/40">
+          <span className="tev-wiggle mr-0.5 inline-block">🎉</span> Aujourd&apos;hui
+        </div>
+      )}
       {/* Reflet doux qui balaie la carte au survol */}
       <span
         aria-hidden
@@ -258,7 +299,13 @@ function EventCard({
               {MONTHS[d.getMonth()]}
             </span>
           </div>
-          <span className={cn("mt-1 text-[22px] leading-none", cfg.anim)}>
+          <span
+            className={cn(
+              "mt-1 leading-none",
+              isToday ? "text-[30px]" : "text-[22px]",
+              cfg.anim
+            )}
+          >
             {cfg.emoji}
           </span>
         </div>
@@ -339,6 +386,63 @@ function EventCard({
         )}
       </div>
     </li>
+  );
+}
+
+/* ─── Pluie d'emojis le jour d'un événement ─────────────────────── */
+
+type FloatBit = {
+  emoji: string;
+  left: number;
+  delay: number;
+  dur: number;
+  size: number;
+  drift: number;
+};
+
+function TodayCelebration({ emojis }: { emojis: string[] }) {
+  // Généré côté client (après montage) pour éviter tout écart d'hydratation
+  // dû au hasard des positions.
+  const [bits, setBits] = useState<FloatBit[]>([]);
+  useEffect(() => {
+    if (emojis.length === 0) {
+      setBits([]);
+      return;
+    }
+    const arr: FloatBit[] = Array.from({ length: 16 }, (_, i) => ({
+      emoji: emojis[i % emojis.length],
+      left: Math.round(Math.random() * 100),
+      delay: Math.round(Math.random() * 4000) / 1000,
+      dur: 4 + Math.round(Math.random() * 4000) / 1000,
+      size: 14 + Math.round(Math.random() * 16),
+      drift: Math.round((Math.random() * 2 - 1) * 40),
+    }));
+    setBits(arr);
+  }, [emojis]);
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+    >
+      {bits.map((b, i) => (
+        <span
+          key={i}
+          className="tev-float absolute bottom-0 select-none"
+          style={
+            {
+              left: `${b.left}%`,
+              fontSize: `${b.size}px`,
+              animationDelay: `${b.delay}s`,
+              animationDuration: `${b.dur}s`,
+              ["--drift"]: `${b.drift}px`,
+            } as React.CSSProperties
+          }
+        >
+          {b.emoji}
+        </span>
+      ))}
+    </div>
   );
 }
 
