@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Newspaper, ExternalLink, ChevronRight } from "lucide-react";
 import type { NewsItem } from "@/lib/pharmacy-news";
@@ -7,12 +8,12 @@ import { cn } from "@/lib/utils";
 
 /**
  * Barre latérale « Actus » du tableau de bord — dernières infos pharmacie qui
- * défilent verticalement en continu (pause au survol / focus clavier). Chaque
- * item est cliquable (article externe, nouvel onglet) ; en-tête vers /infos
- * pour le détail complet.
+ * défilent verticalement en continu. Chaque item est cliquable (article externe).
  *
- * Le défilement est une simple animation CSS (translateY 0 → −50 % sur une
- * liste dupliquée = boucle continue), désactivée s'il y a trop peu d'items.
+ * Défilement : conteneur RÉELLEMENT scrollable + auto-scroll JS (requestAnim).
+ * Au survol (ou au toucher) l'auto-scroll se met en pause → l'utilisateur peut
+ * alors faire défiler la liste À LA MOLETTE (haut/bas), puis ça reprend tout
+ * seul. Boucle continue grâce à la liste dupliquée (reset à la moitié).
  */
 export function AccueilNews({
   items,
@@ -21,17 +22,50 @@ export function AccueilNews({
   items: NewsItem[];
   className?: string;
 }) {
-  if (items.length === 0) return null;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pausedRef = useRef(false);
 
   const animate = items.length >= 4;
-  // Vitesse constante : ~5 s par item (aller simple sur la moitié dupliquée).
-  const duration = Math.max(24, items.length * 5);
   const loop = animate ? [...items, ...items] : items;
+
+  useEffect(() => {
+    if (!animate) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    let last = 0;
+    const SPEED = 22; // px / seconde (défilement doux)
+
+    const step = (now: number) => {
+      if (last === 0) last = now;
+      const dt = now - last;
+      last = now;
+      // Auto-scroll uniquement si non-pausé ET si le contenu déborde.
+      if (!pausedRef.current && el.scrollHeight > el.clientHeight + 1) {
+        el.scrollTop += (SPEED * dt) / 1000;
+        const half = el.scrollHeight / 2;
+        if (el.scrollTop >= half) el.scrollTop -= half; // boucle sans couture
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [animate, items.length]);
+
+  if (items.length === 0) return null;
+
+  const pause = () => {
+    pausedRef.current = true;
+  };
+  const resume = () => {
+    pausedRef.current = false;
+  };
 
   return (
     <section
       className={cn(
-        "accueil-news flex flex-col rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
+        "flex flex-col rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
         className
       )}
     >
@@ -51,21 +85,20 @@ export function AccueilNews({
         </Link>
       </div>
 
-      {/* Zone défilante (masque en fondu haut/bas) */}
-      <div className="relative h-[240px] overflow-hidden lg:h-[360px] [mask-image:linear-gradient(to_bottom,transparent,#000_10%,#000_90%,transparent)]">
-        <ul
-          className={cn("accueil-news-track", animate && "will-change-transform")}
-          style={
-            animate
-              ? {
-                  animationName: "accueil-news-scroll",
-                  animationDuration: `${duration}s`,
-                  animationTimingFunction: "linear",
-                  animationIterationCount: "infinite",
-                }
-              : undefined
-          }
-        >
+      {/* Zone scrollable (molette au survol) + fondu haut/bas.
+          Barre de défilement masquée pour l'esthétique, mais le scroll molette
+          reste actif. */}
+      <div
+        ref={scrollRef}
+        onMouseEnter={pause}
+        onMouseLeave={resume}
+        onFocus={pause}
+        onBlur={resume}
+        onTouchStart={pause}
+        onTouchEnd={resume}
+        className="relative h-[240px] overflow-y-auto overscroll-contain lg:h-[360px] [mask-image:linear-gradient(to_bottom,transparent,#000_10%,#000_90%,transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <ul>
           {loop.map((n, i) => (
             <li key={`${n.link}-${i}`}>
               <a
@@ -98,13 +131,6 @@ export function AccueilNews({
           ))}
         </ul>
       </div>
-
-      {/* Animation + pause au survol / focus (défilement des actus). */}
-      <style>{`
-        @keyframes accueil-news-scroll { to { transform: translateY(-50%); } }
-        .accueil-news:hover .accueil-news-track,
-        .accueil-news:focus-within .accueil-news-track { animation-play-state: paused; }
-      `}</style>
     </section>
   );
 }
