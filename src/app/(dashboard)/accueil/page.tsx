@@ -11,6 +11,7 @@ import {
 } from "@/types";
 import type { TaskCode, AbsenceCode } from "@prisma/client";
 import { toIsoDate, startOfWeek, weekDays } from "@/lib/planning-utils";
+import { GARDE_TYPE_LABELS } from "@/lib/gardes";
 import { getMessagesUnreadCounts } from "@/lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function AccueilPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const isAdmin = isAdminLevel(session.user.role);
+  const pharmacyId = session.user.pharmacyId;
 
   const today = new Date();
   const todayIso = toIsoDate(today);
@@ -49,72 +51,124 @@ export default async function AccueilPage() {
   const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 3600 * 1000);
   const weekDatesIso = weekDays(monday).map(toIsoDate);
 
-  const [sessionEmployee, todayEntries, weekEntries, pendingAbsences, unread] =
-    await Promise.all([
-      session.user.employeeId
-        ? prisma.employee.findUnique({
-            where: { id: session.user.employeeId },
-            select: { firstName: true, weeklyHours: true },
-          })
-        : Promise.resolve(null),
-      prisma.scheduleEntry.findMany({
-        where: {
-          pharmacyId: session.user.pharmacyId,
-          date: { gte: dayStart, lt: dayEnd },
-        },
-        select: {
-          employeeId: true,
-          timeSlot: true,
-          type: true,
-          taskCode: true,
-          absenceCode: true,
-        },
-      }),
-      // Entrées de la semaine de l'utilisateur (récap heures + prochain créneau).
-      session.user.employeeId
-        ? prisma.scheduleEntry.findMany({
-            where: {
-              employeeId: session.user.employeeId,
-              date: { gte: weekStart, lt: weekEnd },
-            },
-            select: {
-              date: true,
-              timeSlot: true,
-              type: true,
-              taskCode: true,
-              absenceCode: true,
-            },
-          })
-        : Promise.resolve([]),
-      // Absences à valider (admin uniquement).
-      isAdmin
-        ? prisma.absenceRequest.count({
-            where: { pharmacyId: session.user.pharmacyId, status: "PENDING" },
-          })
-        : Promise.resolve(0),
-      // Messages non lus (swap + texte).
-      getMessagesUnreadCounts(session.user.id),
-    ]);
+  const [
+    employees,
+    sessionEmployee,
+    todayEntries,
+    weekEntries,
+    pendingAbsences,
+    nextGardeRaw,
+    unread,
+  ] = await Promise.all([
+    // Équipe active (pour nommer présents / absents du jour).
+    prisma.employee.findMany({
+      where: { pharmacyId, isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
+      select: { id: true, firstName: true, lastName: true, displayColor: true },
+    }),
+    session.user.employeeId
+      ? prisma.employee.findUnique({
+          where: { id: session.user.employeeId },
+          select: { firstName: true, weeklyHours: true },
+        })
+      : Promise.resolve(null),
+    prisma.scheduleEntry.findMany({
+      where: {
+        pharmacyId,
+        date: { gte: dayStart, lt: dayEnd },
+      },
+      select: {
+        employeeId: true,
+        timeSlot: true,
+        type: true,
+        taskCode: true,
+        absenceCode: true,
+      },
+    }),
+    // Entrées de la semaine de l'utilisateur (récap heures + prochain créneau).
+    session.user.employeeId
+      ? prisma.scheduleEntry.findMany({
+          where: {
+            employeeId: session.user.employeeId,
+            date: { gte: weekStart, lt: weekEnd },
+          },
+          select: {
+            date: true,
+            timeSlot: true,
+            type: true,
+            taskCode: true,
+            absenceCode: true,
+          },
+        })
+      : Promise.resolve([]),
+    // Absences à valider (admin uniquement).
+    isAdmin
+      ? prisma.absenceRequest.count({
+          where: { pharmacyId, status: "PENDING" },
+        })
+      : Promise.resolve(0),
+    // Prochaine garde (visible par tous) — savoir qui est de garde et quand.
+    prisma.garde.findFirst({
+      where: { pharmacyId, date: { gte: dayStart } },
+      orderBy: { date: "asc" },
+      select: {
+        date: true,
+        type: true,
+        pharmacist: { select: { firstName: true, lastName: true } },
+      },
+    }),
+    // Messages non lus (swap + texte).
+    getMessagesUnreadCounts(session.user.id),
+  ]);
 
   const unreadMessages = unread.swap + unread.text;
+  const nameById = new Map(
+    employees.map((e) => [e.id, `${e.firstName} ${e.lastName.charAt(0)}.`])
+  );
+  const colorById = new Map(employees.map((e) => [e.id, e.displayColor]));
 
   // Présents = employés distincts avec au moins une TÂCHE aujourd'hui (total jour).
   const presentSet = new Set<string>();
   // Présents PAR CRÉNEAU → décompte "en poste en ce moment" côté client.
   const slotSets = new Map<string, Set<string>>();
+  // Absents du jour (au moins une cellule ABSENCE, aucune TÂCHE).
+  const taskEmp = new Set<string>();
+  const absenceByEmp = new Map<string, AbsenceCode>();
   for (const e of todayEntries as Entry[]) {
-    if (e.type !== "TASK") continue;
-    presentSet.add(e.employeeId);
-    let set = slotSets.get(e.timeSlot);
-    if (!set) {
-      set = new Set();
-      slotSets.set(e.timeSlot, set);
+    if (e.type === "TASK") {
+      taskEmp.add(e.employeeId);
+      presentSet.add(e.employeeId);
+      let set = slotSets.get(e.timeSlot);
+      if (!set) {
+        set = new Set();
+        slotSets.set(e.timeSlot, set);
+      }
+      set.add(e.employeeId);
+    } else if (e.type === "ABSENCE" && e.absenceCode) {
+      if (!absenceByEmp.has(e.employeeId))
+        absenceByEmp.set(e.employeeId, e.absenceCode);
     }
-    set.add(e.employeeId);
   }
   const teamPresent = presentSet.size;
   const presentBySlot: Record<string, number> = {};
   for (const [slot, set] of slotSets) presentBySlot[slot] = set.size;
+
+  // Qui travaille aujourd'hui (ordre équipe) + qui est absent.
+  const presentToday = employees
+    .filter((e) => presentSet.has(e.id))
+    .map((e) => ({
+      id: e.id,
+      name: `${e.firstName} ${e.lastName.charAt(0)}.`,
+      color: e.displayColor,
+    }));
+  const absentsToday = [...absenceByEmp.entries()]
+    .filter(([id]) => !taskEmp.has(id)) // absence pleine journée (aucune tâche)
+    .map(([id, code]) => ({
+      id,
+      name: nameById.get(id) ?? "—",
+      color: colorById.get(id) ?? "#a1a1aa",
+      label: ABSENCE_LABELS[code],
+    }));
 
   // Ma journée : blocs contigus (même tâche/absence) compactés.
   let myDay: {
@@ -207,6 +261,28 @@ export default async function AccueilPage() {
     }
   }
 
+  // Prochaine garde formatée (déterministe côté serveur).
+  const nextGarde = nextGardeRaw
+    ? (() => {
+        const iso = toIsoDate(nextGardeRaw.date);
+        const daysUntil = Math.round(
+          (Date.parse(`${iso}T00:00:00Z`) -
+            Date.parse(`${todayIso}T00:00:00Z`)) /
+            86_400_000
+        );
+        return {
+          name: `${nextGardeRaw.pharmacist.firstName} ${nextGardeRaw.pharmacist.lastName.charAt(0)}.`,
+          typeLabel: GARDE_TYPE_LABELS[nextGardeRaw.type],
+          dateLabel: new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          }),
+          daysUntil,
+        };
+      })()
+    : null;
+
   const dateLabel = today.toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
@@ -222,7 +298,11 @@ export default async function AccueilPage() {
       myWeek={myWeek}
       nextSlot={nextSlot}
       teamPresent={teamPresent}
+      teamSize={employees.length}
       presentBySlot={presentBySlot}
+      presentToday={presentToday}
+      absentsToday={absentsToday}
+      nextGarde={nextGarde}
       pendingAbsences={pendingAbsences}
       unreadMessages={unreadMessages}
     />

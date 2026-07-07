@@ -16,20 +16,19 @@ import { cn } from "@/lib/utils";
 import { MyDayCard } from "@/components/accueil/MyDayCard";
 import { MyWeekCard } from "@/components/accueil/MyWeekCard";
 import { TeamNowStat } from "@/components/accueil/TeamNowStat";
+import { StaffingStrip } from "@/components/accueil/StaffingStrip";
+import { TeamTodayCard } from "@/components/accueil/TeamTodayCard";
+import { NextGardeCard } from "@/components/accueil/NextGardeCard";
+import { Greeting } from "@/components/accueil/Greeting";
+import type { AccueilData } from "@/components/accueil/types";
 
 /**
- * Tableau de bord ACCUEIL — version desktop (large écran).
+ * Tableau de bord ACCUEIL — version desktop (large écran, ≥ lg).
  *
- * Exploite la largeur de l'écran : bandeau de KPIs cliquables + colonne
- * principale (ma journée / ma semaine) + colonne de raccourcis. La version
- * mobile (AccueilView) reste inchangée ; ce composant est masqué sous `lg`.
- *
- * S'appuie uniquement sur les données déjà fournies par la page — aucune
- * requête supplémentaire. Les KPIs paie / conformité CCN / échéances RH
- * pourront enrichir ce bandeau dans un second temps.
+ * Bandeau de KPIs cliquables → colonne principale (ma journée, affluence,
+ * ma semaine) + colonne latérale (équipe du jour, prochaine garde, raccourcis).
+ * Toutes les données viennent de la page ; aucune requête ici.
  */
-
-type DayBlock = { from: string; to: string; label: string; isAbsence: boolean };
 
 const TONE: Record<string, { box: string; hover: string }> = {
   amber: {
@@ -50,18 +49,20 @@ const TONE: Record<string, { box: string; hover: string }> = {
   },
 };
 
-/** Tuile KPI statique (chiffre + libellé, cliquable). */
+/** Tuile KPI (libellé + grand chiffre + note contextuelle, cliquable). */
 function StatCard({
   href,
   label,
   value,
+  hint,
   icon: Icon,
   tone,
   alert,
 }: {
   href: string;
   label: string;
-  value: number;
+  value: number | string;
+  hint?: string;
   icon: typeof Users;
   tone: keyof typeof TONE;
   alert?: boolean;
@@ -85,33 +86,29 @@ function StatCard({
       <div className="mt-1.5 font-mono text-[30px] font-semibold tabular-nums leading-none text-foreground">
         {value}
       </div>
+      {hint && <div className="mt-1 text-[11.5px] text-muted-foreground">{hint}</div>}
     </Link>
   );
 }
 
-export function AccueilDesktop({
-  firstName,
-  dateLabel,
-  isAdmin,
-  myDay,
-  myWeek,
-  nextSlot,
-  teamPresent,
-  presentBySlot,
-  pendingAbsences,
-  unreadMessages,
-}: {
-  firstName: string | null;
-  dateLabel: string;
-  isAdmin: boolean;
-  myDay: { hours: number; blocks: DayBlock[] } | null;
-  myWeek: { done: number; contract: number } | null;
-  nextSlot: { when: string; from: string; label: string } | null;
-  teamPresent: number;
-  presentBySlot: Record<string, number>;
-  pendingAbsences: number;
-  unreadMessages: number;
-}) {
+export function AccueilDesktop(data: AccueilData) {
+  const {
+    firstName,
+    dateLabel,
+    isAdmin,
+    myDay,
+    myWeek,
+    nextSlot,
+    teamPresent,
+    teamSize,
+    presentBySlot,
+    presentToday,
+    absentsToday,
+    nextGarde,
+    pendingAbsences,
+    unreadMessages,
+  } = data;
+
   const hasPersonal = !!myDay || (!!myWeek && myWeek.contract > 0);
 
   const shortcuts = [
@@ -134,7 +131,7 @@ export function AccueilDesktop({
       {/* En-tête */}
       <header>
         <h1 className="text-[28px] font-semibold tracking-tight text-foreground">
-          Bonjour{firstName ? ` ${firstName}` : ""} 👋
+          <Greeting firstName={firstName} />
         </h1>
         <p className="mt-0.5 text-[14px] capitalize text-muted-foreground">{dateLabel}</p>
       </header>
@@ -142,11 +139,20 @@ export function AccueilDesktop({
       {/* Bandeau KPIs */}
       <div className={cn("grid gap-4", isAdmin ? "grid-cols-4" : "grid-cols-3")}>
         <TeamNowStat presentBySlot={presentBySlot} dayTotal={teamPresent} />
+        <StatCard
+          href="/planning"
+          label="Effectif du jour"
+          value={teamPresent}
+          hint={`sur ${teamSize} dans l'équipe`}
+          icon={Users}
+          tone="violet"
+        />
         {isAdmin && (
           <StatCard
             href="/absences"
             label="Absences à valider"
             value={pendingAbsences}
+            hint={pendingAbsences > 0 ? "en attente" : "rien à traiter"}
             icon={CalendarOff}
             tone="amber"
             alert={pendingAbsences > 0}
@@ -156,26 +162,17 @@ export function AccueilDesktop({
           href="/messages"
           label="Messages non lus"
           value={unreadMessages}
+          hint={unreadMessages > 0 ? "à lire" : "boîte à jour"}
           icon={MessageCircle}
           tone="blue"
           alert={unreadMessages > 0}
         />
-        <StatCard
-          href="/planning"
-          label="Effectif du jour"
-          value={teamPresent}
-          icon={Users}
-          tone="violet"
-        />
       </div>
 
-      {/* Corps : colonne principale + raccourcis */}
+      {/* Corps : colonne principale + colonne latérale */}
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-4">
           {myDay && <MyDayCard hours={myDay.hours} blocks={myDay.blocks} nextSlot={nextSlot} />}
-          {myWeek && myWeek.contract > 0 && (
-            <MyWeekCard done={myWeek.done} contract={myWeek.contract} />
-          )}
           {!hasPersonal && (
             <Link
               href="/planning"
@@ -193,35 +190,48 @@ export function AccueilDesktop({
               <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
             </Link>
           )}
+          <StaffingStrip presentBySlot={presentBySlot} />
+          {myWeek && myWeek.contract > 0 && (
+            <MyWeekCard done={myWeek.done} contract={myWeek.contract} />
+          )}
         </div>
 
-        {/* Raccourcis */}
-        <aside>
-          <h2 className="px-1 pb-2 text-[12px] uppercase tracking-[0.06em] font-semibold text-muted-foreground/70">
-            Accès rapides
-          </h2>
-          <nav className="space-y-2">
-            {shortcuts.map((s) => {
-              const Icon = s.icon;
-              const t = TONE[s.tone];
-              return (
-                <Link
-                  key={s.href}
-                  href={s.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors",
-                    t.hover
-                  )}
-                >
-                  <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", t.box)}>
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="flex-1 text-[13.5px] font-medium text-foreground">{s.label}</span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
-                </Link>
-              );
-            })}
-          </nav>
+        {/* Colonne latérale */}
+        <aside className="space-y-4">
+          <TeamTodayCard
+            present={presentToday}
+            absents={absentsToday}
+            teamSize={teamSize}
+          />
+          {nextGarde && <NextGardeCard garde={nextGarde} />}
+
+          <div>
+            <h2 className="px-1 pb-2 text-[12px] uppercase tracking-[0.06em] font-semibold text-muted-foreground/70">
+              Accès rapides
+            </h2>
+            <nav className="space-y-2">
+              {shortcuts.map((s) => {
+                const Icon = s.icon;
+                const t = TONE[s.tone];
+                return (
+                  <Link
+                    key={s.href}
+                    href={s.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors",
+                      t.hover
+                    )}
+                  >
+                    <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", t.box)}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="flex-1 text-[13.5px] font-medium text-foreground">{s.label}</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         </aside>
       </div>
     </div>

@@ -1,0 +1,33 @@
+/** Types partagés du tableau de bord Accueil (page → vues mobile/desktop). */
+
+export type PersonRef = { id: string; name: string; color: string };
+export type AbsentRef = PersonRef & { label: string };
+export type DayBlock = {
+  from: string;
+  to: string;
+  label: string;
+  isAbsence: boolean;
+};
+export type NextGarde = {
+  name: string;
+  typeLabel: string;
+  dateLabel: string;
+  daysUntil: number;
+};
+
+export type AccueilData = {
+  firstName: string | null;
+  dateLabel: string;
+  isAdmin: boolean;
+  myDay: { hours: number; blocks: DayBlock[] } | null;
+  myWeek: { done: number; contract: number } | null;
+  nextSlot: { when: string; from: string; label: string } | null;
+  teamPresent: number;
+  teamSize: number;
+  presentBySlot: Record<string, number>;
+  presentToday: PersonRef[];
+  absentsToday: AbsentRef[];
+  nextGarde: NextGarde | null;
+  pendingAbsences: number;
+  unreadMessages: number;
+};
