@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { isAdminLevel } from "@/lib/permissions";
+import { isAdminLevel, canEditPlanning } from "@/lib/permissions";
 import { canViewPayroll } from "@/lib/payroll-permissions";
 import { prisma } from "@/lib/prisma";
 import { AccueilView } from "@/components/accueil/AccueilView";
@@ -44,6 +44,8 @@ export default async function AccueilPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const isAdmin = isAdminLevel(session.user.role);
+  // MANAGEUR+ : cible de la checklist de démarrage (équipe/gabarit/planning).
+  const isManager = canEditPlanning(session.user.role);
   const pharmacyId = session.user.pharmacyId;
 
   const today = new Date();
@@ -71,6 +73,8 @@ export default async function AccueilPage() {
     unread,
     news,
     payrollCtx,
+    templateExists,
+    planningExists,
   ] = await Promise.all([
     // Équipe active (pour nommer présents / absents du jour).
     prisma.employee.findMany({
@@ -142,6 +146,13 @@ export default async function AccueilPage() {
     getPharmacyNews(),
     // Contexte paie (flag + statut) pour décider l'accès Rémunération (admin).
     isAdmin ? getPayrollUserContext(session.user.id) : Promise.resolve(null),
+    // Onboarding (manageur+) : l'officine a-t-elle un gabarit / un planning ?
+    isManager
+      ? prisma.weekTemplate.findFirst({ where: { pharmacyId }, select: { id: true } })
+      : Promise.resolve(null),
+    isManager
+      ? prisma.scheduleEntry.findFirst({ where: { pharmacyId }, select: { id: true } })
+      : Promise.resolve(null),
   ]);
 
   const unreadMessages = unread.swap + unread.text;
@@ -330,6 +341,11 @@ export default async function AccueilPage() {
       role={session.user.role}
       canViewPayroll={canSeePayroll}
       news={news}
+      onboarding={{
+        hasTeam: employees.length > 0,
+        hasTemplate: !!templateExists,
+        hasPlanning: !!planningExists,
+      }}
       myDay={myDay}
       myWeek={myWeek}
       nextSlot={nextSlot}
