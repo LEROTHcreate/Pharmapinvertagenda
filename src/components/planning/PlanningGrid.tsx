@@ -663,7 +663,10 @@ export const PlanningGrid = memo(function PlanningGrid({
                   )}
                 >
                   <td
-                    className="sticky left-0 z-10 bg-card px-3 font-mono tabular-nums select-none"
+                    className={cn(
+                      "sticky left-0 z-10 bg-card px-3 font-mono tabular-nums select-none",
+                      !isCurrent && ROW_SEP
+                    )}
                     style={isCurrent ? { boxShadow: CURRENT_TIME_LINE } : undefined}
                   >
                     {/* Heure "à cheval" sur le trait qui sépare deux bandes
@@ -743,7 +746,10 @@ export const PlanningGrid = memo(function PlanningGrid({
                     );
                   })}
                   <td
-                    className="sticky right-0 z-10 bg-card px-2 py-1 text-center select-none"
+                    className={cn(
+                      "sticky right-0 z-10 bg-card px-2 py-1 text-center select-none",
+                      !isCurrent && ROW_SEP
+                    )}
                     style={isCurrent ? { boxShadow: CURRENT_TIME_LINE } : undefined}
                   >
                     <Tooltip>
@@ -819,6 +825,14 @@ export const PlanningGrid = memo(function PlanningGrid({
 // se peint AU-DESSUS du fond de chaque cellule (colorée ou sticky) → ligne
 // continue et nette sur toute la largeur.
 const CURRENT_TIME_LINE = "inset 0 3px 0 0 rgb(244 63 94)"; // rose-500
+
+// Séparateur horizontal des lignes — en box-shadow inset (et NON en border)
+// pour s'afficher À L'IDENTIQUE dans les colonnes sticky (heure / effectif) et
+// les cellules centrales → traits parfaitement alignés d'un bord à l'autre.
+// Une border est masquée par le repaint des colonnes sticky (même raison que
+// le trait rouge ci-dessus) → décalage de 1px sinon.
+const ROW_SEP =
+  "shadow-[inset_0_-1px_0_0_rgb(228_228_231)] dark:shadow-[inset_0_-1px_0_0_rgb(63_63_70)]";
 
 /** Props communs à toutes les variantes de cellule (présentation + sélection). */
 type CellProps = {
@@ -980,9 +994,9 @@ function CellView({
         {...handlers}
         className={cn(
           baseClasses,
-          // Trait horaire fin entre demi-heures — assez visible pour lire les
-          // bandes, et pour que l'heure "à cheval" tombe pile dessus.
-          "border-b border-b-zinc-200/70 dark:border-b-zinc-700/50",
+          // Trait horaire fin entre demi-heures — en box-shadow (cf. ROW_SEP)
+          // pour rester ALIGNÉ avec les colonnes sticky heure / effectif.
+          !isCurrentRow && ROW_SEP,
           canEdit && "hover:bg-muted/40",
           isMyColumn && "bg-amber-50/50",
           dropTargetRing
