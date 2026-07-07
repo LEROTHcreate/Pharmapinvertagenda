@@ -89,7 +89,6 @@ Quand tu orientes quelqu'un vers une page, mets un LIEN cliquable au format Mark
 - Gardes → \`/gardes\`
 - Utilisateurs → \`/utilisateurs\`
 - Paramètres → \`/parametres\`
-- Actualités pharmacie → \`/actualites\`
 - Mon profil (mes heures, iCal, mot de passe) → \`/profil\`
 Exemple : « Pour poser ton congé, va sur [Absences & dispos](/absences). »
 `.trim();
