@@ -686,7 +686,11 @@ export const PlanningGrid = memo(function PlanningGrid({
                     <span
                       className={cn(
                         "absolute right-3 whitespace-nowrap select-none",
-                        slotIdx === 0 ? "top-1.5" : "top-0 -translate-y-1/2",
+                        slotIdx === 0
+                          ? "top-0.5" // 07:30 : pas de trait au-dessus (header) → calée en haut de sa bande
+                          : isCurrent
+                            ? "top-0 -translate-y-[calc(50%+8px)]" // créneau courant : remonté au-dessus du trait rouge pour rester lisible
+                            : "top-0 -translate-y-1/2", // autres : à cheval sur le trait
                         isHourMark
                           ? "text-foreground font-semibold"
                           : "text-muted-foreground/45 text-[10.5px]",
@@ -949,8 +953,9 @@ function CellView({
   const baseClasses = cn(
     "px-1 h-9 text-center font-medium text-[11px] transition-all relative",
     // Fine ligne verticale entre les salariés (colonnes) — repère net, visible
-    // même par-dessus les blocs colorés, pour mieux séparer les colonnes.
-    "border-r border-r-white/80 dark:border-r-black/30",
+    // même par-dessus les blocs colorés. PAS sur la ligne courante : sinon la
+    // bordure verticale (peinte au-dessus du box-shadow) coupe le trait rouge.
+    !isCurrentRow && "border-r border-r-white/80 dark:border-r-black/30",
     // Toute la colonne en cours de réordonnancement → semi-transparente,
     // pour que l'admin voie clairement quel bloc complet est en train d'être déplacé.
     isInDragSourceCol && "opacity-40",
@@ -1266,9 +1271,7 @@ const HeaderCell = memo(function HeaderCell({
         // Cible survolée → rail violet à gauche pour signaler l'insertion
         isDropTarget && "ring-2 ring-violet-500/70 ring-inset bg-violet-50/60"
       )}
-      title={`${employee.firstName} ${employee.lastName} · ${STATUS_LABELS[employee.status]} · contrat ${employee.weeklyHours}h · jour ${dailyH.toFixed(1)}h · semaine ${weeklyH.toFixed(1)}h${
-        Math.abs(delta) >= 0.5 ? ` (${delta > 0 ? "+" : ""}${delta.toFixed(1)}h)` : ""
-      }${colReorderEnabled ? " — Glisser la poignée pour réordonner" : " — Cliquer pour voir son planning"}`}
+      title={`Contrat ${employee.weeklyHours}h · Aujourd'hui ${dailyH.toFixed(1)}h · Semaine ${weeklyH.toFixed(1)}h · Heures sup ${Math.max(0, delta).toFixed(1)}h`}
     >
       {/* Poignée de drag — visible uniquement au hover, et seulement si
           le réordonnancement est activé. Position absolute pour ne pas
