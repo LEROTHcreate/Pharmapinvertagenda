@@ -659,7 +659,7 @@ export function TemplateView({
   );
 
   return (
-    <div className="p-3 md:p-4 space-y-4">
+    <div className="p-2 md:px-4 md:py-2.5 space-y-2.5">
       {/* En-tête */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -686,7 +686,7 @@ export function TemplateView({
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={80}
-              className="mt-1 h-9 max-w-md border-0 border-b border-zinc-200 bg-transparent px-0 text-xl font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-2xl"
+              className="mt-0.5 h-8 max-w-md border-0 border-b border-zinc-200 bg-transparent px-0 text-lg font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-xl"
             />
             {/* Classement libre + note — servent à ranger le gabarit selon les
                 besoins et à décrire son usage (visibles sur sa carte). */}

@@ -1620,20 +1620,20 @@ export function PlanningView({
   };
 
   return (
-    <div className="p-3 md:px-6 md:py-3 space-y-2 md:space-y-3 relative">
+    <div className="p-2 md:px-6 md:py-2 space-y-1.5 md:space-y-2 relative">
       {/* En-tête : titre + navigation, design Apple épuré */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Sur mobile : titre compact ("Planning · S19") en 18px,
                 sur desktop : version complète 26px */}
-            <h1 className="text-[18px] md:text-[26px] font-semibold tracking-tight text-foreground">
+            <h1 className="text-[15px] md:text-[19px] font-semibold tracking-tight text-foreground">
               Planning
             </h1>
-            <span className="text-[18px] md:text-[26px] font-semibold tracking-tight text-muted-foreground/40">
+            <span className="text-[15px] md:text-[19px] font-semibold tracking-tight text-muted-foreground/40">
               ·
             </span>
-            <span className="text-[18px] md:text-[26px] font-semibold tracking-tight text-muted-foreground">
+            <span className="text-[15px] md:text-[19px] font-semibold tracking-tight text-muted-foreground">
               S{weekNumber}
             </span>
             <span className="ml-1 text-[10.5px] uppercase tracking-[0.08em] font-medium text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
