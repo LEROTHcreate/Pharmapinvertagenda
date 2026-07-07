@@ -73,6 +73,26 @@ export default async function EmployesPage() {
     dpcLastDate: iso(e.dpcLastDate),
   }));
 
+  // Comptes utilisateurs reliés aux fiches → permet de choisir le RÔLE
+  // (Collaborateur / Manageur / Titulaire) directement depuis la page Équipe.
+  const linkedUsers = await prisma.user.findMany({
+    where: { pharmacyId: session.user.pharmacyId, employeeId: { not: null } },
+    select: { id: true, role: true, employeeId: true },
+  });
+  const roleByEmployeeId: Record<
+    string,
+    { userId: string; role: (typeof linkedUsers)[number]["role"]; isCurrentUser: boolean }
+  > = {};
+  for (const u of linkedUsers) {
+    if (u.employeeId) {
+      roleByEmployeeId[u.employeeId] = {
+        userId: u.id,
+        role: u.role,
+        isCurrentUser: u.id === session.user.id,
+      };
+    }
+  }
+
   // Échéances RH à venir (sur les collaborateurs actifs uniquement).
   const deadlines = upcomingDeadlines(
     employees.filter((e) => e.isActive),
@@ -124,7 +144,11 @@ export default async function EmployesPage() {
         {/* Colonne gauche : échéances RH + tableau de l'équipe */}
         <div className="min-w-0 flex-1 space-y-4">
           <HrDeadlinesCard deadlines={deadlines} />
-          <EmployeesTable employees={rows} />
+          <EmployeesTable
+            employees={rows}
+            roleByEmployeeId={roleByEmployeeId}
+            currentUserRole={session.user.role}
+          />
         </div>
 
         {/* Colonne droite : la vie de l'équipe (événements animés) */}
