@@ -18,6 +18,7 @@ import {
   Settings,
   StickyNote,
   ShieldCheck,
+  ChevronRight,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { cn } from "@/lib/utils";
@@ -112,13 +113,16 @@ export function Sidebar({
 
   return (
     <div className="hidden md:block group/sb">
-      {/* Bande de survol (toujours visible, fine) — révèle la barre au passage
-          de la souris. Se fond quand la barre s'ouvre. */}
+      {/* Zone de survol pleine hauteur (fine, invisible) + onglet « tiroir »
+          visible au milieu du bord gauche → indique clairement qu'un menu est
+          là quand la barre est repliée. Le tout se fond quand elle s'ouvre. */}
       <div
         aria-hidden
-        className="fixed left-0 top-0 z-30 flex h-screen w-3 items-center justify-center transition-opacity duration-200 group-hover/sb:opacity-0"
+        className="fixed left-0 top-0 z-30 h-screen w-3 transition-opacity duration-200 group-hover/sb:opacity-0"
       >
-        <span className="h-12 w-1 rounded-full bg-muted-foreground/25" />
+        <span className="absolute left-0 top-1/2 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-border bg-card text-violet-600 shadow-md dark:text-violet-400">
+          <ChevronRight className="h-4 w-4" />
+        </span>
       </div>
 
       {/* Barre latérale — masquée hors écran par défaut, glisse à l'apparition
