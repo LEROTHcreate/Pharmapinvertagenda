@@ -1,6 +1,5 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { Printer } from "lucide-react";
 import { auth } from "@/auth";
 import { canEditPlanning } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -159,20 +158,6 @@ export default async function PlanningPage({
         <OnboardingEmptyState isAdmin={canEditPlanning(session.user.role)} />
       ) : (
         <>
-          {canEditPlanning(session.user.role) && (
-            <div className="flex justify-end px-1">
-              <a
-                href="/planning/imprimer"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[12px] font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400"
-                title="Version imprimable A4 de la semaine (affichage mural)"
-              >
-                <Printer className="h-3.5 w-3.5" />
-                Imprimer la semaine (équipe)
-              </a>
-            </div>
-          )}
           <PlanningView
             initialWeekStart={weekStartIso}
             initialDayIndex={initialDayIndex}

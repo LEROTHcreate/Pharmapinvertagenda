@@ -51,9 +51,15 @@ export function isoWeekNumber(d: Date): number {
   return 1 + Math.round(diff / (7 * 24 * 3600 * 1000));
 }
 
-/** S1 si numéro de semaine impair, S2 si pair (convention courante) */
+/**
+ * Type de semaine S1/S2 (alternance). Convention de CETTE officine :
+ * semaine ISO PAIRE = S1, IMPAIRE = S2 (calée pour que la semaine ISO 28,
+ * du 5–11 juillet 2026, soit S1). Point unique qui pilote l'étiquette S1/S2
+ * partout (en-tête planning, impressions). N'affecte PAS le contenu appliqué
+ * (les gabarits sont choisis explicitement à l'application).
+ */
 export function weekTypeFor(d: Date): "S1" | "S2" {
-  return isoWeekNumber(d) % 2 === 1 ? "S1" : "S2";
+  return isoWeekNumber(d) % 2 === 0 ? "S1" : "S2";
 }
 
 /** Map (date → timeSlot → entrée) pour un collaborateur donné */
