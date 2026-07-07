@@ -60,10 +60,28 @@ export const TASK_COLORS: Record<TaskCode, CellStyle> = {
   MISE_EN_RAYON: { bg: "#cffafe", text: "#155e75", border: "#67e8f9" },
   VERIFICATION_STOCKS: { bg: "#fef3c7", text: "#92400e", border: "#fcd34d" },
   ROBOT: { bg: "#e4e4e7", text: "#27272a", border: "#a1a1aa" },
-  REMPLACEMENT: { bg: "#e2e8f0", text: "#1e293b", border: "#94a3b8" },
-  ECHANGE: { bg: "#a7f3d0", text: "#064e3b", border: "#34d399" },
+  // Échange + Remplacement : MÊME couleur (violet) — ils vont par paire (la
+  // personne qui échange son poste ↔ celle qui la remplace). Échange est en
+  // plus TEXTURÉ (cf. NON_WORKED_TASKS) pour montrer que la personne n'est pas là.
+  REMPLACEMENT: { bg: "#ede9fe", text: "#5b21b6", border: "#c4b5fd" },
+  ECHANGE: { bg: "#ede9fe", text: "#5b21b6", border: "#c4b5fd" },
   REUNION_FOURNISSEUR: { bg: "#fdf2f8", text: "#831843", border: "#f9a8d4" },
 };
+
+/**
+ * Postes « non travaillés » : affichés TEXTURÉS (hachures, comme une absence)
+ * et EXCLUS du décompte des heures ET de l'effectif.
+ *
+ * ECHANGE = la personne a échangé son poste → elle n'est PAS présente (ses
+ * heures ne comptent pas). C'est son remplaçant (poste REMPLACEMENT, non
+ * texturé) qui, lui, est présent et dont les heures comptent.
+ */
+export const NON_WORKED_TASKS: TaskCode[] = ["ECHANGE"];
+
+/** Vrai si le poste est « non travaillé » (texturé, hors décompte heures). */
+export function isNonWorkedTask(code: TaskCode | null | undefined): boolean {
+  return !!code && NON_WORKED_TASKS.includes(code);
+}
 
 export const ABSENCE_LABELS: Record<AbsenceCode, string> = {
   ABSENT: "Absent",

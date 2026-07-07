@@ -5,7 +5,8 @@ import {
   isoWeekStartUTC,
   weeklyOvertimeSplit,
 } from "@/lib/work-hours";
-import type { AbsenceCode, EmployeeStatus } from "@prisma/client";
+import type { AbsenceCode, EmployeeStatus, TaskCode } from "@prisma/client";
+import { isNonWorkedTask } from "@/types";
 
 // Absences "rémunérées" qui comptent comme temps de contrat rempli (congé payé,
 // maladie indemnisée, formation sur le temps de travail). ABSENT (non précisé)
@@ -133,6 +134,7 @@ export function buildEmployeeStats(
     employeeId: string;
     type: ScheduleType;
     date: Date;
+    taskCode: TaskCode | null;
     absenceCode: AbsenceCode | null;
   }>
 ): EmployeeStat[] {
@@ -154,7 +156,8 @@ export function buildEmployeeStats(
       bucket = { task: 0, absence: 0, paidAbsence: 0 };
       weeks.set(weekKey, bucket);
     }
-    if (e.type === ScheduleType.TASK) {
+    if (e.type === ScheduleType.TASK && !isNonWorkedTask(e.taskCode)) {
+      // ECHANGE (texturé) = non travaillé → exclu du décompte des heures.
       bucket.task += 1;
     } else if (e.type === ScheduleType.ABSENCE) {
       bucket.absence += 1;
@@ -291,7 +294,7 @@ export async function computeStats(
           ? {}
           : { date: { gte: range.start, lt: range.end } }),
       },
-      select: { employeeId: true, type: true, date: true, absenceCode: true },
+      select: { employeeId: true, type: true, date: true, taskCode: true, absenceCode: true },
     }),
     prevRange
       ? prisma.scheduleEntry.findMany({
@@ -299,7 +302,7 @@ export async function computeStats(
             pharmacyId,
             date: { gte: prevRange.start, lt: prevRange.end },
           },
-          select: { employeeId: true, type: true, date: true, absenceCode: true },
+          select: { employeeId: true, type: true, date: true, taskCode: true, absenceCode: true },
         })
       : Promise.resolve(null),
   ]);

@@ -16,20 +16,24 @@ describe("role-task-rules", () => {
       expect(isTaskAllowed("SECRETAIRE", "COMPTOIR")).toBe(false);
     });
 
-    it("réserve l'ECHANGE aux pharmaciens uniquement", () => {
-      expect(isTaskAllowed("PHARMACIEN", "ECHANGE")).toBe(true);
-      expect(isTaskAllowed("TITULAIRE", "ECHANGE")).toBe(false);
-      expect(isTaskAllowed("PREPARATEUR", "ECHANGE")).toBe(false);
-      expect(isTaskAllowed("LIVREUR", "ECHANGE")).toBe(false);
-    });
-
-    it("interdit REMPLACEMENT à tous les rôles (retiré du UI)", () => {
+    it("ECHANGE et REMPLACEMENT sont universels (échange/remplacement de poste)", () => {
       const roles = [
         "PHARMACIEN", "PREPARATEUR", "ETUDIANT",
         "LIVREUR", "BACK_OFFICE", "SECRETAIRE", "TITULAIRE",
       ] as const;
       for (const r of roles) {
-        expect(isTaskAllowed(r, "REMPLACEMENT")).toBe(false);
+        expect(isTaskAllowed(r, "ECHANGE")).toBe(true);
+        expect(isTaskAllowed(r, "REMPLACEMENT")).toBe(true);
+      }
+    });
+
+    it("MAIL n'est plus proposé à aucun rôle", () => {
+      const roles = [
+        "PHARMACIEN", "PREPARATEUR", "ETUDIANT",
+        "LIVREUR", "BACK_OFFICE", "SECRETAIRE", "TITULAIRE",
+      ] as const;
+      for (const r of roles) {
+        expect(isTaskAllowed(r, "MAIL")).toBe(false);
       }
     });
 
@@ -77,9 +81,11 @@ describe("role-task-rules", () => {
       expect(tasks).toContain("HEURES_SUP");
     });
 
-    it("ne contient pas REMPLACEMENT", () => {
+    it("contient ECHANGE et REMPLACEMENT (universels) mais plus MAIL", () => {
       const tasks = getAllowedTasks("PREPARATEUR");
-      expect(tasks).not.toContain("REMPLACEMENT");
+      expect(tasks).toContain("ECHANGE");
+      expect(tasks).toContain("REMPLACEMENT");
+      expect(tasks).not.toContain("MAIL");
     });
   });
 });

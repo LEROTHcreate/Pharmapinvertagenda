@@ -4,11 +4,12 @@ import { buildEmployeeStats } from "./stats";
 
 // 20 créneaux TASK le lundi 2026-06-29 (même semaine ISO) = 10 h de travail.
 // Contrat 8 h → 2 h supplémentaires pour un statut « normal ».
-function week10hEntries(employeeId: string) {
+function week10hEntries(employeeId: string, taskCode: string | null = "COMPTOIR") {
   return Array.from({ length: 20 }, () => ({
     employeeId,
     type: ScheduleType.TASK,
     date: new Date("2026-06-29T09:00:00Z"),
+    taskCode: taskCode as never,
     absenceCode: null,
   }));
 }
@@ -47,5 +48,11 @@ describe("buildEmployeeStats — heures sup titulaire", () => {
       week10hEntries("e1")
     );
     expect(s.overtimeHours).toBe(2);
+  });
+
+  it("poste ECHANGE (texturé) : NON compté dans les heures", () => {
+    const [s] = buildEmployeeStats([emp()], week10hEntries("e1", "ECHANGE"));
+    expect(s.taskHours).toBe(0);
+    expect(s.overtimeHours).toBe(0);
   });
 });
