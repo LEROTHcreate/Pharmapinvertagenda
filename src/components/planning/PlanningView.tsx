@@ -1571,9 +1571,12 @@ export function PlanningView({
       );
       const numSlots = TIME_SLOTS.length;
       const headerH = 64; // hauteur approx. de l'en-tête (noms + heures)
+      // Plancher abaissé à 16 px (au lieu de 20) : sur les écrans un peu courts,
+      // les lignes se compriment davantage pour faire tenir TOUTE la journée
+      // sans défilement interne. Reste lisible (grille dense type tableur).
       const rowHeight = Math.min(
         44,
-        Math.max(20, Math.floor((maxHeight - headerH) / numSlots))
+        Math.max(16, Math.floor((maxHeight - headerH) / numSlots))
       );
       setFit({ maxHeight, rowHeight });
     }
