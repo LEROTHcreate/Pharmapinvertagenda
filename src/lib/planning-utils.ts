@@ -181,7 +181,9 @@ export type StaffingLevel = "ok" | "warning" | "critical";
 
 export function staffingLevel(count: number, minStaff: number): StaffingLevel {
   if (count >= minStaff) return "ok";
-  if (count >= Math.ceil(minStaff / 2)) return "warning";
+  // Orange (warning) UNIQUEMENT juste sous le minimum (ex. 3 si min = 4) ;
+  // en-dessous (≤ 2 si min = 4) → rouge (critical).
+  if (count >= minStaff - 1) return "warning";
   return "critical";
 }
 
