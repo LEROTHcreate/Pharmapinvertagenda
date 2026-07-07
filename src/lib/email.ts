@@ -638,3 +638,60 @@ export async function sendPasswordResetEmail(params: {
     tag: "password-reset",
   });
 }
+
+/**
+ * ✉️ Digest hebdomadaire — envoie à un salarié son planning de la semaine
+ * suivante (récap par jour + total + lien). Déclenché par le cron du vendredi.
+ */
+export async function sendWeeklyDigestEmail(params: {
+  to: string;
+  name: string;
+  pharmacyName: string;
+  /** Ex. « du 14 au 19 juillet ». */
+  weekLabel: string;
+  /** Un par jour travaillé/ouvré (lun→sam). `blocks` vide = repos. */
+  days: { label: string; blocks: string[] }[];
+  totalHours: number;
+  planningUrl: string;
+}): Promise<void> {
+  const rows = params.days
+    .map((d) => {
+      const content =
+        d.blocks.length > 0
+          ? d.blocks
+              .map(
+                (b) =>
+                  `<div style="margin:1px 0;">${escapeHtml(b)}</div>`
+              )
+              .join("")
+          : `<span style="color:#a1a1aa; font-style:italic;">repos</span>`;
+      return `<tr>
+        <td style="padding:8px 12px; border-bottom:1px solid #f4f4f5; font-weight:600; color:#3f3f46; white-space:nowrap; text-transform:capitalize; vertical-align:top;">${escapeHtml(d.label)}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #f4f4f5; color:#52525b; font-size:14px;">${content}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const fmtH = (h: number) => (h % 1 === 0 ? String(h) : h.toFixed(1));
+
+  const html = layout({
+    title: "Ton planning de la semaine prochaine",
+    bodyHtml: [
+      h1("Bonjour " + firstNameOf(params.name)),
+      p(
+        `Voici ton planning pour la semaine ${params.weekLabel} à la ${params.pharmacyName}.`
+      ),
+      `<table style="width:100%; border-collapse:collapse; margin:8px 0 16px; border:1px solid #f4f4f5; border-radius:8px; overflow:hidden;">${rows}</table>`,
+      p(`Total prévu : ${fmtH(params.totalHours)} h sur la semaine.`),
+      cta(params.planningUrl, "Voir mon planning"),
+      `<p style="font-size:13px; color:#a1a1aa; margin:24px 0 0;">Planning indicatif, susceptible d'ajustements. Tu peux aussi synchroniser ton planning dans ton agenda depuis ton profil.</p>`,
+    ].join(""),
+  });
+
+  await safeSend({
+    to: params.to,
+    subject: `Ton planning — semaine ${params.weekLabel}`,
+    html,
+    tag: "weekly-digest",
+  });
+}

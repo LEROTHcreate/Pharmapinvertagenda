@@ -157,8 +157,11 @@ export default async function DashboardLayout({
         unreadTextMessages={messagesUnread.text}
       />
 
-      {/* Assistant IA « Pilou » — bulle flottante sur toutes les pages connectées. */}
-      <AssistantBubble firstName={session.user.name?.split(/\s+/)[0] ?? ""} />
+      {/* Assistante IA « Hygie » — bulle flottante sur toutes les pages connectées. */}
+      <AssistantBubble
+        firstName={session.user.name?.split(/\s+/)[0] ?? ""}
+        role={session.user.role}
+      />
     </div>
   );
 }

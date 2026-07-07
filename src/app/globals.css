@@ -803,6 +803,69 @@ body[data-focus="true"] .md\:hidden header {
   display: none !important;
 }
 
+/* ─── Animations « La vie de l'équipe » (TeamEventsPanel) ──────────────────
+   Petites animations d'ambiance sur les emojis/badges des cartes d'événement,
+   selon le type (repas, animation labo, entretien…). Volontairement discrètes
+   et désactivées si l'utilisateur préfère moins d'animations. */
+@keyframes tev-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes tev-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-9deg); }
+  75% { transform: rotate(9deg); }
+}
+@keyframes tev-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+@keyframes tev-sparkle {
+  0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  50% { opacity: 0.75; transform: scale(1.12) rotate(8deg); }
+}
+.tev-bob { display: inline-block; animation: tev-bob 3s ease-in-out infinite; }
+.tev-wiggle { display: inline-block; animation: tev-wiggle 2.6s ease-in-out infinite; }
+.tev-pulse { display: inline-block; animation: tev-pulse 2.2s ease-in-out infinite; }
+.tev-sparkle { display: inline-block; animation: tev-sparkle 2.4s ease-in-out infinite; }
+
+/* Jour J : confettis (formes colorées) qui tombent en tournoyant + dérive. */
+@keyframes tev-confetti-fall {
+  0%   { transform: translateY(-16px) translateX(0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(420px) translateX(var(--drift, 0px)) rotate(540deg); opacity: 0; }
+}
+.tev-confetti {
+  animation-name: tev-confetti-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+/* Jour J : la carte de l'événement « respire » avec une lueur de sa couleur. */
+@keyframes tev-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+  50%      { box-shadow: 0 0 18px 2px var(--glow, rgba(139, 92, 246, 0.5)); }
+}
+.tev-today-card { animation: tev-glow 1.9s ease-in-out infinite; }
+
+/* Jour J : bandeau au dégradé qui défile doucement. */
+@keyframes tev-gradient {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.tev-today-banner {
+  background-size: 200% 100%;
+  animation: tev-gradient 3s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tev-bob, .tev-wiggle, .tev-pulse, .tev-sparkle,
+  .tev-confetti, .tev-today-card, .tev-today-banner { animation: none; }
+  .tev-confetti { display: none; }
+}
+
 /* ─── Animation flash sur cellule planning fraîchement enregistrée ─── */
 @keyframes cell-flash {
   0% {

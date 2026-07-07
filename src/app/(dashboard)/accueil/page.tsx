@@ -24,6 +24,11 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Accueil — PharmaPlanning" };
 
+/** Date calendaire du jour en Europe/Paris (YYYY-MM-DD) — cf. commentaire plus bas. */
+function parisTodayIso(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(now);
+}
+
 type Entry = {
   employeeId: string;
   timeSlot: string;
@@ -48,8 +53,11 @@ export default async function AccueilPage() {
   const isManager = canEditPlanning(session.user.role);
   const pharmacyId = session.user.pharmacyId;
 
-  const today = new Date();
-  const todayIso = toIsoDate(today);
+  // « Aujourd'hui » = date calendaire en Europe/Paris. Le serveur tourne en UTC :
+  // sans ça, entre minuit et ~02h heure de Paris, "aujourd'hui" serait la veille
+  // → l'accueil afficherait l'effectif du mauvais jour (bug d'effectif du jour).
+  const todayIso = parisTodayIso();
+  const today = new Date(`${todayIso}T00:00:00Z`);
   const tomorrowIso = toIsoDate(new Date(today.getTime() + 24 * 3600 * 1000));
   const dayStart = new Date(`${todayIso}T00:00:00Z`);
   const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);

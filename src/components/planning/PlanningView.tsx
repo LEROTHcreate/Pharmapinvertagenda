@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3, Trash2, ClipboardCopy, ClipboardPaste } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Trash2, ClipboardCopy, ClipboardPaste } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
@@ -261,10 +261,6 @@ export function PlanningView({
   const [selection, setSelection] = useState<Selection>(null);
   const [multiSelection, setMultiSelection] = useState<Set<CellKey>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
-  // Densité de la grille desktop : "compact" (défaut, dense) ou "comfortable"
-  // (lignes plus aérées). Persisté en localStorage.
-  const [density, setDensity] = useState<"compact" | "comfortable">("compact");
   const [recentlySaved, setRecentlySaved] = useState<Set<CellKey>>(new Set());
   // Piles undo/redo (Ctrl+Z / Ctrl+Y) : gérées dans le store Zustand. Lues via
   // getState() dans les handlers ; aucun rendu ne dépend de leur contenu
@@ -302,18 +298,6 @@ export function PlanningView({
       window.localStorage.setItem("pp_mobile_view", mobileView);
     }
   }, [mobileView]);
-
-  // Restauration / persistance de la densité de grille.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem("pp_density");
-    if (saved === "compact" || saved === "comfortable") setDensity(saved);
-  }, []);
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("pp_density", density);
-    }
-  }, [density]);
 
   // Liste filtrée passée à la grille — quand le filtre est vide, tout passe.
   const visibleEmployees = useMemo(
@@ -573,18 +557,6 @@ export function PlanningView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  // Mode focus : cache la sidebar via un attribut data sur <body>
-  useEffect(() => {
-    if (focusMode) {
-      document.body.dataset.focus = "true";
-    } else {
-      delete document.body.dataset.focus;
-    }
-    return () => {
-      delete document.body.dataset.focus;
-    };
-  }, [focusMode]);
 
   useEffect(() => {
     setEntries(initialEntries);
@@ -1571,16 +1543,19 @@ export function PlanningView({
       );
       const numSlots = TIME_SLOTS.length;
       const headerH = 64; // hauteur approx. de l'en-tête (noms + heures)
+      // Plancher abaissé à 16 px (au lieu de 20) : sur les écrans un peu courts,
+      // les lignes se compriment davantage pour faire tenir TOUTE la journée
+      // sans défilement interne. Reste lisible (grille dense type tableur).
       const rowHeight = Math.min(
         44,
-        Math.max(20, Math.floor((maxHeight - headerH) / numSlots))
+        Math.max(16, Math.floor((maxHeight - headerH) / numSlots))
       );
       setFit({ maxHeight, rowHeight });
     }
     recompute();
     window.addEventListener("resize", recompute);
     return () => window.removeEventListener("resize", recompute);
-  }, [isDesktopWidth, focusMode, density]);
+  }, [isDesktopWidth]);
 
   const toggleAdminLock = useCallback(() => {
     setAdminLocked((prev) => {
@@ -1698,42 +1673,6 @@ export function PlanningView({
               currentEmployeeId={currentEmployeeId}
               weekStart={weekStart}
             />
-            <button
-              onClick={() =>
-                setDensity((d) => (d === "compact" ? "comfortable" : "compact"))
-              }
-              className={cn(
-                "hidden md:inline-flex items-center justify-center h-8 w-8 rounded-md border transition-colors",
-                density === "comfortable"
-                  ? "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100"
-                  : "border-border bg-card text-foreground/70 hover:bg-accent/50"
-              )}
-              title={
-                density === "comfortable"
-                  ? "Densité : Confort (clique pour Compact)"
-                  : "Densité : Compact (clique pour Confort)"
-              }
-              aria-label="Densité de la grille"
-              aria-pressed={density === "comfortable"}
-            >
-              {density === "comfortable" ? (
-                <Rows3 className="h-4 w-4" />
-              ) : (
-                <Rows2 className="h-4 w-4" />
-              )}
-            </button>
-            <button
-              onClick={() => setFocusMode((v) => !v)}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-card text-foreground/70 hover:bg-accent/50 transition-colors"
-              title={focusMode ? "Quitter le mode focus" : "Mode focus (cache la barre latérale)"}
-              aria-label="Mode focus"
-            >
-              {focusMode ? (
-                <Minimize2 className="h-4 w-4" />
-              ) : (
-                <Maximize2 className="h-4 w-4" />
-              )}
-            </button>
           </div>
           {/* Verrou admin — bascule lecture seule pour éviter les modifs
               accidentelles sur tactile. Préférence persistée en localStorage.
@@ -1996,7 +1935,6 @@ export function PlanningView({
             onMoveTask={effectiveCanEdit ? handleMoveTask : undefined}
             onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
             onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
-            density={density}
             fitHeight={fit?.maxHeight}
             fitRowHeight={fit?.rowHeight}
           />

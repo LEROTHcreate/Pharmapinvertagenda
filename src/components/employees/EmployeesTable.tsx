@@ -1,14 +1,34 @@
 "use client";
 
 import * as React from "react";
-import { MoreHorizontal, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Crown,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Power,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import type {
   ContractType,
   EmployeeStatus,
   OvertimeReference,
+  UserRole,
 } from "@prisma/client";
+import {
+  assignableRoles,
+  canManageUser,
+  isCreator,
+  normalizeRole,
+  roleLabel,
+  type AppRole,
+} from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,17 +85,65 @@ type DialogState =
   | { mode: "edit"; employee: EmployeeRowData }
   | null;
 
+/** Compte utilisateur relié à une fiche employé (pour le choix du rôle). */
+export type RoleInfo = {
+  userId: string;
+  role: UserRole;
+  isCurrentUser: boolean;
+};
+
 export function EmployeesTable({
   employees,
+  roleByEmployeeId,
+  currentUserRole,
 }: {
   employees: EmployeeRowData[];
+  /** Rôle du compte relié à chaque employé (clé = employeeId). */
+  roleByEmployeeId?: Record<string, RoleInfo>;
+  /** Rôle de l'utilisateur courant — détermine ce qu'il peut attribuer. */
+  currentUserRole?: UserRole;
 }) {
+  const router = useRouter();
   const [dialog, setDialog] = React.useState<DialogState>(null);
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
   const [deleteTarget, setDeleteTarget] =
     React.useState<EmployeeRowData | null>(null);
+  // Rôles que l'utilisateur courant a le droit d'attribuer (jamais CREATEUR).
+  const assignable = React.useMemo(
+    () => assignableRoles(currentUserRole ?? null),
+    [currentUserRole]
+  );
+  const [roleBusyUserId, setRoleBusyUserId] = React.useState<string | null>(
+    null
+  );
+
+  const changeRole = async (userId: string, role: AppRole) => {
+    setRoleBusyUserId(userId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(
+          data?.error === "CANNOT_CHANGE_OWN_ROLE"
+            ? "Vous ne pouvez pas changer votre propre rôle."
+            : "Changement de rôle impossible."
+        );
+        return;
+      }
+      startTransition(() => router.refresh());
+    } catch {
+      setError("Erreur réseau lors du changement de rôle.");
+    } finally {
+      setRoleBusyUserId(null);
+    }
+  };
 
   // Numéro d'ordre affiché = RANG parmi les ACTIFS uniquement (contigu, sans
   // trou). Un inactif n'a pas de numéro. La liste arrive déjà triée (actifs par
@@ -136,6 +204,7 @@ export function EmployeesTable({
               <th className="w-1 px-3 py-2"></th>
               <th className="px-3 py-2 text-left font-medium">Nom</th>
               <th className="px-3 py-2 text-left font-medium">Statut</th>
+              <th className="px-3 py-2 text-left font-medium">Rôle</th>
               <th className="px-3 py-2 text-right font-medium">Hebdo</th>
               <th className="px-3 py-2 text-right font-medium">Ordre</th>
               <th className="px-3 py-2 text-left font-medium">État</th>
@@ -146,7 +215,7 @@ export function EmployeesTable({
             {employees.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   Aucun collaborateur. Cliquez sur « Nouveau collaborateur » pour commencer.
@@ -194,6 +263,18 @@ export function EmployeesTable({
                     )}
                   </td>
                   <td className="px-3 py-2">{STATUS_LABELS[e.status]}</td>
+                  <td className="px-3 py-2">
+                    <RoleCell
+                      info={roleByEmployeeId?.[e.id]}
+                      assignable={assignable}
+                      currentUserRole={currentUserRole}
+                      busy={roleBusyUserId === roleByEmployeeId?.[e.id]?.userId}
+                      onChange={(role) =>
+                        roleByEmployeeId?.[e.id] &&
+                        changeRole(roleByEmployeeId[e.id].userId, role)
+                      }
+                    />
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {e.weeklyHours} h
                   </td>
@@ -269,5 +350,98 @@ export function EmployeesTable({
         onClose={() => setDeleteTarget(null)}
       />
     </>
+  );
+}
+
+/** Valeur du <select> de rôle : rôle courant normalisé s'il est attribuable,
+ *  sinon le premier attribuable (repli défensif). */
+function roleValueForSelect(role: UserRole, assignable: AppRole[]): AppRole {
+  const normalized = normalizeRole(role);
+  const candidate: AppRole =
+    normalized === "CREATEUR" ? "ADMIN" : normalized;
+  return assignable.includes(candidate) ? candidate : assignable[0];
+}
+
+/** Cellule « Rôle » : select éditable si l'acteur peut gérer ce compte,
+ *  badge en lecture seule sinon (créateur, soi-même, ou droits insuffisants). */
+function RoleCell({
+  info,
+  assignable,
+  currentUserRole,
+  busy,
+  onChange,
+}: {
+  info?: RoleInfo;
+  assignable: AppRole[];
+  currentUserRole?: UserRole;
+  busy: boolean;
+  onChange: (role: AppRole) => void;
+}) {
+  if (!info) {
+    return (
+      <span className="text-xs italic text-muted-foreground/60">
+        Aucun compte
+      </span>
+    );
+  }
+  const creator = isCreator(info.role);
+  const editable =
+    !creator &&
+    !info.isCurrentUser &&
+    !!currentUserRole &&
+    canManageUser(currentUserRole, info.role) &&
+    assignable.length > 0;
+
+  if (editable) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-1">
+        {busy ? (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+        ) : (
+          <ShieldCheck className="h-3 w-3 text-muted-foreground" />
+        )}
+        <select
+          value={roleValueForSelect(info.role, assignable)}
+          onChange={(e) => onChange(e.target.value as AppRole)}
+          disabled={busy}
+          aria-label="Rôle du compte"
+          className="bg-transparent text-xs font-medium text-foreground outline-none"
+        >
+          {assignable.map((r) => (
+            <option key={r} value={r}>
+              {roleLabel(r)}
+            </option>
+          ))}
+        </select>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        creator
+          ? "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+          : "bg-muted text-foreground/80"
+      )}
+      title={
+        info.isCurrentUser
+          ? "Vous ne pouvez pas changer votre propre rôle"
+          : creator
+            ? "Le créateur ne peut pas être modifié"
+            : undefined
+      }
+    >
+      {creator ? (
+        <Crown className="h-3 w-3" />
+      ) : (
+        <ShieldCheck className="h-3 w-3" />
+      )}
+      {roleLabel(info.role)}
+      {info.isCurrentUser && (
+        <span className="opacity-60">(vous)</span>
+      )}
+    </span>
   );
 }
