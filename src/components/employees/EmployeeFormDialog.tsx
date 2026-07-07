@@ -59,6 +59,7 @@ type FormState = {
   contractType: ContractType;
   contractEndDate: string;
   trialEndDate: string;
+  departureDate: string;
   lastMedicalVisitDate: string;
   lastProfessionalInterviewDate: string;
   dpcLastDate: string;
@@ -85,6 +86,7 @@ const emptyForm: FormState = {
   contractType: "CDI",
   contractEndDate: "",
   trialEndDate: "",
+  departureDate: "",
   lastMedicalVisitDate: "",
   lastProfessionalInterviewDate: "",
   dpcLastDate: "",
@@ -104,6 +106,7 @@ function fromEmployee(e: EmployeeRowData): FormState {
     contractType: e.contractType,
     contractEndDate: e.contractEndDate ?? "",
     trialEndDate: e.trialEndDate ?? "",
+    departureDate: e.departureDate ?? "",
     lastMedicalVisitDate: e.lastMedicalVisitDate ?? "",
     lastProfessionalInterviewDate: e.lastProfessionalInterviewDate ?? "",
     dpcLastDate: e.dpcLastDate ?? "",
@@ -161,6 +164,7 @@ export function EmployeeFormDialog({ open, mode, employee, onClose }: Props) {
       contractType: form.contractType,
       contractEndDate: form.contractEndDate || null,
       trialEndDate: form.trialEndDate || null,
+      departureDate: form.departureDate || null,
       lastMedicalVisitDate: form.lastMedicalVisitDate || null,
       lastProfessionalInterviewDate: form.lastProfessionalInterviewDate || null,
       dpcLastDate: form.dpcLastDate || null,
@@ -394,6 +398,26 @@ export function EmployeeFormDialog({ open, mode, employee, onClose }: Props) {
                     onChange={(e) => set("contractEndDate", e.target.value)}
                   />
                 </div>
+              </div>
+
+              {/* Date de départ → désactivation automatique */}
+              <div className="rounded-md border border-amber-300/60 bg-amber-50/60 px-3 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+                <Label htmlFor="departureDate" className="text-amber-900 dark:text-amber-200">
+                  Date de départ prévue
+                </Label>
+                <Input
+                  id="departureDate"
+                  type="date"
+                  className="mt-1.5"
+                  value={form.departureDate}
+                  onChange={(e) => set("departureDate", e.target.value)}
+                />
+                <p className="mt-1.5 text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-200/80">
+                  Démission, fin de mission… Au passage de cette date le
+                  collaborateur devient automatiquement inactif (il disparaît de
+                  la grille). Idem pour un CDD / stage / intérim non renouvelé à
+                  sa date de fin. Son planning et son historique sont conservés.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -153,6 +153,10 @@ export function AccueilDesktop(data: AccueilData) {
       : []),
   ];
 
+  // Cartes « à venir » (ma semaine / prochaine garde) réellement présentes —
+  // rendues dans une rangée pleine largeur (plus de colonne latérale fourre-tout).
+  const hasUpcoming = (!!myWeek && myWeek.contract > 0) || !!nextGarde;
+
   return (
     <div className="hidden lg:block w-full px-6 xl:px-8 py-7 space-y-6">
       {/* En-tête */}
@@ -166,7 +170,7 @@ export function AccueilDesktop(data: AccueilData) {
       {/* Checklist de démarrage (manageur+, tant que non configuré) */}
       {isManager && <OnboardingChecklist state={onboarding} />}
 
-      {/* Bandeau KPIs */}
+      {/* Bandeau KPIs — pleine largeur */}
       <div className={cn("grid gap-4", isAdmin ? "grid-cols-4" : "grid-cols-3")}>
         <TeamNowStat presentBySlot={presentBySlot} dayTotal={teamPresent} />
         <StatCard
@@ -199,21 +203,27 @@ export function AccueilDesktop(data: AccueilData) {
         />
       </div>
 
-      {/* Corps : colonne principale + colonne latérale */}
+      {/* Actus — pleine largeur (dernières infos de l'officine qui défilent) */}
+      <AccueilNews items={news} />
+
+      {/* Actions admin à traiter — pleine largeur */}
+      {isAdmin && (
+        <ActionsCard
+          pendingAbsences={pendingAbsences}
+          pendingUsers={pendingUsers}
+          pendingSwaps={pendingSwaps}
+        />
+      )}
+
+      {/* Aujourd'hui : ma journée (large) + équipe du jour (compacte) */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-4">
-          {isAdmin && (
-            <ActionsCard
-              pendingAbsences={pendingAbsences}
-              pendingUsers={pendingUsers}
-              pendingSwaps={pendingSwaps}
-            />
-          )}
-          {myDay && <MyDayCard hours={myDay.hours} blocks={myDay.blocks} nextSlot={nextSlot} />}
-          {!hasPersonal && (
+        <div className="col-span-2">
+          {myDay ? (
+            <MyDayCard hours={myDay.hours} blocks={myDay.blocks} nextSlot={nextSlot} />
+          ) : (
             <Link
               href="/planning"
-              className="flex items-center gap-4 rounded-2xl border border-border bg-card p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors hover:border-violet-300 dark:hover:border-violet-800"
+              className="flex h-full items-center gap-4 rounded-2xl border border-border bg-card p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors hover:border-violet-300 dark:hover:border-violet-800"
             >
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
                 <LayoutDashboard className="h-6 w-6" />
@@ -221,59 +231,63 @@ export function AccueilDesktop(data: AccueilData) {
               <div className="flex-1">
                 <p className="text-[15px] font-semibold text-foreground">Vue d&apos;ensemble</p>
                 <p className="text-[13px] text-muted-foreground">
-                  Vous n&apos;êtes pas planifié aujourd&apos;hui — ouvrez le planning de l&apos;équipe.
+                  {hasPersonal
+                    ? "Vous n'êtes pas planifié aujourd'hui — ouvrez le planning de l'équipe."
+                    : "Ouvrez le planning de l'équipe pour voir la journée."}
                 </p>
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
             </Link>
           )}
-          <StaffingStrip presentBySlot={presentBySlot} minStaff={minStaff} />
+        </div>
+        <TeamTodayCard
+          present={presentToday}
+          absents={absentsToday}
+          teamSize={teamSize}
+        />
+      </div>
+
+      {/* Affluence par créneau — pleine largeur */}
+      <StaffingStrip presentBySlot={presentBySlot} minStaff={minStaff} />
+
+      {/* À venir : ma semaine + prochaine garde — rangée équilibrée */}
+      {hasUpcoming && (
+        <div className="grid grid-cols-2 gap-6">
           {myWeek && myWeek.contract > 0 && (
             <MyWeekCard done={myWeek.done} contract={myWeek.contract} />
           )}
-        </div>
-
-        {/* Colonne latérale */}
-        <aside className="space-y-4">
-          {/* Barre « Actus » — dernières infos pharmacie qui défilent */}
-          <AccueilNews items={news} />
-
-          <TeamTodayCard
-            present={presentToday}
-            absents={absentsToday}
-            teamSize={teamSize}
-          />
           {nextGarde && <NextGardeCard garde={nextGarde} />}
+        </div>
+      )}
 
-          <div>
-            <h2 className="px-1 pb-2 text-[12px] uppercase tracking-[0.06em] font-semibold text-muted-foreground/70">
-              Accès rapides
-            </h2>
-            <nav className="space-y-2">
-              {shortcuts.map((s) => {
-                const Icon = s.icon;
-                const t = TONE[s.tone];
-                return (
-                  <Link
-                    key={s.href}
-                    href={s.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors",
-                      t.hover
-                    )}
-                  >
-                    <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", t.box)}>
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="flex-1 text-[13.5px] font-medium text-foreground">{s.label}</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-        </aside>
-      </div>
+      {/* Accès rapides — grille horizontale pleine largeur (plus de nav en colonne) */}
+      <section>
+        <h2 className="px-1 pb-2.5 text-[12px] uppercase tracking-[0.06em] font-semibold text-muted-foreground/70">
+          Accès rapides
+        </h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          {shortcuts.map((s) => {
+            const Icon = s.icon;
+            const t = TONE[s.tone];
+            return (
+              <Link
+                key={s.href}
+                href={s.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors",
+                  t.hover
+                )}
+              >
+                <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", t.box)}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="flex-1 text-[13.5px] font-medium text-foreground">{s.label}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
+              </Link>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

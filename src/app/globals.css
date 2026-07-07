@@ -751,6 +751,36 @@
   }
 }
 
+/* ─── Grille « ajustée à l'écran » (data-fit) ─────────────────────────────
+   Activée quand la grille est bornée en hauteur (scroll interne, la page ne
+   scrolle plus). L'en-tête des personnes reste FIGÉ en haut (repère « qui est
+   qui » toujours visible) et les lignes sont compressées à --row-h pour faire
+   tenir tout le planning sans scroller quand c'est possible. Desktop only. */
+@media (min-width: 768px) {
+  /* En-tête figé verticalement — fond opaque pour masquer les lignes qui
+     défilent dessous. Le coin heure (1re cellule) et l'effectif (dernière)
+     passent au-dessus des colonnes latérales déjà sticky. */
+  table[data-fit="true"] thead th {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: hsl(var(--card));
+  }
+  table[data-fit="true"] thead th:first-child,
+  table[data-fit="true"] thead th:last-child {
+    z-index: 30;
+  }
+  /* Lignes compressées à la hauteur calculée (bornée à un minimum lisible). */
+  table[data-fit="true"] tbody tr {
+    height: var(--row-h, 28px);
+  }
+  table[data-fit="true"] tbody td {
+    padding-top: 1px;
+    padding-bottom: 1px;
+    line-height: 1.15;
+  }
+}
+
 /* ─── Largeur de colonne employé : compact sur mobile, confort sur desktop ─── */
 :root {
   --col-w: 48px;

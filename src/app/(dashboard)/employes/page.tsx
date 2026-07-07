@@ -6,6 +6,7 @@ import { EmployeesTable } from "@/components/employees/EmployeesTable";
 import type { EmployeeRowData } from "@/components/employees/EmployeesTable";
 import { HrDeadlinesCard } from "@/components/employees/HrDeadlinesCard";
 import { upcomingDeadlines } from "@/lib/hr-deadlines";
+import { sweepInactiveEmployees } from "@/lib/employee-lifecycle";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -18,6 +19,11 @@ export default async function EmployesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canManageTeam(session.user.role)) redirect("/planning");
+
+  // Désactivation automatique des collaborateurs dont la date de départ ou la
+  // fin de contrat (non-CDI) est passée, AVANT de charger la liste.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  await sweepInactiveEmployees(session.user.pharmacyId, todayIso);
 
   const employees = await prisma.employee.findMany({
     where: { pharmacyId: session.user.pharmacyId },
@@ -36,6 +42,7 @@ export default async function EmployesPage() {
       contractType: true,
       contractEndDate: true,
       trialEndDate: true,
+      departureDate: true,
       lastMedicalVisitDate: true,
       lastProfessionalInterviewDate: true,
       dpcLastDate: true,
@@ -56,13 +63,13 @@ export default async function EmployesPage() {
     contractType: e.contractType,
     contractEndDate: iso(e.contractEndDate),
     trialEndDate: iso(e.trialEndDate),
+    departureDate: iso(e.departureDate),
     lastMedicalVisitDate: iso(e.lastMedicalVisitDate),
     lastProfessionalInterviewDate: iso(e.lastProfessionalInterviewDate),
     dpcLastDate: iso(e.dpcLastDate),
   }));
 
   // Échéances RH à venir (sur les collaborateurs actifs uniquement).
-  const todayIso = new Date().toISOString().slice(0, 10);
   const deadlines = upcomingDeadlines(
     employees.filter((e) => e.isActive),
     todayIso

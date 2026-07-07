@@ -167,7 +167,7 @@ Chaque statut d'employé n'a accès qu'à un ensemble restreint de postes. Ces r
 **PREPARATEUR** — Polyvalent comptoir + support :
 - Comptoir ✅
 - Parapharmacie ✅
-- Mail ✅
+- Commande ✅
 - Mise à prix ✅
 - Robot ✅
 - Tout le reste ❌
@@ -198,15 +198,17 @@ Chaque statut d'employé n'a accès qu'à un ensemble restreint de postes. Ces r
 - Vérification des stocks ✅
 - Tout le reste ❌
 
-> **Échange de poste** : seuls les pharmaciens peuvent utiliser le code `ECHANGE` (échange de garde). Pour les autres rôles, on ne propose plus ce poste.
+> **Échange / Remplacement** : `ECHANGE` et `REMPLACEMENT` sont désormais **universels** (tous rôles). Un échange de poste se note en 2 cases : `ECHANGE` sur la personne qui n'est pas là (affichée **texturée** comme une absence, et **HORS décompte des heures ET de l'effectif** — cf. `NON_WORKED_TASKS` dans `src/types/index.ts`), et `REMPLACEMENT` sur son remplaçant (compte normalement les heures).
 >
-> **Remplacement** : le code `REMPLACEMENT` n'est plus proposé dans l'interface (l'enum reste pour compatibilité avec les anciennes données).
+> **Mail** : le code `MAIL` n'est plus proposé dans l'interface (l'enum reste pour compatibilité avec les anciennes données).
 
 #### Postes universels (autorisés pour TOUS les rôles)
 
 Les postes suivants sont transversaux et peuvent être affectés à n'importe quel employé quel que soit son statut :
 - `FORMATION` — Formation (sur site ou externe)
 - `HEURES_SUP` — Heures supplémentaires
+- `ECHANGE` — Échange de poste (texturé, NON compté dans les heures/effectif)
+- `REMPLACEMENT` — Remplacement (compte normalement)
 
 #### Matrice récapitulative
 
@@ -214,16 +216,17 @@ Les postes suivants sont transversaux et peuvent être affectés à n'importe qu
 |-------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | COMPTOIR | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | PARAPHARMACIE | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| COMMANDE | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| COMMANDE | ❌ | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ |
 | SECRETARIAT | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| MAIL | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| ~~MAIL~~ (retiré de l'UI) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | MISE_A_PRIX (Mail/App/Préparatoire) | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | LIVRAISON | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | MISE_EN_RAYON | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | VERIFICATION_STOCKS | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | ROBOT | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | REUNION_FOURNISSEUR | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| ECHANGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| ECHANGE (texturé, hors heures/effectif) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| REMPLACEMENT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | FORMATION | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HEURES_SUP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
@@ -245,14 +248,15 @@ Cette validation doit être appliquée à **3 niveaux** :
 ```typescript
 import type { EmployeeStatus, TaskCode } from '@prisma/client';
 
-// Postes universels autorisés pour tous les rôles
-const UNIVERSAL_TASKS: TaskCode[] = ['FORMATION', 'HEURES_SUP'];
+// Postes universels autorisés pour tous les rôles (ECHANGE + REMPLACEMENT
+// inclus : un échange de poste peut concerner n'importe quel collaborateur).
+const UNIVERSAL_TASKS: TaskCode[] = ['FORMATION', 'HEURES_SUP', 'ECHANGE', 'REMPLACEMENT'];
 
-// Postes spécifiques autorisés par rôle (hors universels)
+// Postes spécifiques autorisés par rôle (hors universels). MAIL a été retiré.
 const ROLE_SPECIFIC_TASKS: Record<EmployeeStatus, TaskCode[]> = {
-  PHARMACIEN:  ['COMPTOIR', 'ECHANGE'],
+  PHARMACIEN:  ['COMPTOIR'],
   TITULAIRE:   ['COMPTOIR', 'PARAPHARMACIE', 'REUNION_FOURNISSEUR', 'LIVRAISON'],
-  PREPARATEUR: ['COMPTOIR', 'PARAPHARMACIE', 'MAIL', 'MISE_A_PRIX', 'ROBOT'],
+  PREPARATEUR: ['COMPTOIR', 'PARAPHARMACIE', 'COMMANDE', 'MISE_A_PRIX', 'ROBOT'],
   ETUDIANT:    ['COMPTOIR'],
   LIVREUR:     ['LIVRAISON', 'MISE_EN_RAYON', 'VERIFICATION_STOCKS'],
   BACK_OFFICE: ['COMMANDE'],
@@ -297,8 +301,8 @@ Source unique des droits : les helpers `can…(role)` (4 rôles : Collaborateur 
 
 ### Style et UI
 - Palette principale : tons violets/indigo (cohérent avec le prototype).
-- Les cellules de tâches ont un code couleur fixe (voir constante `TASK_COLORS` dans `types/index.ts`).
-- Les absences sont visuellement distinctes (fond grisé, jaune, rouge selon le type).
+- Les cellules de tâches ont un code couleur fixe (voir constante `TASK_COLORS` dans `types/index.ts`). NB : Parapharmacie = rose, Secrétariat = vert.
+- Les 4 types d'absence partagent une même couleur **beige** (`ABSENCE_STYLES`) ; on les distingue par le libellé (ABS / CONGÉ / MAL / FORM), pas par la couleur.
 - Le compteur d'effectif par créneau utilise un code couleur vert/orange/rouge selon le seuil min paramétrable.
 - Typography : DM Sans (display) + DM Mono (heures/chiffres).
 
@@ -313,9 +317,9 @@ Source unique des droits : les helpers `can…(role)` (4 rôles : Collaborateur 
 
 ### Détection sous-effectif
 - Seuil minimum configurable par pharmacie (défaut : 4 personnes)
-- Comptage par créneau : nombre d'employés ayant une TÂCHE (pas absent)
-- Alerte visuelle (orange si < seuil, rouge si < 50% du seuil)
-- Un créneau à 0 effectif entre 8h et 20h est critique (rouge clignotant)
+- Comptage « comptoir » par créneau : nombre de **pharmaciens + préparateurs + étudiants** ayant une TÂCHE réelle sur le créneau (un étudiant ne peut faire que du comptoir → il compte). Livreurs / secrétaires / back-office exclus. Les postes `ECHANGE` (texturés) ne comptent pas.
+- Alerte visuelle : vert ≥ seuil, orange juste sous le seuil, rouge en dessous.
+- Un créneau à 0 effectif entre 8h et 20h est critique.
 
 ### Semaine type S1/S2
 - Les pharmacies utilisent souvent 2 modèles de semaine alternés
