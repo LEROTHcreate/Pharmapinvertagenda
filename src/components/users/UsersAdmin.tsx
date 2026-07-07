@@ -994,7 +994,7 @@ function Avatar({ user }: { user: UserRow }) {
   // dernier mot du `name` (convention "Nom Prénom" du seed admin).
   const fallbackName = user.name.trim();
   const fallbackParts = fallbackName.split(/\s+/);
-  const fallbackFirstName = fallbackParts[fallbackParts.length - 1] ?? fallbackName;
+  const fallbackFirstName = fallbackParts[0] ?? fallbackName;
   const firstName = user.employee?.firstName ?? fallbackFirstName;
   const color = user.employee?.displayColor ?? null;
   return (

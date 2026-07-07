@@ -245,7 +245,7 @@ export function ConversationPanel({
                           avatarId={m.author.avatarId}
                           firstName={
                             m.author.firstName ??
-                            m.author.name.split(/\s+/).pop() ??
+                            m.author.name.split(/\s+/)[0] ??
                             "?"
                           }
                           color={m.author.displayColor}

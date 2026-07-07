@@ -223,7 +223,7 @@ export function PayrollNotesView({ currentUser }: Props) {
                           avatarId={n.author.avatarId}
                           firstName={
                             n.author.firstName ??
-                            n.author.name.split(/\s+/).pop() ??
+                            n.author.name.split(/\s+/)[0] ??
                             "?"
                           }
                           color={n.author.displayColor}

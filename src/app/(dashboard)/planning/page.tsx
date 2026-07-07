@@ -121,13 +121,12 @@ export default async function PlanningPage({
 
   // ─── Bandeau "Bonjour [prénom]" + phrase du jour ─────────────────
   // Prénom : on privilégie la fiche Employee (champ firstName isolé). Sans
-  // fiche, on tombe sur session.user.name — qui peut être au format
-  // "Nom Prénom" (admin titulaire) → on prend alors le DERNIER mot, plus
-  // probable d'être le prénom dans cette convention.
+  // fiche, on tombe sur session.user.name (stocké en "Prénom Nom") → on
+  // prend le PREMIER mot comme prénom.
   const fallbackName = (session.user.name ?? "").trim();
   const fallbackParts = fallbackName.split(/\s+/);
   const fallbackFirstName =
-    fallbackParts[fallbackParts.length - 1] ?? fallbackName;
+    fallbackParts[0] ?? fallbackName;
   const firstName = sessionEmployee?.firstName ?? fallbackFirstName;
   const todayIso = toIsoDate(new Date());
   const phrase = pickRandomGreeting(todayIso);

@@ -390,7 +390,7 @@ export default async function ProfilPage() {
           currentAvatarId={sessionUser?.avatarId ?? null}
           firstName={
             employee?.firstName ??
-            (session.user.name ?? "").trim().split(/\s+/).pop() ??
+            (session.user.name ?? "").trim().split(/\s+/)[0] ??
             ""
           }
           color={employee?.displayColor}

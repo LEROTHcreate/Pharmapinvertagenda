@@ -130,7 +130,7 @@ export function ConversationList({
                 {peer ? (
                   <AvatarImage
                     avatarId={peer.avatarId}
-                    firstName={peer.firstName ?? peer.name.split(/\s+/).pop() ?? "?"}
+                    firstName={peer.firstName ?? peer.name.split(/\s+/)[0] ?? "?"}
                     color={peer.displayColor}
                     size={36}
                   />
