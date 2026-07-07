@@ -127,7 +127,7 @@ export function AccueilDesktop(data: AccueilData) {
   ];
 
   return (
-    <div className="hidden lg:block mx-auto max-w-6xl px-8 py-7 space-y-6">
+    <div className="hidden lg:block w-full px-6 xl:px-8 py-7 space-y-6">
       {/* En-tête */}
       <header>
         <h1 className="text-[28px] font-semibold tracking-tight text-foreground">

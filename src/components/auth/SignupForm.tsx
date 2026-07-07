@@ -16,8 +16,9 @@ export function SignupForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<Mode>("join");
 
-  // Champs communs
-  const [name, setName] = useState("");
+  // Champs communs — prénom et nom séparés (évite la confusion d'ordre).
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -41,10 +42,11 @@ export function SignupForm() {
 
     const payload =
       mode === "join"
-        ? { mode, name, email, password, pharmacySiret }
+        ? { mode, firstName, lastName, email, password, pharmacySiret }
         : {
             mode,
-            name,
+            firstName,
+            lastName,
             email,
             password,
             pharmacySiret,
@@ -151,17 +153,30 @@ export function SignupForm() {
       </p>
 
       <form onSubmit={onSubmit} className="space-y-3" noValidate>
-        <FloatingField
-          id="name"
-          name="name"
-          type="text"
-          label="Nom et prénom"
-          autoComplete="name"
-          value={name}
-          onChange={setName}
-          disabled={isPending}
-          required
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <FloatingField
+            id="firstName"
+            name="firstName"
+            type="text"
+            label="Prénom"
+            autoComplete="given-name"
+            value={firstName}
+            onChange={setFirstName}
+            disabled={isPending}
+            required
+          />
+          <FloatingField
+            id="lastName"
+            name="lastName"
+            type="text"
+            label="Nom"
+            autoComplete="family-name"
+            value={lastName}
+            onChange={setLastName}
+            disabled={isPending}
+            required
+          />
+        </div>
 
         <FloatingField
           id="email"
