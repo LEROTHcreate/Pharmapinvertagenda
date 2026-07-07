@@ -68,11 +68,11 @@ describe("planning-utils", () => {
       expect(isoWeekNumber(new Date(2026, 0, 1))).toBe(1);
     });
 
-    it("S1 si semaine impaire, S2 si paire", () => {
-      // Semaine 1 (impaire) → S1
-      expect(weekTypeFor(new Date(2026, 0, 1))).toBe("S1");
-      // Semaine 18 (paire) → S2 — 27 avril 2026 = semaine 18
-      expect(weekTypeFor(new Date(2026, 3, 27))).toBe("S2");
+    it("S1 si semaine paire, S2 si impaire (convention officine)", () => {
+      // Semaine 1 (impaire) → S2
+      expect(weekTypeFor(new Date(2026, 0, 1))).toBe("S2");
+      // Semaine 18 (paire) → S1 — 27 avril 2026 = semaine 18
+      expect(weekTypeFor(new Date(2026, 3, 27))).toBe("S1");
     });
   });
 });
