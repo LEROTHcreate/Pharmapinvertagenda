@@ -5,28 +5,32 @@ import { Sparkles, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Msg = { role: "user" | "assistant"; content: string };
+type PendingAction = { tool: string; args: Record<string, unknown>; summary: string };
 
 /**
- * Bulle d'assistant IA « Pilou » — flotte en bas à droite sur toutes les pages
- * connectées. Aide l'équipe à comprendre / utiliser PharmaPlanning.
+ * Bulle d'assistante IA « Hygie » — flotte en bas à droite sur toutes les pages
+ * connectées. Aide l'équipe à comprendre / utiliser PharmaPlanning, et peut
+ * effectuer certaines actions (poser une absence, signaler une dispo…).
  *
- * La conversation part au serveur (/api/assistant → Groq) ; la clé reste
- * côté serveur. Étape 1 : explique / guide (pas encore d'actions).
+ * La conversation part au serveur (/api/assistant → Groq) ; la clé reste côté
+ * serveur. Les actions qui modifient des données demandent une CONFIRMATION
+ * (boutons) avant d'être exécutées.
  */
 export function AssistantBubble({ firstName }: { firstName: string }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState<PendingAction | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const greeting = `Bonjour ${firstName || ""} 👋 Je suis Pilou, ton assistant. Pose-moi une question sur PharmaPlanning — par exemple « comment poser une absence ? » ou « c'est quoi le poste Échange ? ».`;
+  const greeting = `Bonjour ${firstName || ""} 👋 Je suis Hygie, ton assistante. Pose-moi une question (« comment poser une absence ? », « c'est quoi le poste Échange ? ») — ou demande-moi de poser un congé ou signaler une dispo pour toi.`;
 
   // Auto-scroll vers le bas à chaque nouveau message / pendant la frappe.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, loading]);
+  }, [messages, loading, pending]);
 
   // Focus l'input à l'ouverture.
   useEffect(() => {
@@ -36,6 +40,7 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
+    setPending(null); // nouvelle question → on abandonne toute action en attente
     const next: Msg[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
@@ -46,10 +51,12 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ messages: next }),
       });
-      const data = (await res.json().catch(() => null)) as { reply?: string } | null;
-      const reply =
-        data?.reply ?? "Désolé, je n'ai pas pu répondre. Réessaie.";
+      const data = (await res.json().catch(() => null)) as
+        | { reply?: string; pendingAction?: PendingAction }
+        | null;
+      const reply = data?.reply ?? "Désolé, je n'ai pas pu répondre. Réessaie.";
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
+      if (data?.pendingAction) setPending(data.pendingAction);
     } catch {
       setMessages((m) => [
         ...m,
@@ -58,6 +65,40 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function confirmAction() {
+    if (!pending || loading) return;
+    const p = pending;
+    setPending(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: { tool: p.tool, args: p.args } }),
+      });
+      const data = (await res.json().catch(() => null)) as { reply?: string } | null;
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: data?.reply ?? "C'est fait." },
+      ]);
+    } catch {
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: "L'action a échoué. Réessaie." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function cancelAction() {
+    setPending(null);
+    setMessages((m) => [
+      ...m,
+      { role: "assistant", content: "Ok, j'annule — rien n'a été fait. 👍" },
+    ]);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -104,9 +145,9 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
               <Sparkles className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold leading-tight">Pilou</p>
+              <p className="text-[14px] font-semibold leading-tight">Hygie</p>
               <p className="text-[11px] text-white/80 leading-tight">
-                Assistant PharmaPlanning
+                Assistante PharmaPlanning
               </p>
             </div>
             <button
@@ -128,8 +169,31 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
             {messages.map((m, i) => (
               <Bubble key={i} role={m.role} content={m.content} />
             ))}
-            {loading && (
-              <Bubble role="assistant" content="…" typing />
+            {loading && <Bubble role="assistant" content="…" typing />}
+
+            {/* Carte de confirmation d'action (avant exécution) */}
+            {pending && !loading && (
+              <div className="rounded-2xl border border-violet-300 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950/30">
+                <p className="mb-2 text-[12.5px] font-medium text-violet-900 dark:text-violet-200">
+                  {pending.summary} — confirmer ?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void confirmAction()}
+                    className="h-8 flex-1 rounded-lg bg-violet-600 text-[13px] font-medium text-white hover:bg-violet-700"
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelAction}
+                    className="h-8 flex-1 rounded-lg border border-border bg-card text-[13px] font-medium text-foreground hover:bg-muted"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
