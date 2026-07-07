@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, X } from "lucide-react";
+import { MessageCircleQuestion, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Msg = { role: "user" | "assistant"; content: string };
@@ -25,7 +25,7 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const greeting = `Bonjour ${firstName || ""} 👋 Je suis Hygie, ton assistante. Pose-moi une question (« comment poser une absence ? », « c'est quoi le poste Échange ? ») — ou demande-moi de poser un congé ou signaler une dispo pour toi.`;
+  const greeting = `Bonjour ${firstName || ""} 👋 Je suis Hygie, ton assistante. Pose ta question sur le planning ou l'appli : je t'explique tout et je peux même t'aider pour certaines choses.`;
 
   // Auto-scroll vers le bas à chaque nouveau message / pendant la frappe.
   useEffect(() => {
@@ -97,7 +97,7 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
     setPending(null);
     setMessages((m) => [
       ...m,
-      { role: "assistant", content: "Ok, j'annule — rien n'a été fait. 👍" },
+      { role: "assistant", content: "Ok, c'est annulé, rien n'a été fait. 👍" },
     ]);
   }
 
@@ -119,12 +119,12 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
           className={cn(
             "no-print fixed right-4 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full",
             "bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6",
-            "bg-violet-600 text-white shadow-[0_8px_24px_-4px_rgba(124,58,237,0.5)]",
+            "bg-emerald-600 text-white shadow-[0_8px_24px_-4px_rgba(5,150,105,0.45)]",
             "transition-transform hover:scale-105 active:scale-95",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
           )}
         >
-          <Sparkles className="h-6 w-6" />
+          <MessageCircleQuestion className="h-6 w-6" />
         </button>
       )}
 
@@ -140,9 +140,9 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
           aria-label="Assistant PharmaPlanning"
         >
           {/* En-tête */}
-          <div className="flex items-center gap-2.5 border-b border-border bg-violet-600 px-4 py-3 text-white">
+          <div className="flex items-center gap-2.5 border-b border-border bg-emerald-600 px-4 py-3 text-white">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
-              <Sparkles className="h-4 w-4" />
+              <MessageCircleQuestion className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-semibold leading-tight">Hygie</p>
@@ -173,15 +173,15 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
 
             {/* Carte de confirmation d'action (avant exécution) */}
             {pending && !loading && (
-              <div className="rounded-2xl border border-violet-300 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950/30">
-                <p className="mb-2 text-[12.5px] font-medium text-violet-900 dark:text-violet-200">
-                  {pending.summary} — confirmer ?
+              <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30">
+                <p className="mb-2 text-[12.5px] font-medium text-emerald-900 dark:text-emerald-200">
+                  {pending.summary}, confirmer ?
                 </p>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => void confirmAction()}
-                    className="h-8 flex-1 rounded-lg bg-violet-600 text-[13px] font-medium text-white hover:bg-violet-700"
+                    className="h-8 flex-1 rounded-lg bg-emerald-600 text-[13px] font-medium text-white hover:bg-emerald-700"
                   >
                     Confirmer
                   </button>
@@ -207,14 +207,14 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
                 onKeyDown={onKeyDown}
                 rows={1}
                 placeholder="Écris ta question…"
-                className="max-h-28 min-h-[40px] flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:ring-2 focus:ring-violet-400"
+                className="max-h-28 min-h-[40px] flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:ring-2 focus:ring-emerald-400"
               />
               <button
                 type="button"
                 onClick={() => void send()}
                 disabled={!input.trim() || loading}
                 aria-label="Envoyer"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -245,7 +245,7 @@ function Bubble({
         className={cn(
           "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed",
           isUser
-            ? "bg-violet-600 text-white rounded-br-sm"
+            ? "bg-emerald-600 text-white rounded-br-sm"
             : "bg-muted text-foreground rounded-bl-sm",
           typing && "animate-pulse text-muted-foreground"
         )}

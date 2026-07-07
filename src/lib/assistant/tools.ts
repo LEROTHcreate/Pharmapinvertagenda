@@ -232,7 +232,7 @@ export async function executeTool(
       const s = a.dateStart.toISOString().slice(0, 10);
       const e = a.dateEnd.toISOString().slice(0, 10);
       const span = s === e ? frDate(s) : `${frDate(s)} → ${frDate(e)}`;
-      return `- ${who} : ${ABSENCE_TYPE_LABELS[a.absenceCode] ?? a.absenceCode}, ${span}`;
+      return `• ${who} : ${ABSENCE_TYPE_LABELS[a.absenceCode] ?? a.absenceCode}, ${span}`;
     });
     return {
       ok: true,
