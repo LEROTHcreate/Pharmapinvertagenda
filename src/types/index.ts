@@ -54,7 +54,7 @@ export const TASK_COLORS: Record<TaskCode, CellStyle> = {
   PARAPHARMACIE: { bg: "#ffe4e6", text: "#9f1239", border: "#fda4af" },
   SECRETARIAT: { bg: "#dcfce7", text: "#166534", border: "#86efac" },
   MAIL: { bg: "#ede9fe", text: "#5b21b6", border: "#c4b5fd" },
-  FORMATION: { bg: "#e0e7ff", text: "#3730a3", border: "#a5b4fc" },
+  FORMATION: { bg: "#ccfbf1", text: "#0f766e", border: "#5eead4" },
   HEURES_SUP: { bg: "#ffedd5", text: "#9a3412", border: "#fdba74" },
   LIVRAISON: { bg: "#d1fae5", text: "#065f46", border: "#6ee7b7" },
   MISE_EN_RAYON: { bg: "#cffafe", text: "#155e75", border: "#67e8f9" },
