@@ -806,6 +806,20 @@ export const PlanningGrid = memo(function PlanningGrid({
                 </tr>
               );
             })}
+            {/* Ligne de fermeture "20:00" — libellé à cheval sur le dernier
+                trait (bas du créneau 19:30). L'officine ferme à 20h : aucune
+                cellule éditable ici, juste le repère horaire de fin. */}
+            <tr aria-hidden className="h-4">
+              <td className="sticky left-0 z-10 bg-card px-3 relative">
+                <span className="absolute right-3 top-0 -translate-y-1/2 font-mono tabular-nums text-foreground font-semibold whitespace-nowrap select-none">
+                  20:00
+                </span>
+              </td>
+              {employees.map((emp) => (
+                <td key={emp.id} className="h-4" />
+              ))}
+              <td className="sticky right-0 z-10 bg-card" />
+            </tr>
           </tbody>
         </table>
       </div>
