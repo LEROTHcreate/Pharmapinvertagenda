@@ -167,10 +167,11 @@ export type SessionUser = {
 
 // ─── Constantes planning ─────────────────────────────────────────
 
-/** Créneaux de 30 min de 07:30 à 22:00 (le dernier créneau démarre à 21:30) */
+/** Créneaux de 30 min de 07:30 à 20:00 : l'officine ferme à 20h, le dernier
+ *  créneau démarre donc à 19:30 (tranche 19:30→20:00). */
 export const TIME_SLOTS: string[] = (() => {
   const slots: string[] = [];
-  for (let h = 7; h <= 21; h++) {
+  for (let h = 7; h <= 19; h++) {
     const hh = h.toString().padStart(2, "0");
     if (h === 7) {
       slots.push(`${hh}:30`);
