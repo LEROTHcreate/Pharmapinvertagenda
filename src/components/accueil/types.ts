@@ -2,6 +2,7 @@
 
 import type { UserRole } from "@prisma/client";
 import type { NewsItem } from "@/lib/pharmacy-news";
+import type { OnboardingState } from "@/components/accueil/OnboardingChecklist";
 
 export type PersonRef = { id: string; name: string; color: string };
 export type AbsentRef = PersonRef & { label: string };
@@ -29,6 +30,8 @@ export type AccueilData = {
   canViewPayroll: boolean;
   /** Actu pharmacie (barre latérale « Actus »). */
   news: NewsItem[];
+  /** État de configuration de l'officine (checklist de démarrage). */
+  onboarding: OnboardingState;
   myDay: { hours: number; blocks: DayBlock[] } | null;
   myWeek: { done: number; contract: number } | null;
   nextSlot: { when: string; from: string; label: string } | null;

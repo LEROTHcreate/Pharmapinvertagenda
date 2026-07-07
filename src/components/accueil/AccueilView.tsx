@@ -20,6 +20,7 @@ import { TeamTodayCard } from "@/components/accueil/TeamTodayCard";
 import { NextGardeCard } from "@/components/accueil/NextGardeCard";
 import { ActionsCard } from "@/components/accueil/ActionsCard";
 import { AccueilNews } from "@/components/accueil/AccueilNews";
+import { OnboardingChecklist } from "@/components/accueil/OnboardingChecklist";
 import { Greeting } from "@/components/accueil/Greeting";
 import { AccueilDesktop } from "@/components/accueil/AccueilDesktop";
 import { canEditPlanning } from "@/lib/permissions";
@@ -41,6 +42,7 @@ export function AccueilView(data: AccueilData) {
     role,
     canViewPayroll,
     news,
+    onboarding,
     myDay,
     myWeek,
     nextSlot,
@@ -108,6 +110,9 @@ export function AccueilView(data: AccueilData) {
           </h1>
           <p className="text-[13px] text-muted-foreground capitalize mt-0.5">{dateLabel}</p>
         </header>
+
+        {/* Checklist de démarrage (manageur+, tant que non configuré) */}
+        {isManager && <OnboardingChecklist state={onboarding} />}
 
         {/* À traiter (responsables) — absences / inscriptions / échanges */}
         {isAdmin && (

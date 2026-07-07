@@ -22,6 +22,7 @@ import { TeamTodayCard } from "@/components/accueil/TeamTodayCard";
 import { NextGardeCard } from "@/components/accueil/NextGardeCard";
 import { ActionsCard } from "@/components/accueil/ActionsCard";
 import { AccueilNews } from "@/components/accueil/AccueilNews";
+import { OnboardingChecklist } from "@/components/accueil/OnboardingChecklist";
 import { Greeting } from "@/components/accueil/Greeting";
 import { canEditPlanning } from "@/lib/permissions";
 import type { AccueilData } from "@/components/accueil/types";
@@ -106,6 +107,7 @@ export function AccueilDesktop(data: AccueilData) {
     role,
     canViewPayroll,
     news,
+    onboarding,
     teamPresent,
     teamSize,
     minStaff,
@@ -160,6 +162,9 @@ export function AccueilDesktop(data: AccueilData) {
         </h1>
         <p className="mt-0.5 text-[14px] capitalize text-muted-foreground">{dateLabel}</p>
       </header>
+
+      {/* Checklist de démarrage (manageur+, tant que non configuré) */}
+      {isManager && <OnboardingChecklist state={onboarding} />}
 
       {/* Bandeau KPIs */}
       <div className={cn("grid gap-4", isAdmin ? "grid-cols-4" : "grid-cols-3")}>
