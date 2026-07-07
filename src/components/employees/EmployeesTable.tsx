@@ -17,6 +17,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { STATUS_LABELS } from "@/types";
+
+const CONTRACT_SHORT: Record<ContractType, string> = {
+  CDI: "CDI",
+  CDD: "CDD",
+  APPRENTISSAGE: "Apprentissage",
+  STAGE: "Stage",
+  INTERIM: "Intérim",
+};
+
+/** "2026-07-31" → "31/07/2026" (affichage FR). */
+function frDate(iso: string | null): string | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
 import { EmployeeFormDialog } from "@/components/employees/EmployeeFormDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -39,6 +54,7 @@ export type EmployeeRowData = {
   contractType: ContractType;
   contractEndDate: string | null;
   trialEndDate: string | null;
+  departureDate: string | null;
   lastMedicalVisitDate: string | null;
   lastProfessionalInterviewDate: string | null;
   dpcLastDate: string | null;
@@ -155,8 +171,27 @@ export function EmployeesTable({
                       style={{ backgroundColor: e.displayColor }}
                     />
                   </td>
-                  <td className="px-3 py-2 font-medium">
-                    {e.lastName.toUpperCase()} {e.firstName}
+                  <td className="px-3 py-2">
+                    <div className="font-medium">
+                      {e.lastName.toUpperCase()} {e.firstName}
+                    </div>
+                    {(e.contractType !== "CDI" || e.departureDate) && (
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                        {e.contractType !== "CDI" && (
+                          <span>
+                            {CONTRACT_SHORT[e.contractType]}
+                            {e.contractEndDate
+                              ? ` → ${frDate(e.contractEndDate)}`
+                              : ""}
+                          </span>
+                        )}
+                        {e.departureDate && (
+                          <span className="text-amber-700 dark:text-amber-400">
+                            Départ {frDate(e.departureDate)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">{STATUS_LABELS[e.status]}</td>
                   <td className="px-3 py-2 text-right tabular-nums">

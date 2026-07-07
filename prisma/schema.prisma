@@ -279,7 +279,11 @@ model Employee {
   // ─── Échéances RH (rappels automatiques) ───────────────────────────
   contractType                  ContractType @default(CDI)
   contractEndDate               DateTime?  // Fin de CDD / stage / apprentissage
-  trialEndDate                  DateTime?  // Fin de période d'essai
+  trialEndDate                  DateTime?  // Fin de période d'essai (rappel seul)
+  // Date de départ prévue (démission, rupture…). Au passage de cette date, OU
+  // de contractEndDate pour un contrat non-CDI, le collaborateur bascule
+  // automatiquement en inactif (cf. src/lib/employee-lifecycle.ts).
+  departureDate                 DateTime?
   lastMedicalVisitDate          DateTime?  // Dernière visite médicale du travail
   lastProfessionalInterviewDate DateTime?  // Dernier entretien professionnel
   dpcLastDate                   DateTime?  // Dernière action DPC (pharmacien)

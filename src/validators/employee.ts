@@ -46,6 +46,8 @@ export const employeeInput = z.object({
   contractType: z.enum(CONTRACT_TYPES).default("CDI"),
   contractEndDate: dateStr,
   trialEndDate: dateStr,
+  // Date de départ prévue → désactivation auto à son passage.
+  departureDate: dateStr,
   lastMedicalVisitDate: dateStr,
   lastProfessionalInterviewDate: dateStr,
   dpcLastDate: dateStr,

@@ -51,6 +51,7 @@ function hrFields(data: EmployeeInput) {
     contractType: data.contractType,
     contractEndDate: toDate(data.contractEndDate),
     trialEndDate: toDate(data.trialEndDate),
+    departureDate: toDate(data.departureDate),
     lastMedicalVisitDate: toDate(data.lastMedicalVisitDate),
     lastProfessionalInterviewDate: toDate(data.lastProfessionalInterviewDate),
     dpcLastDate: toDate(data.dpcLastDate),

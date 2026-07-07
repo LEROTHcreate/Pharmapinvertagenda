@@ -138,6 +138,29 @@ export function GabaritsList({
   const totalCount = rows.length;
   const shownCount = filtered.length;
 
+  // Rendu d'une grille de cartes pour une liste donnée (réutilisé pour le
+  // rendu direct et pour les sous-groupes S1/S2 en vue « Tous »).
+  const renderCards = (list: GabaritRow[]) => (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {list.map((g) => (
+        <GabaritCard
+          key={g.id}
+          row={g}
+          editing={editingId === g.id}
+          busyDelete={busyDelete === g.id}
+          onStartEdit={() => setEditingId(g.id)}
+          onCancelEdit={() => setEditingId(null)}
+          onSaved={() => {
+            setEditingId(null);
+            startTransition(() => router.refresh());
+          }}
+          onDelete={() => setConfirmTarget(g)}
+          onDuplicate={() => setDuplicateTarget(g)}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-5">
       {error && (
@@ -238,24 +261,29 @@ export function GabaritsList({
                 </span>
               </header>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {group.list.map((g) => (
-                  <GabaritCard
-                    key={g.id}
-                    row={g}
-                    editing={editingId === g.id}
-                    busyDelete={busyDelete === g.id}
-                    onStartEdit={() => setEditingId(g.id)}
-                    onCancelEdit={() => setEditingId(null)}
-                    onSaved={() => {
-                      setEditingId(null);
-                      startTransition(() => router.refresh());
-                    }}
-                    onDelete={() => setConfirmTarget(g)}
-                    onDuplicate={() => setDuplicateTarget(g)}
-                  />
-                ))}
-              </div>
+              {/* En « Tous » : on sépare S1 et S2 en sous-sections dans chaque
+                  catégorie. Filtre S1/S2 déjà actif → rendu direct (inutile). */}
+              {typeFilter === "ALL" ? (
+                <div className="space-y-4">
+                  {TYPES.map((type) => {
+                    const sub = group.list.filter((g) => g.weekType === type);
+                    if (sub.length === 0) return null;
+                    return (
+                      <div key={type}>
+                        <h3 className="mb-2 flex items-center gap-1.5 pl-0.5 text-[12px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                          Semaine {type}
+                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground/60">
+                            {sub.length}
+                          </span>
+                        </h3>
+                        {renderCards(sub)}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                renderCards(group.list)
+              )}
             </section>
           ))}
         </div>
