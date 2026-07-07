@@ -44,9 +44,17 @@ const DURATION_OPTIONS: Array<{ value: number; label: string; sub: string }> = [
 export function ApplyTemplateButton({
   weekStart,
   onApplied,
+  alwaysConfirm = false,
 }: {
   weekStart: string;
   onApplied: () => void;
+  /**
+   * Si true, exige TOUJOURS une étape de confirmation avant d'appliquer, même
+   * pour une application simple (1 semaine, sans écrasement). Utile quand le
+   * bouton est loin du planning (page Gabarits) : on évite de modifier le
+   * planning réel par surprise.
+   */
+  alwaysConfirm?: boolean;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -66,7 +74,20 @@ export function ApplyTemplateButton({
 
   // Une application est "à risque" si elle couvre une longue période OU écrase
   // des modifs OU supprime des absences → on exige une confirmation explicite.
-  const needsConfirm = duration >= 12 || overwrite || deleteAbsences;
+  // `alwaysConfirm` force cette étape même pour une application anodine.
+  const needsConfirm =
+    alwaysConfirm || duration >= 12 || overwrite || deleteAbsences;
+
+  // Semaine cible (lundi) formatée — affichée dans l'étape de confirmation pour
+  // que l'utilisateur sache exactement quelle semaine sera modifiée. Midi UTC
+  // pour éviter tout décalage de jour selon le fuseau.
+  const targetWeekLabel = new Date(
+    `${weekStart}T12:00:00`
+  ).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
 
   // Toute modification des paramètres réinitialise l'étape de confirmation.
   useEffect(() => {
@@ -339,10 +360,11 @@ export function ApplyTemplateButton({
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-800 flex items-start gap-2 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>
-                Confirme l&apos;application sur{" "}
+                Êtes-vous sûr ? Application sur{" "}
                 <strong>
                   {duration} semaine{duration > 1 ? "s" : ""}
-                </strong>
+                </strong>{" "}
+                à partir de la semaine du <strong>{targetWeekLabel}</strong>
                 {overwrite && (
                   <>
                     {" "}
@@ -373,7 +395,13 @@ export function ApplyTemplateButton({
                 applyBatch();
               }}
               disabled={!canApply}
-              variant={confirmStep ? "destructive" : "default"}
+              // Rouge seulement si l'action est réellement destructrice (écrase /
+              // supprime). Une simple application confirmée reste en violet.
+              variant={
+                confirmStep && (overwrite || deleteAbsences)
+                  ? "destructive"
+                  : "default"
+              }
             >
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

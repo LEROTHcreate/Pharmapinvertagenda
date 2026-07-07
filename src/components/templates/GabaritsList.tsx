@@ -197,6 +197,7 @@ export function GabaritsList({
           <ApplyTemplateButton
             weekStart={currentWeekStart}
             onApplied={() => startTransition(() => router.refresh())}
+            alwaysConfirm
           />
           {TYPES.map((type) => (
             <Button key={type} asChild size="sm" variant="outline">
