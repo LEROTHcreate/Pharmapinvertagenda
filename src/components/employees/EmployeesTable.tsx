@@ -61,6 +61,18 @@ export function EmployeesTable({
   const [deleteTarget, setDeleteTarget] =
     React.useState<EmployeeRowData | null>(null);
 
+  // Numéro d'ordre affiché = RANG parmi les ACTIFS uniquement (contigu, sans
+  // trou). Un inactif n'a pas de numéro. La liste arrive déjà triée (actifs par
+  // displayOrder, puis inactifs).
+  const activeRankById = React.useMemo(() => {
+    const map = new Map<string, number>();
+    let rank = 0;
+    for (const e of employees) {
+      if (e.isActive) map.set(e.id, rank++);
+    }
+    return map;
+  }, [employees]);
+
   const handleToggle = (e: EmployeeRowData) => {
     setPendingId(e.id);
     setError(null);
@@ -151,7 +163,7 @@ export function EmployeesTable({
                     {e.weeklyHours} h
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {e.displayOrder}
+                    {e.isActive ? activeRankById.get(e.id) : "—"}
                   </td>
                   <td className="px-3 py-2">
                     {e.isActive ? (
