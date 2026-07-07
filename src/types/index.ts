@@ -51,7 +51,7 @@ export const TASK_COLORS: Record<TaskCode, CellStyle> = {
   COMPTOIR: { bg: "#dbeafe", text: "#1e40af", border: "#93c5fd" },
   COMMANDE: { bg: "#fef9c3", text: "#854d0e", border: "#fde047" },
   MISE_A_PRIX: { bg: "#f3e8ff", text: "#6b21a8", border: "#d8b4fe" },
-  PARAPHARMACIE: { bg: "#dcfce7", text: "#166534", border: "#86efac" },
+  PARAPHARMACIE: { bg: "#ffe4e6", text: "#9f1239", border: "#fda4af" },
   SECRETARIAT: { bg: "#fce7f3", text: "#9d174d", border: "#f9a8d4" },
   MAIL: { bg: "#ede9fe", text: "#5b21b6", border: "#c4b5fd" },
   FORMATION: { bg: "#e0e7ff", text: "#3730a3", border: "#a5b4fc" },
@@ -74,10 +74,9 @@ export const ABSENCE_LABELS: Record<AbsenceCode, string> = {
 
 /**
  * Étiquettes courtes affichées DIRECTEMENT dans la cellule du planning (case
- * de 9 mm de haut). On évite les pictogrammes ☀/✚ qui prêtent à confusion :
- * le code couleur du fond suffit à distinguer le type d'absence (jaune =
- * congé, rouge = maladie, indigo = formation, gris = absent), le texte
- * court rappelle juste qu'on est sur une absence.
+ * de 9 mm de haut). Les absences partagent désormais une même couleur beige
+ * (cf. ABSENCE_STYLES) : c'est ce libellé court (ABS / CONGÉ / MAL / FORM) qui
+ * distingue le type d'absence.
  */
 export const ABSENCE_ICONS: Record<AbsenceCode, string> = {
   ABSENT: "ABS",
@@ -86,11 +85,19 @@ export const ABSENCE_ICONS: Record<AbsenceCode, string> = {
   FORMATION_ABS: "FORM",
 };
 
+// Les 4 types d'absence partagent une même couleur BEIGE — le type se
+// distingue par le libellé dans la case (ABS / CONGÉ / MAL / FORM), pas par
+// la couleur. (Choix produit : uniformiser visuellement les absences.)
+const ABSENCE_BEIGE: CellStyle = {
+  bg: "#f1ece1",
+  text: "#6f6249",
+  border: "#dccfb8",
+};
 export const ABSENCE_STYLES: Record<AbsenceCode, CellStyle> = {
-  ABSENT: { bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
-  CONGE: { bg: "#fef9c3", text: "#854d0e", border: "#fde047" },
-  MALADIE: { bg: "#fee2e2", text: "#991b1b", border: "#fca5a5" },
-  FORMATION_ABS: { bg: "#e0e7ff", text: "#3730a3", border: "#a5b4fc" },
+  ABSENT: ABSENCE_BEIGE,
+  CONGE: ABSENCE_BEIGE,
+  MALADIE: ABSENCE_BEIGE,
+  FORMATION_ABS: ABSENCE_BEIGE,
 };
 
 /**
