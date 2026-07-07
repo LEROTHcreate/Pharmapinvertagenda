@@ -187,6 +187,9 @@ export function Sidebar({
             <Link
               key={item.href}
               href={item.href}
+              // Après clic : retire le focus pour que la barre ne reste pas
+              // ouverte (sinon focus-within la maintient dépliée).
+              onClick={(e) => e.currentTarget.blur()}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 active
@@ -217,6 +220,7 @@ export function Sidebar({
       <div className="p-3 space-y-3">
         <Link
           href="/profil"
+          onClick={(e) => e.currentTarget.blur()}
           className={cn(
             "block rounded-md px-3 py-2 transition-colors",
             pathname.startsWith("/profil")
