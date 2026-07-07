@@ -973,7 +973,7 @@ function CellView({
     // Fine ligne verticale entre les salariés (colonnes) — repère net, visible
     // même par-dessus les blocs colorés. PAS sur la ligne courante : sinon la
     // bordure verticale (peinte au-dessus du box-shadow) coupe le trait rouge.
-    !isCurrentRow && "border-r border-r-white/80 dark:border-r-black/30",
+    !isCurrentRow && "border-r-2 border-r-white/85 dark:border-r-black/35",
     // Toute la colonne en cours de réordonnancement → semi-transparente,
     // pour que l'admin voie clairement quel bloc complet est en train d'être déplacé.
     isInDragSourceCol && "opacity-40",
