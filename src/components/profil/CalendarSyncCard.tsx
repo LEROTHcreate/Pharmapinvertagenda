@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Copy, Loader2, Link2, Power } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  Copy,
+  Loader2,
+  Link2,
+  Power,
+  CalendarPlus,
+} from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 
 /**
@@ -18,6 +26,9 @@ export function CalendarSyncCard({ initialToken }: { initialToken: string | null
     token && typeof window !== "undefined"
       ? `${window.location.origin}/api/ical/${token}`
       : null;
+  // Schéma webcal:// → ouvre directement le dialogue d'abonnement sur
+  // iPhone/Mac (Apple Calendrier) et la plupart des apps agenda.
+  const webcalUrl = feedUrl ? feedUrl.replace(/^https?:/, "webcal:") : null;
 
   async function enable() {
     setBusy(true);
@@ -87,6 +98,18 @@ export function CalendarSyncCard({ initialToken }: { initialToken: string | null
         </button>
       ) : (
         <div className="space-y-3">
+          {/* Ajout en 1 clic (iPhone / Mac / apps agenda gérant webcal://) */}
+          {webcalUrl && (
+            <a
+              href={webcalUrl}
+              className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-3 py-2 text-[13px] font-medium text-white hover:bg-violet-700"
+            >
+              <CalendarPlus className="h-4 w-4" />
+              Ajouter à mon agenda
+            </a>
+          )}
+
+          {/* URL manuelle (Google Agenda web, Android…) */}
           <div className="flex items-center gap-2">
             <input
               readOnly
@@ -103,10 +126,27 @@ export function CalendarSyncCard({ initialToken }: { initialToken: string | null
               {copied ? "Copié" : "Copier"}
             </button>
           </div>
-          <p className="text-[11.5px] text-muted-foreground leading-relaxed">
-            Dans Google Agenda : « Autres agendas » → « À partir de l&apos;URL » →
-            colle ce lien. Garde-le secret : il donne accès à ton planning.
+
+          {/* Mini-guide par plateforme */}
+          <ul className="space-y-1 text-[11.5px] leading-relaxed text-muted-foreground">
+            <li>
+              <span className="font-semibold text-foreground/80">iPhone / Mac :</span>{" "}
+              touche « Ajouter à mon agenda » ci-dessus → confirme l&apos;abonnement.
+            </li>
+            <li>
+              <span className="font-semibold text-foreground/80">Google Agenda :</span>{" "}
+              sur ordinateur, « Autres agendas » → « À partir de l&apos;URL » → colle le lien
+              (il se synchronise ensuite sur ton téléphone Android).
+            </li>
+            <li>
+              <span className="font-semibold text-foreground/80">Android :</span>{" "}
+              utilise Google Agenda ci-dessus, ou colle le lien dans ton appli calendrier.
+            </li>
+          </ul>
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+            Garde ce lien secret : il donne accès à ton planning.
           </p>
+
           <button
             onClick={disable}
             disabled={busy}
