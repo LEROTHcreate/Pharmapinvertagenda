@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarHeart,
+  FlaskConical,
+  GraduationCap,
+  Handshake,
   Loader2,
   MapPin,
+  MessagesSquare,
+  PartyPopper,
   Pencil,
   Plus,
   Sparkles,
   Trash2,
+  UtensilsCrossed,
   X,
 } from "lucide-react";
 import {
@@ -39,76 +45,82 @@ export type TeamEventRow = {
   location: string | null;
 };
 
-/** Ambiance visuelle par type : emoji, couleurs, animation de l'icône. */
+type IconType = ComponentType<{ className?: string }>;
+
+/** Ambiance visuelle par type : icône, couleurs, animation, confettis. */
 const TYPE_CONFIG: Record<
   TeamEventType,
   {
     label: string;
-    emoji: string;
+    Icon: IconType;
     card: string; // dégradé de fond de carte
     ring: string; // liseré / accent
-    chip: string; // pastille de type
-    anim: string; // classe d'animation de l'emoji
+    chip: string; // badge de type (fond + texte)
+    anim: string; // animation discrète de l'icône
+    glow: string; // lueur "jour J" (rgba)
+    confetti: string[]; // couleurs des confettis "jour J"
   }
 > = {
   REPAS: {
     label: "Repas d'équipe",
-    emoji: "🍽️",
+    Icon: UtensilsCrossed,
     card: "from-amber-50 to-orange-100/70 dark:from-amber-950/30 dark:to-orange-950/20",
     ring: "ring-amber-200/70 dark:ring-amber-900/50",
     chip: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
     anim: "tev-bob",
+    glow: "rgba(245,158,11,0.55)",
+    confetti: ["#f59e0b", "#fb923c", "#fbbf24", "#fde68a"],
   },
   ANIMATION_LABO: {
     label: "Animation labo",
-    emoji: "🧪",
+    Icon: FlaskConical,
     card: "from-violet-50 to-fuchsia-100/70 dark:from-violet-950/30 dark:to-fuchsia-950/20",
     ring: "ring-violet-200/70 dark:ring-violet-900/50",
     chip: "bg-violet-100 text-violet-800 dark:bg-violet-950/50 dark:text-violet-300",
     anim: "tev-sparkle",
+    glow: "rgba(168,85,247,0.55)",
+    confetti: ["#a855f7", "#d946ef", "#c084fc", "#f0abfc"],
   },
   REUNION_FOURNISSEUR: {
     label: "Réunion fournisseur",
-    emoji: "🤝",
+    Icon: Handshake,
     card: "from-sky-50 to-blue-100/70 dark:from-sky-950/30 dark:to-blue-950/20",
     ring: "ring-sky-200/70 dark:ring-sky-900/50",
     chip: "bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300",
     anim: "tev-bob",
+    glow: "rgba(14,165,233,0.5)",
+    confetti: ["#0ea5e9", "#38bdf8", "#60a5fa", "#7dd3fc"],
   },
   ENTRETIEN: {
     label: "Entretien",
-    emoji: "💬",
+    Icon: MessagesSquare,
     card: "from-emerald-50 to-teal-100/70 dark:from-emerald-950/30 dark:to-teal-950/20",
     ring: "ring-emerald-200/70 dark:ring-emerald-900/50",
     chip: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
     anim: "tev-pulse",
+    glow: "rgba(16,185,129,0.5)",
+    confetti: ["#10b981", "#14b8a6", "#34d399", "#5eead4"],
   },
   FORMATION: {
     label: "Formation",
-    emoji: "🎓",
+    Icon: GraduationCap,
     card: "from-indigo-50 to-blue-100/70 dark:from-indigo-950/30 dark:to-blue-950/20",
     ring: "ring-indigo-200/70 dark:ring-indigo-900/50",
     chip: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300",
     anim: "tev-bob",
+    glow: "rgba(99,102,241,0.5)",
+    confetti: ["#6366f1", "#818cf8", "#60a5fa", "#a5b4fc"],
   },
   AUTRE: {
     label: "Événement",
-    emoji: "🎉",
+    Icon: PartyPopper,
     card: "from-rose-50 to-pink-100/70 dark:from-rose-950/30 dark:to-pink-950/20",
     ring: "ring-rose-200/70 dark:ring-rose-900/50",
     chip: "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
     anim: "tev-wiggle",
+    glow: "rgba(244,63,94,0.55)",
+    confetti: ["#f43f5e", "#ec4899", "#fb7185", "#fbbf24"],
   },
-};
-
-/** Effets « jour J » par type : lueur de la carte + emojis qui flottent. */
-const TYPE_FX: Record<TeamEventType, { glow: string; emojis: string[] }> = {
-  REPAS: { glow: "rgba(245,158,11,0.55)", emojis: ["🍽️", "🥂", "🍷", "😋", "🎉"] },
-  ANIMATION_LABO: { glow: "rgba(168,85,247,0.55)", emojis: ["🧪", "✨", "💊", "🔬", "🎈"] },
-  REUNION_FOURNISSEUR: { glow: "rgba(14,165,233,0.5)", emojis: ["🤝", "📦", "📋", "✨"] },
-  ENTRETIEN: { glow: "rgba(16,185,129,0.5)", emojis: ["💬", "🌟", "✨"] },
-  FORMATION: { glow: "rgba(99,102,241,0.5)", emojis: ["🎓", "📚", "✏️", "✨"] },
-  AUTRE: { glow: "rgba(244,63,94,0.55)", emojis: ["🎉", "🎊", "🥳", "✨"] },
 };
 
 const WEEKDAYS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
@@ -158,29 +170,29 @@ export function TeamEventsPanel({
     }
   }
 
-  // Événements du JOUR → déclenche la fête (emojis flottants + bandeau).
+  // Événements du JOUR → déclenche la fête (confettis + bandeau).
   const todayEvents = events.filter((e) => daysUntil(e.date) <= 0);
-  const todayEmojis = Array.from(
-    new Set(todayEvents.flatMap((e) => TYPE_FX[e.type].emojis))
+  const confettiColors = Array.from(
+    new Set(todayEvents.flatMap((e) => TYPE_CONFIG[e.type].confetti))
   );
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-border bg-card/60 p-4 shadow-sm">
-      {/* Pluie d'emojis thématiques le jour d'un événement */}
-      {todayEvents.length > 0 && <TodayCelebration emojis={todayEmojis} />}
+      {/* Confettis le jour d'un événement */}
+      {todayEvents.length > 0 && <Confetti colors={confettiColors} />}
 
       {/* Bandeau festif « c'est le jour ! » */}
       {todayEvents.length > 0 && (
-        <div className="tev-today-banner relative mb-3 rounded-xl bg-gradient-to-r from-amber-200 via-rose-200 to-violet-200 px-3 py-2 text-center text-[12.5px] font-semibold text-foreground shadow-sm dark:from-amber-500/30 dark:via-rose-500/30 dark:to-violet-500/30">
-          <span className="tev-wiggle mr-1 inline-block">🎉</span>
+        <div className="tev-today-banner relative z-[1] mb-3 flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-200 via-rose-200 to-violet-200 px-3 py-2 text-center text-[12.5px] font-semibold text-foreground shadow-sm dark:from-amber-500/30 dark:via-rose-500/30 dark:to-violet-500/30">
+          <PartyPopper className="h-4 w-4 shrink-0 tev-bob" />
           {todayEvents.length === 1
             ? `Aujourd'hui : ${todayEvents[0].title} !`
             : `${todayEvents.length} événements aujourd'hui !`}
         </div>
       )}
 
-      {/* En-tête festif */}
-      <div className="mb-3 flex items-start justify-between gap-2">
+      {/* En-tête */}
+      <div className="relative z-[1] mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight">
             <Sparkles className="h-4 w-4 text-violet-500 tev-sparkle" />
@@ -208,7 +220,7 @@ export function TeamEventsPanel({
       {events.length === 0 ? (
         <EmptyState canManage={canManage} />
       ) : (
-        <ul className="relative space-y-3">
+        <ul className="relative z-[1] space-y-3">
           {events.map((ev) => (
             <EventCard
               key={ev.id}
@@ -241,7 +253,7 @@ export function TeamEventsPanel({
   );
 }
 
-/* ─── Carte événement animée ─────────────────────────────────────── */
+/* ─── Carte événement ────────────────────────────────────────────── */
 
 function EventCard({
   ev,
@@ -259,26 +271,27 @@ function EventCard({
   onDelete: () => void;
 }) {
   const cfg = TYPE_CONFIG[ev.type];
-  const fx = TYPE_FX[ev.type];
+  const Icon = cfg.Icon;
   const d = new Date(`${ev.date}T00:00:00`);
   const soon = daysUntil(ev.date) <= 2;
 
   return (
     <li
       className={cn(
-        "group/ev relative overflow-hidden rounded-2xl bg-gradient-to-br p-3 ring-1 transition-transform duration-200 hover:-translate-y-0.5",
+        "group/ev relative overflow-hidden rounded-2xl bg-gradient-to-br p-3 transition-transform duration-200 hover:-translate-y-0.5",
         cfg.card,
         isToday ? "tev-today-card ring-2" : "ring-1",
         cfg.ring
       )}
-      style={isToday ? ({ ["--glow"]: fx.glow } as React.CSSProperties) : undefined}
+      style={isToday ? ({ ["--glow"]: cfg.glow } as React.CSSProperties) : undefined}
     >
-      {/* Ruban « c'est aujourd'hui » */}
+      {/* Ruban « aujourd'hui » */}
       {isToday && (
-        <div className="absolute right-0 top-0 z-10 rounded-bl-lg bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-foreground shadow-sm dark:bg-black/40">
-          <span className="tev-wiggle mr-0.5 inline-block">🎉</span> Aujourd&apos;hui
+        <div className="absolute right-0 top-0 z-10 flex items-center gap-0.5 rounded-bl-lg bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-foreground shadow-sm dark:bg-black/40">
+          <PartyPopper className="h-2.5 w-2.5 tev-wiggle" /> Aujourd&apos;hui
         </div>
       )}
+
       {/* Reflet doux qui balaie la carte au survol */}
       <span
         aria-hidden
@@ -286,8 +299,8 @@ function EventCard({
       />
 
       <div className="relative flex items-start gap-3">
-        {/* Pastille date + emoji animé */}
-        <div className="flex flex-col items-center">
+        {/* Pastille date + icône du type */}
+        <div className="flex flex-col items-center gap-1.5">
           <div className="flex h-14 w-14 flex-col items-center justify-center rounded-xl bg-white/70 shadow-sm ring-1 ring-black/5 dark:bg-black/20">
             <span className="text-[10px] font-medium uppercase leading-none text-muted-foreground">
               {WEEKDAYS[d.getDay()]}
@@ -299,15 +312,16 @@ function EventCard({
               {MONTHS[d.getMonth()]}
             </span>
           </div>
-          <span
+          <div
             className={cn(
-              "mt-1 leading-none",
-              isToday ? "text-[30px]" : "text-[22px]",
+              "flex items-center justify-center rounded-lg",
+              isToday ? "h-9 w-9" : "h-8 w-8",
+              cfg.chip,
               cfg.anim
             )}
           >
-            {cfg.emoji}
-          </span>
+            <Icon className={isToday ? "h-5 w-5" : "h-4 w-4"} />
+          </div>
         </div>
 
         <div className="min-w-0 flex-1">
@@ -389,58 +403,62 @@ function EventCard({
   );
 }
 
-/* ─── Pluie d'emojis le jour d'un événement ─────────────────────── */
+/* ─── Confettis (le jour d'un événement) ─────────────────────────── */
 
-type FloatBit = {
-  emoji: string;
+type Piece = {
   left: number;
   delay: number;
   dur: number;
+  color: string;
   size: number;
+  round: boolean;
   drift: number;
 };
 
-function TodayCelebration({ emojis }: { emojis: string[] }) {
-  // Généré côté client (après montage) pour éviter tout écart d'hydratation
-  // dû au hasard des positions.
-  const [bits, setBits] = useState<FloatBit[]>([]);
+function Confetti({ colors }: { colors: string[] }) {
+  // Généré côté client (après montage) → pas d'écart d'hydratation dû au hasard.
+  const [pieces, setPieces] = useState<Piece[]>([]);
   useEffect(() => {
-    if (emojis.length === 0) {
-      setBits([]);
+    if (colors.length === 0) {
+      setPieces([]);
       return;
     }
-    const arr: FloatBit[] = Array.from({ length: 16 }, (_, i) => ({
-      emoji: emojis[i % emojis.length],
+    const arr: Piece[] = Array.from({ length: 34 }, (_, i) => ({
       left: Math.round(Math.random() * 100),
-      delay: Math.round(Math.random() * 4000) / 1000,
-      dur: 4 + Math.round(Math.random() * 4000) / 1000,
-      size: 14 + Math.round(Math.random() * 16),
-      drift: Math.round((Math.random() * 2 - 1) * 40),
+      delay: Math.round(Math.random() * 5000) / 1000,
+      dur: 3 + Math.round(Math.random() * 3000) / 1000,
+      color: colors[i % colors.length],
+      size: 5 + Math.round(Math.random() * 5),
+      round: Math.random() > 0.55,
+      drift: Math.round((Math.random() * 2 - 1) * 30),
     }));
-    setBits(arr);
-  }, [emojis]);
+    setPieces(arr);
+  }, [colors]);
 
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
     >
-      {bits.map((b, i) => (
+      {pieces.map((p, i) => (
         <span
           key={i}
-          className="tev-float absolute bottom-0 select-none"
+          className={cn(
+            "tev-confetti absolute top-0 block",
+            p.round ? "rounded-full" : "rounded-[1px]"
+          )}
           style={
             {
-              left: `${b.left}%`,
-              fontSize: `${b.size}px`,
-              animationDelay: `${b.delay}s`,
-              animationDuration: `${b.dur}s`,
-              ["--drift"]: `${b.drift}px`,
+              left: `${p.left}%`,
+              width: `${p.size}px`,
+              height: `${p.round ? p.size : Math.round(p.size * 0.5)}px`,
+              backgroundColor: p.color,
+              animationDelay: `${p.delay}s`,
+              animationDuration: `${p.dur}s`,
+              ["--drift"]: `${p.drift}px`,
             } as React.CSSProperties
           }
-        >
-          {b.emoji}
-        </span>
+        />
       ))}
     </div>
   );
@@ -448,13 +466,13 @@ function TodayCelebration({ emojis }: { emojis: string[] }) {
 
 function EmptyState({ canManage }: { canManage: boolean }) {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-card/40 px-4 py-8 text-center">
+    <div className="relative z-[1] flex flex-col items-center rounded-2xl border border-dashed border-border bg-card/40 px-4 py-8 text-center">
       <CalendarHeart className="h-8 w-8 text-violet-400 tev-bob" />
       <p className="mt-2 text-[13px] font-medium">Rien de prévu pour l&apos;instant</p>
       <p className="mt-0.5 text-[11.5px] text-muted-foreground">
         {canManage
-          ? "Ajoute un repas d'équipe ou une animation pour animer la vie de l'officine 🌱"
-          : "Les prochains repas et animations apparaîtront ici 🌱"}
+          ? "Ajoute un repas d'équipe ou une animation pour faire vivre l'officine."
+          : "Les prochains repas et animations apparaîtront ici."}
       </p>
     </div>
   );
@@ -543,7 +561,7 @@ function EventFormDialog({
         </DialogHeader>
 
         <div className="space-y-3 py-1">
-          {/* Type — grille de pastilles */}
+          {/* Type — grille de pastilles avec icônes */}
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Type
@@ -551,6 +569,7 @@ function EventFormDialog({
             <div className="grid grid-cols-2 gap-1.5">
               {TEAM_EVENT_TYPES.map((t) => {
                 const cfg = TYPE_CONFIG[t];
+                const Icon = cfg.Icon;
                 const active = type === t;
                 return (
                   <button
@@ -565,7 +584,7 @@ function EventFormDialog({
                         : "border-border bg-card text-foreground/80 hover:bg-muted/40"
                     )}
                   >
-                    <span className="text-[15px] leading-none">{cfg.emoji}</span>
+                    <Icon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{cfg.label}</span>
                   </button>
                 );

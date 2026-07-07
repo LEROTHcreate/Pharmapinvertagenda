@@ -829,16 +829,16 @@ body[data-focus="true"] .md\:hidden header {
 .tev-pulse { display: inline-block; animation: tev-pulse 2.2s ease-in-out infinite; }
 .tev-sparkle { display: inline-block; animation: tev-sparkle 2.4s ease-in-out infinite; }
 
-/* Jour J : emojis thématiques qui montent en flottant à travers la colonne. */
-@keyframes tev-float-up {
-  0%   { transform: translateY(20%) translateX(0); opacity: 0; }
-  12%  { opacity: 0.95; }
-  85%  { opacity: 0.9; }
-  100% { transform: translateY(-120%) translateX(var(--drift, 0px)); opacity: 0; }
+/* Jour J : confettis (formes colorées) qui tombent en tournoyant + dérive. */
+@keyframes tev-confetti-fall {
+  0%   { transform: translateY(-16px) translateX(0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(420px) translateX(var(--drift, 0px)) rotate(540deg); opacity: 0; }
 }
-.tev-float {
-  animation-name: tev-float-up;
-  animation-timing-function: ease-in;
+.tev-confetti {
+  animation-name: tev-confetti-fall;
+  animation-timing-function: linear;
   animation-iteration-count: infinite;
   will-change: transform, opacity;
 }
@@ -862,8 +862,8 @@ body[data-focus="true"] .md\:hidden header {
 
 @media (prefers-reduced-motion: reduce) {
   .tev-bob, .tev-wiggle, .tev-pulse, .tev-sparkle,
-  .tev-float, .tev-today-card, .tev-today-banner { animation: none; }
-  .tev-float { display: none; }
+  .tev-confetti, .tev-today-card, .tev-today-banner { animation: none; }
+  .tev-confetti { display: none; }
 }
 
 /* ─── Animation flash sur cellule planning fraîchement enregistrée ─── */
