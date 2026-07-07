@@ -1,4 +1,5 @@
 import { LegalLayout } from "@/components/legal/LegalLayout";
+import { LEGAL, type LegalField } from "@/lib/legal-info";
 
 export const metadata = {
   title: "Mentions légales · PharmaPlanning",
@@ -8,13 +9,10 @@ export const metadata = {
 /**
  * Mentions légales — obligation LCEN art. 6, II.
  *
- * ⚠️ TEMPLATE : à compléter avant mise en production.
- * Les valeurs entre <code className="legal-placeholder">…</code> doivent
- * être remplacées par les informations réelles de l'éditeur. Sans cela,
- * la page reste publiable mais l'obligation légale n'est pas remplie.
- *
- * NB : ces mentions ne tiennent pas lieu de conseil juridique.
- * Faire valider par un avocat avant ouverture commerciale.
+ * Les informations de l'éditeur proviennent de variables d'environnement
+ * (cf. src/lib/legal-info.ts). Les champs non renseignés s'affichent « à
+ * renseigner » (repli honnête). À compléter avant ouverture commerciale ;
+ * faire valider par un conseil juridique.
  */
 export default function MentionsLegales() {
   return (
@@ -29,54 +27,37 @@ export default function MentionsLegales() {
 
       <h2>Éditeur du site</h2>
       <p>
-        <strong>Raison sociale :</strong>{" "}
-        <code className="legal-placeholder">{"{{RAISON_SOCIALE}}"}</code>
+        <strong>Raison sociale :</strong> <Value f={LEGAL.raisonSociale} />
         <br />
-        <strong>Forme juridique :</strong>{" "}
-        <code className="legal-placeholder">{"{{FORME_JURIDIQUE}}"}</code>{" "}
-        (SAS, SARL, EURL, micro-entreprise…)
+        <strong>Forme juridique :</strong> <Value f={LEGAL.formeJuridique} />
         <br />
-        <strong>Capital social :</strong>{" "}
-        <code className="legal-placeholder">{"{{CAPITAL_SOCIAL}}"}</code> €
+        <strong>Capital social :</strong> <Value f={LEGAL.capitalSocial} suffix=" €" />
         <br />
-        <strong>Siège social :</strong>{" "}
-        <code className="legal-placeholder">{"{{ADRESSE_SIEGE}}"}</code>
+        <strong>Siège social :</strong> <Value f={LEGAL.adresseSiege} />
         <br />
-        <strong>SIRET :</strong>{" "}
-        <code className="legal-placeholder">{"{{SIRET}}"}</code>
+        <strong>SIRET :</strong> <Value f={LEGAL.siret} />
         <br />
-        <strong>RCS :</strong>{" "}
-        <code className="legal-placeholder">{"{{RCS_VILLE_NUMERO}}"}</code>
+        <strong>RCS :</strong> <Value f={LEGAL.rcs} />
         <br />
-        <strong>N° TVA intracommunautaire :</strong>{" "}
-        <code className="legal-placeholder">{"{{TVA_INTRA}}"}</code>
+        <strong>N° TVA intracommunautaire :</strong> <Value f={LEGAL.tvaIntra} />
         <br />
-        <strong>Téléphone :</strong>{" "}
-        <code className="legal-placeholder">{"{{TELEPHONE}}"}</code>
+        <strong>Téléphone :</strong> <Value f={LEGAL.telephone} />
         <br />
         <strong>Email :</strong>{" "}
-        <a href="mailto:contact@pharmaplanning.fr">contact@pharmaplanning.fr</a>
+        <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>
       </p>
 
       <h2>Directeur de la publication</h2>
       <p>
-        <code className="legal-placeholder">{"{{NOM_DIRECTEUR_PUBLICATION}}"}</code>
-        , en qualité de{" "}
-        <code className="legal-placeholder">
-          {"{{QUALITE_DIRECTEUR_PUBLICATION}}"}
-        </code>{" "}
-        (gérant, président, dirigeant…).
+        <Value f={LEGAL.directeurPublication} />, en qualité de{" "}
+        <Value f={LEGAL.qualiteDirecteur} /> (gérant, président, dirigeant…).
       </p>
 
       <h2>Hébergement</h2>
       <p>
         Le site est hébergé par <strong>Vercel Inc.</strong> — 340 S Lemon Ave
         #4133, Walnut, CA 91789, USA. Site web :{" "}
-        <a
-          href="https://vercel.com"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href="https://vercel.com" target="_blank" rel="noopener noreferrer">
           vercel.com
         </a>
         .
@@ -85,11 +66,7 @@ export default function MentionsLegales() {
         Les données utilisateurs sont stockées sur l&apos;infrastructure de{" "}
         <strong>Supabase</strong> dans la région Europe (Irlande). Supabase Inc.
         — 970 Toa Payoh North #07-04, Singapore 318992. Site web :{" "}
-        <a
-          href="https://supabase.com"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href="https://supabase.com" target="_blank" rel="noopener noreferrer">
           supabase.com
         </a>
         .
@@ -115,10 +92,30 @@ export default function MentionsLegales() {
       <p>
         Pour toute question relative au site, à un signalement de contenu ou
         une demande relative aux données personnelles, merci d&apos;écrire à{" "}
-        <a href="mailto:contact@pharmaplanning.fr">contact@pharmaplanning.fr</a>
-        . Pour exercer vos droits RGPD, consultez la{" "}
+        <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>. Pour exercer vos
+        droits RGPD, consultez la{" "}
         <a href="/confidentialite">politique de confidentialité</a>.
       </p>
     </LegalLayout>
+  );
+}
+
+/** Affiche la valeur si renseignée, sinon un repli « à renseigner » discret. */
+function Value({ f, suffix }: { f: LegalField; suffix?: string }) {
+  if (f.value === null) {
+    return (
+      <em
+        title={`À définir via la variable d'environnement ${f.envVar}`}
+        className="legal-placeholder text-muted-foreground"
+      >
+        à renseigner
+      </em>
+    );
+  }
+  return (
+    <>
+      {f.value}
+      {suffix ?? ""}
+    </>
   );
 }
