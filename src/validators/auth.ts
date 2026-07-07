@@ -28,7 +28,8 @@ export const signupSchema = z.discriminatedUnion("mode", [
   // ─── Rejoindre une officine existante ──────────────────────────
   z.object({
     mode: z.literal("join"),
-    name: z.string().trim().min(2).max(80),
+    firstName: z.string().trim().min(1, "Prénom requis").max(40),
+    lastName: z.string().trim().min(1, "Nom requis").max(60),
     email: z.string().trim().toLowerCase().email(),
     password: z.string().min(8).max(128),
     pharmacySiret: siretSchema,
@@ -36,7 +37,8 @@ export const signupSchema = z.discriminatedUnion("mode", [
   // ─── Créer une nouvelle officine ───────────────────────────────
   z.object({
     mode: z.literal("create"),
-    name: z.string().trim().min(2).max(80),
+    firstName: z.string().trim().min(1, "Prénom requis").max(40),
+    lastName: z.string().trim().min(1, "Nom requis").max(60),
     email: z.string().trim().toLowerCase().email(),
     password: z.string().min(8).max(128),
     pharmacyName: z.string().trim().min(2).max(120),

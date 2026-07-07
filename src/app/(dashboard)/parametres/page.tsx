@@ -5,7 +5,9 @@ import { ParametresForm } from "@/components/parametres/ParametresForm";
 import { PharmacyLogoForm } from "@/components/parametres/PharmacyLogoForm";
 import { PayrollSettingsForm } from "@/components/parametres/PayrollSettingsForm";
 import { canEditPayroll, isSuperAdmin } from "@/lib/payroll-permissions";
+import { canEditSettings } from "@/lib/permissions";
 import { REGION_LABELS, type Region } from "@/lib/payroll-reference";
+import { Lock } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Paramètres — PharmaPlanning" };
@@ -13,7 +15,12 @@ export const metadata = { title: "Paramètres — PharmaPlanning" };
 export default async function ParametresPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/planning");
+
+  // Décision produit (cf. CLAUDE.md) : page visible par TOUS en lecture ;
+  // modification réservée aux titulaires+ (canEditSettings). Le bloc
+  // Rémunération reste masqué aux non-autorisés (canSeePayrollSettings).
+  // Le serveur revérifie chaque écriture (actions gatées).
+  const canEdit = canEditSettings(session.user.role);
 
   const [pharmacy, me] = await Promise.all([
     prisma.pharmacy.findUnique({
@@ -76,9 +83,20 @@ export default async function ParametresPage() {
         </p>
       </header>
 
+      {!canEdit && (
+        <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Lecture seule — seul un titulaire peut modifier les paramètres de
+            l&apos;officine.
+          </p>
+        </div>
+      )}
+
       <PharmacyLogoForm
         initialLogoUrl={pharmacy.logoUrl ?? null}
         pharmacyName={pharmacy.name}
+        canEdit={canEdit}
       />
 
       <ParametresForm
@@ -89,6 +107,7 @@ export default async function ParametresPage() {
           siret: pharmacy.siret ?? "",
           minStaff: pharmacy.minStaff,
         }}
+        canEdit={canEdit}
         canEditSiret={canEditSiret}
       />
 

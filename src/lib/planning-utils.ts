@@ -1,6 +1,6 @@
 import { ScheduleType, type AbsenceCode, type TaskCode } from "@prisma/client";
 import type { ScheduleEntryDTO } from "@/types";
-import { SLOT_HOURS, TIME_SLOTS } from "@/types";
+import { SLOT_HOURS, TIME_SLOTS, isNonWorkedTask } from "@/types";
 
 /**
  * Format ISO YYYY-MM-DD à partir d'une Date — ou d'une string.
@@ -101,7 +101,8 @@ export function dailyTaskHours(
   if (!day) return 0;
   let count = 0;
   day.forEach((e) => {
-    if (e.type === ScheduleType.TASK) {
+    if (e.type === ScheduleType.TASK && !isNonWorkedTask(e.taskCode)) {
+      // ECHANGE (texturé) = la personne n'est pas là → n'incrémente pas.
       count++;
     } else if (
       e.type === ScheduleType.ABSENCE &&
@@ -148,7 +149,7 @@ export function computeOvertimeCells(
     for (const date of weekDates) {
       for (const slot of timeSlots) {
         const e = index.get(emp.id)?.get(date)?.get(slot);
-        if (e?.type === ScheduleType.TASK) {
+        if (e?.type === ScheduleType.TASK && !isNonWorkedTask(e.taskCode)) {
           cumSlots++;
           if (cumSlots > contractSlots) {
             out.add(`${emp.id}|${date}|${slot}`);
@@ -170,7 +171,8 @@ export function staffingForSlot(
   let count = 0;
   for (const id of employeeIds) {
     const e = index.get(id)?.get(isoDate)?.get(timeSlot);
-    if (e?.type === ScheduleType.TASK) count++;
+    // ECHANGE (texturé) = personne pas présente → hors effectif.
+    if (e?.type === ScheduleType.TASK && !isNonWorkedTask(e.taskCode)) count++;
   }
   return count;
 }

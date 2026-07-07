@@ -111,7 +111,11 @@ async function processSignup(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
   const data = parsed.data;
-  const { name, email, password } = data;
+  const { firstName, lastName, email, password } = data;
+  // On stocke le nom d'affichage « Prénom Nom » (dans cet ordre) : la
+  // salutation d'accueil prend le 1er mot → le PRÉNOM. Prénom/Nom sont saisis
+  // séparément pour éviter toute confusion d'ordre.
+  const name = `${firstName} ${lastName}`.trim();
 
   // Email unique global, peu importe le mode
   const existing = await prisma.user.findUnique({

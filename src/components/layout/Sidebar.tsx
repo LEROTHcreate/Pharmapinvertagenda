@@ -18,6 +18,7 @@ import {
   Settings,
   StickyNote,
   ShieldCheck,
+  ChevronRight,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { cn } from "@/lib/utils";
@@ -65,7 +66,9 @@ const NAV: NavItem[] = [
   { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
   { key: "gardes", href: "/gardes", label: "Gardes", icon: ShieldCheck, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
-  { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings, adminOnly: true },
+  // Paramètres : visible par TOUS (lecture) ; édition gatée dans la page
+  // (canEditSettings) + serveur. Bloc paie masqué aux non-autorisés. Cf. CLAUDE.md.
+  { key: "parametres", href: "/parametres", label: "Paramètres", icon: Settings },
 ];
 
 export function Sidebar({
@@ -109,7 +112,23 @@ export function Sidebar({
   const textBadge = unreadTextMessages;
 
   return (
-    <aside className="hidden md:flex flex-col w-64 border-r bg-card md:sticky md:top-0 md:h-screen md:overflow-y-auto md:self-start">
+    <div className="hidden md:block group/sb">
+      {/* Zone de survol pleine hauteur (fine, invisible) + onglet « tiroir »
+          visible au milieu du bord gauche → indique clairement qu'un menu est
+          là quand la barre est repliée. Le tout se fond quand elle s'ouvre. */}
+      <div
+        aria-hidden
+        className="fixed left-0 top-0 z-30 h-screen w-3 transition-opacity duration-200 group-hover/sb:opacity-0"
+      >
+        <span className="absolute left-0 top-1/2 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-border bg-card text-violet-600 shadow-md dark:text-violet-400">
+          <ChevronRight className="h-4 w-4" />
+        </span>
+      </div>
+
+      {/* Barre latérale — masquée hors écran par défaut, glisse à l'apparition
+          au survol (group-hover) ou au focus clavier (group-focus-within). Le
+          contenu principal occupe donc toute la largeur quand elle est repliée. */}
+      <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col overflow-y-auto border-r bg-card shadow-xl -translate-x-full transition-transform duration-200 ease-out group-hover/sb:translate-x-0 group-focus-within/sb:translate-x-0">
       <div className="flex items-center gap-3 px-5 py-5 border-b">
         <PharmacyLogo
           logoUrl={pharmacyLogoUrl}
@@ -168,6 +187,9 @@ export function Sidebar({
             <Link
               key={item.href}
               href={item.href}
+              // Après clic : retire le focus pour que la barre ne reste pas
+              // ouverte (sinon focus-within la maintient dépliée).
+              onClick={(e) => e.currentTarget.blur()}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 active
@@ -198,6 +220,7 @@ export function Sidebar({
       <div className="p-3 space-y-3">
         <Link
           href="/profil"
+          onClick={(e) => e.currentTarget.blur()}
           className={cn(
             "block rounded-md px-3 py-2 transition-colors",
             pathname.startsWith("/profil")
@@ -224,5 +247,6 @@ export function Sidebar({
         </form>
       </div>
     </aside>
+    </div>
   );
 }

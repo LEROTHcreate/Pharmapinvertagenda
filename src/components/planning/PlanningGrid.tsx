@@ -21,6 +21,7 @@ import {
   TASK_COLORS,
   TASK_LABELS,
   TIME_SLOTS,
+  isNonWorkedTask,
 } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import {
@@ -1019,6 +1020,14 @@ function CellView({
     // On empile les washes (overtime + ma colonne) sur la couleur du poste.
     // L'ordre : couleur du poste en bas, washes par-dessus.
     const overlays: string[] = [];
+    // Échange (poste « non travaillé ») → hachures comme une absence, pour
+    // montrer d'un coup d'œil que la personne n'est PAS là (ses heures ne
+    // comptent pas). Placé en premier = au-dessus.
+    if (isNonWorkedTask(entry.taskCode)) {
+      overlays.push(
+        "repeating-linear-gradient(45deg, rgba(0,0,0,0.16) 0 1.5px, transparent 1.5px 6px)"
+      );
+    }
     if (isOvertime) overlays.push(`linear-gradient(${overtimeWash}, ${overtimeWash})`);
     if (isMyColumn) overlays.push(`linear-gradient(${myColumnWash}, ${myColumnWash})`);
     const background =
