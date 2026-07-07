@@ -1543,6 +1543,45 @@ export function PlanningView({
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  // ─── Ajustement de la grille à la hauteur de l'écran (desktop) ──────────
+  // Objectif : sur petit écran, voir tout le planning sans scroller la page ET
+  // garder l'en-tête « qui est qui » toujours visible. On mesure l'espace
+  // disponible sous le haut de la grille puis :
+  //   - on borne la hauteur de la grille (scroll interne, la page ne bouge plus)
+  //   - on compresse la hauteur des lignes pour tout faire tenir quand c'est
+  //     possible (borné à un minimum lisible ; au-delà l'en-tête reste figé et
+  //     la grille défile en interne).
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ maxHeight: number; rowHeight: number } | null>(
+    null
+  );
+  useEffect(() => {
+    if (!isDesktopWidth) {
+      setFit(null);
+      return;
+    }
+    function recompute() {
+      const el = gridWrapRef.current;
+      if (!el || typeof window === "undefined") return;
+      const top = el.getBoundingClientRect().top; // haut de la grille → haut viewport
+      const bottomMargin = 12; // petite marge sous la grille
+      const maxHeight = Math.max(
+        320,
+        Math.round(window.innerHeight - top - bottomMargin)
+      );
+      const numSlots = TIME_SLOTS.length;
+      const headerH = 64; // hauteur approx. de l'en-tête (noms + heures)
+      const rowHeight = Math.min(
+        44,
+        Math.max(20, Math.floor((maxHeight - headerH) / numSlots))
+      );
+      setFit({ maxHeight, rowHeight });
+    }
+    recompute();
+    window.addEventListener("resize", recompute);
+    return () => window.removeEventListener("resize", recompute);
+  }, [isDesktopWidth, focusMode, density]);
+
   const toggleAdminLock = useCallback(() => {
     setAdminLocked((prev) => {
       const next = !prev;
@@ -1940,7 +1979,7 @@ export function PlanningView({
           Sur desktop : toujours affichée. Sur mobile : remplacée par les
           vues dédiées ci-dessus (frise / semaine / moi), donc masquée. */}
       {isDesktopWidth && (
-        <div className="hidden md:block">
+        <div className="hidden md:block" ref={gridWrapRef}>
           <PlanningGrid
             employees={visibleEmployees}
             date={selectedDay}
@@ -1958,6 +1997,8 @@ export function PlanningView({
             onMoveBlock={effectiveCanEdit ? handleMoveBlock : undefined}
             onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
             density={density}
+            fitHeight={fit?.maxHeight}
+            fitRowHeight={fit?.rowHeight}
           />
         </div>
       )}

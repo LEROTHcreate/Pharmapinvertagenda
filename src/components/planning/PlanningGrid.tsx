@@ -126,6 +126,14 @@ type Props = {
   onReorderColumns?: (orderedIds: string[]) => void;
   /** Densité d'affichage desktop : "compact" (défaut) ou "comfortable". */
   density?: "compact" | "comfortable";
+  /**
+   * Ajustement à l'écran (desktop) : quand fourni, la grille est bornée à cette
+   * hauteur (px) et défile en INTERNE (la page ne scrolle plus), avec l'en-tête
+   * des personnes figé en haut. `fitRowHeight` compresse la hauteur des lignes
+   * pour tout faire tenir sans scroll quand c'est possible.
+   */
+  fitHeight?: number;
+  fitRowHeight?: number;
 };
 
 export const PlanningGrid = memo(function PlanningGrid({
@@ -145,6 +153,8 @@ export const PlanningGrid = memo(function PlanningGrid({
   onMoveBlock,
   onReorderColumns,
   density = "compact",
+  fitHeight,
+  fitRowHeight,
 }: Props) {
   const dndEnabled = canEdit && !!onMoveTask;
   // Réordonnancement de colonnes : desktop uniquement (sur tactile, l'écran
@@ -564,9 +574,18 @@ export const PlanningGrid = memo(function PlanningGrid({
 
   const grid = (
     <div className="select-none rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)] overflow-hidden">
-      <div className="overflow-x-auto scrollbar-thin overscroll-x-contain">
+      <div
+        className={cn(
+          "scrollbar-thin overscroll-x-contain",
+          // Ajusté à l'écran : scroll interne 2 axes (la page ne bouge plus) ;
+          // sinon, comportement historique (scroll horizontal, page scrolle en Y).
+          fitHeight ? "overflow-auto overscroll-y-contain" : "overflow-x-auto"
+        )}
+        style={fitHeight ? { maxHeight: fitHeight } : undefined}
+      >
         <table
           data-density={density}
+          data-fit={fitHeight ? "true" : undefined}
           aria-label="Grille de planning de l'équipe"
           // Variables CSS responsive : largeur de colonne employé + colonne
           // heure + colonne effectif. Sur mobile on réduit fortement pour
@@ -592,6 +611,11 @@ export const PlanningGrid = memo(function PlanningGrid({
           style={{
             tableLayout: "fixed",
             minWidth: `calc(${employees.length} * var(--col-w) + var(--time-w) + var(--eff-w))`,
+            // Hauteur de ligne compressée (mode ajusté) — consommée par la règle
+            // CSS `table[data-fit="true"] tbody tr` dans globals.css.
+            ...(fitRowHeight
+              ? ({ ["--row-h"]: `${fitRowHeight}px` } as React.CSSProperties)
+              : {}),
           }}
         >
           <colgroup>
