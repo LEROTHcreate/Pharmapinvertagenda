@@ -140,7 +140,7 @@ async function POST__impl(req: Request) {
     const first = await callGroq(apiKey, {
       model: GROQ_MODEL,
       temperature: 0.3,
-      max_tokens: 700,
+      max_tokens: 900,
       messages: baseMessages,
       ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
     });
@@ -174,7 +174,7 @@ async function POST__impl(req: Request) {
     const second = await callGroq(apiKey, {
       model: GROQ_MODEL,
       temperature: 0.3,
-      max_tokens: 600,
+      max_tokens: 800,
       messages: [
         ...baseMessages,
         { role: "assistant", content: first.content ?? "", tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: JSON.stringify(call.args) } }] },

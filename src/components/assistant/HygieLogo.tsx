@@ -1,29 +1,41 @@
 /**
  * Logo d'Hygie — la « coupe d'Hygie » (calice + serpent), symbole universel de
- * la pharmacie. Trait unique qui hérite de `currentColor` (blanc sur le bouton
- * vert, etc.). Dessiné pour rester lisible même en petit (16–24 px).
+ * la pharmacie. Vasque pleine + serpent en S qui s'élève, dessiné pour rester
+ * net et reconnaissable même en petit (16–24 px). Hérite de `currentColor`
+ * (blanc sur fond vert, vert sur fond clair…).
  */
 export function HygieLogo({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
       className={className}
       aria-hidden
     >
-      {/* Calice : bord + coupe + pied */}
-      <path d="M5.5 11h13" />
-      <path d="M7 11a5 4.6 0 0 0 10 0" />
-      <path d="M12 15.6v3.4" />
-      <path d="M8.8 19h6.4" />
-      {/* Serpent en S qui s'élève de la coupe */}
-      <path d="M13.6 11c-3-1.6-3-4.6-1-5.7s2-2.6.6-3.2" />
+      {/* Serpent : S ascendant qui sort de la coupe */}
+      <path
+        d="M11.3 10.1c-2.7-1.7-1.4-4.1.8-4.8 1.9-.6 1.9-2 .3-2.8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       {/* Tête du serpent */}
-      <circle cx="12.4" cy="1.9" r="0.7" fill="currentColor" stroke="none" />
+      <circle cx="12.85" cy="2.35" r="0.95" fill="currentColor" />
+
+      {/* Coupe : rebord (ellipse) + vasque pleine */}
+      <ellipse cx="12" cy="10.5" rx="6.2" ry="1.55" fill="currentColor" />
+      <path d="M6.3 10.7a5.7 5.4 0 0 0 11.4 0Z" fill="currentColor" />
+
+      {/* Pied + socle */}
+      <path
+        d="M12 15.6v3.3M8.6 19.2h6.8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
