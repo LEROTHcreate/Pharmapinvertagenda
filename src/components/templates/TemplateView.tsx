@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ArrowLeft,
   Save,
@@ -148,6 +149,8 @@ export function TemplateView({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Confirmation avant de quitter le gabarit avec des modifs non enregistrées.
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   // ─── Historique annuler / rétablir ─────────────────────────────────────
   // Le gabarit vit en state local (pas dans le store Zustand du planning) : on
@@ -251,6 +254,18 @@ export function TemplateView({
   useEffect(() => {
     if (name !== initialName) setDirty(true);
   }, [name, initialName]);
+
+  // Garde-fou navigateur : prévient à la fermeture / au rafraîchissement de
+  // l'onglet tant qu'il reste des modifications non enregistrées.
+  useEffect(() => {
+    if (!dirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = ""; // requis par certains navigateurs pour afficher l'invite
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   const dayDates = useMemo(() => [0, 1, 2, 3, 4, 5].map(dayKey), []);
   const selectedDay = dayDates[dayIndex];
@@ -539,7 +554,17 @@ export function TemplateView({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button asChild variant="outline" size="sm">
-            <Link href="/gabarits">
+            <Link
+              href="/gabarits"
+              onClick={(e) => {
+                // Modifs non enregistrées → on bloque la navigation et on
+                // demande confirmation pour éviter de perdre le travail.
+                if (dirty) {
+                  e.preventDefault();
+                  setConfirmLeave(true);
+                }
+              }}
+            >
               <ArrowLeft className="h-4 w-4" />
               Retour
             </Link>
@@ -727,6 +752,21 @@ export function TemplateView({
         onClose={() => setBulkOpen(false)}
         onApply={handleBulkApply}
         onClearAll={handleBulkClear}
+      />
+
+      {/* Confirmation avant de quitter avec des modifications non enregistrées */}
+      <ConfirmDialog
+        open={confirmLeave}
+        variant="destructive"
+        title="Modifications non enregistrées"
+        description="Ce gabarit contient des changements qui n'ont pas encore été enregistrés. Vérifie qu'il est bien sauvegardé (bouton « Enregistrer ») avant de partir, sinon ton travail sera perdu."
+        confirmLabel="Quitter sans enregistrer"
+        cancelLabel="Rester sur le gabarit"
+        onConfirm={() => {
+          setConfirmLeave(false);
+          router.push("/gabarits");
+        }}
+        onClose={() => setConfirmLeave(false)}
       />
 
       {/* Barre flottante multi-sélection */}
