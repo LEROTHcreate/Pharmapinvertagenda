@@ -111,7 +111,20 @@ export function Sidebar({
   const textBadge = unreadTextMessages;
 
   return (
-    <aside className="hidden md:flex flex-col w-64 border-r bg-card md:sticky md:top-0 md:h-screen md:overflow-y-auto md:self-start">
+    <div className="hidden md:block group/sb">
+      {/* Bande de survol (toujours visible, fine) — révèle la barre au passage
+          de la souris. Se fond quand la barre s'ouvre. */}
+      <div
+        aria-hidden
+        className="fixed left-0 top-0 z-30 flex h-screen w-3 items-center justify-center transition-opacity duration-200 group-hover/sb:opacity-0"
+      >
+        <span className="h-12 w-1 rounded-full bg-muted-foreground/25" />
+      </div>
+
+      {/* Barre latérale — masquée hors écran par défaut, glisse à l'apparition
+          au survol (group-hover) ou au focus clavier (group-focus-within). Le
+          contenu principal occupe donc toute la largeur quand elle est repliée. */}
+      <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col overflow-y-auto border-r bg-card shadow-xl -translate-x-full transition-transform duration-200 ease-out group-hover/sb:translate-x-0 group-focus-within/sb:translate-x-0">
       <div className="flex items-center gap-3 px-5 py-5 border-b">
         <PharmacyLogo
           logoUrl={pharmacyLogoUrl}
@@ -226,5 +239,6 @@ export function Sidebar({
         </form>
       </div>
     </aside>
+    </div>
   );
 }
