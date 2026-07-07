@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircleQuestion, Send, X } from "lucide-react";
+import { Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HygieLogo } from "@/components/assistant/HygieLogo";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type PendingAction = { tool: string; args: Record<string, unknown>; summary: string };
@@ -124,7 +125,7 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
           )}
         >
-          <MessageCircleQuestion className="h-6 w-6" />
+          <HygieLogo className="h-7 w-7" />
         </button>
       )}
 
@@ -142,7 +143,7 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
           {/* En-tête */}
           <div className="flex items-center gap-2.5 border-b border-border bg-emerald-600 px-4 py-3 text-white">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
-              <MessageCircleQuestion className="h-4 w-4" />
+              <HygieLogo className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-semibold leading-tight">Hygie</p>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Maximize2, Minimize2, Rows2, Rows3, Trash2, ClipboardCopy, ClipboardPaste } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
@@ -81,6 +81,19 @@ type Selection = {
  * dont la date appartient à la semaine visible sont reflétées dans le state
  * (les autres semaines sont écrites côté serveur mais hors viewport).
  */
+/**
+ * Élément du presse-papiers du planning : contenu d'une case, VOLONTAIREMENT
+ * jour-agnostique (employé + horaire + poste, sans la date). Le collage
+ * réapplique le poste au même employé/horaire sur le JOUR AFFICHÉ.
+ */
+type ClipEntry = {
+  employeeId: string;
+  timeSlot: string;
+  type: "TASK" | "ABSENCE";
+  taskCode: TaskCode | null;
+  absenceCode: AbsenceCode | null;
+};
+
 function applyEntriesUpdate(
   prev: ScheduleEntryDTO[],
   updates: Array<{
@@ -207,6 +220,23 @@ export function PlanningView({
   // Dates visibles — lues via ref par applySnapshots (hors deps). Mises à jour
   // via useEffect une fois `dayDates` calculé.
   const dayDatesRef = useRef<string[]>([]);
+  // Presse-papiers de postes (copier/coller entre jours, Ctrl+C / Ctrl+V).
+  const [clipboard, setClipboard] = useState<ClipEntry[]>([]);
+  // Ref miroir pour le handler clavier copier/coller : évite de re-souscrire le
+  // listener à chaque édition (entries change souvent) tout en lisant l'état à jour.
+  const copyPasteRef = useRef<{
+    copy: () => void;
+    paste: () => void;
+    hasSelection: boolean;
+    hasClipboard: boolean;
+    canEdit: boolean;
+  }>({
+    copy: () => {},
+    paste: () => {},
+    hasSelection: false,
+    hasClipboard: false,
+    canEdit: false,
+  });
   // Liste de collaborateurs locale — mirror du prop, mais éditable quand
   // l'admin réordonne les colonnes via drag & drop. Resync sur l'initial
   // dès que le serveur renvoie une nouvelle liste (changement de pharmacie,
@@ -511,6 +541,38 @@ export function PlanningView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [handleUndo, handleRedo]);
+
+  // Copier / coller des postes (Ctrl/⌘+C, Ctrl/⌘+V). On lit l'état courant via
+  // `copyPasteRef` (mis à jour au rendu) → listener stable, pas de re-souscription
+  // à chaque édition. Ctrl+C ne s'active que si des cases sont sélectionnées ET
+  // qu'aucun texte n'est sélectionné (copier-coller de texte natif préservé).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod || e.shiftKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      const s = copyPasteRef.current;
+      if (!s.canEdit) return;
+      if (key === "c") {
+        if (!s.hasSelection) return;
+        if (window.getSelection()?.toString()) return; // laisse copier du texte
+        e.preventDefault();
+        s.copy();
+      } else {
+        if (!s.hasClipboard) return;
+        e.preventDefault();
+        s.paste();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Mode focus : cache la sidebar via un attribut data sur <body>
   useEffect(() => {
@@ -1306,6 +1368,110 @@ export function PlanningView({
     }
   }
 
+  /**
+   * Copie le contenu des cases sélectionnées dans le presse-papiers (postes +
+   * position employé/horaire, sans la date). Seules les cases REMPLIES sont
+   * retenues → un collage ne vient jamais effacer une case cible par une case
+   * source vide.
+   */
+  function copySelection() {
+    const cells = Array.from(multiSelection).map(parseCellKey);
+    const items = cells
+      .map((c): ClipEntry | null => {
+        const e = entries.find(
+          (x) =>
+            x.employeeId === c.employeeId &&
+            x.date === c.date &&
+            x.timeSlot === c.timeSlot
+        );
+        if (!e) return null;
+        return {
+          employeeId: c.employeeId,
+          timeSlot: c.timeSlot,
+          type: e.type,
+          taskCode: e.taskCode,
+          absenceCode: e.absenceCode,
+        };
+      })
+      .filter((x): x is ClipEntry => x !== null);
+    if (items.length === 0) {
+      toast({
+        tone: "info",
+        title: "Rien à copier",
+        description: "Sélectionne des cases déjà remplies.",
+      });
+      return;
+    }
+    setClipboard(items);
+    toast({
+      tone: "success",
+      title: `${items.length} créneau${items.length > 1 ? "x" : ""} copié${items.length > 1 ? "s" : ""}`,
+      description: "Ctrl+V pour coller sur le jour affiché.",
+    });
+  }
+
+  /**
+   * Colle le presse-papiers sur le JOUR AFFICHÉ (selectedDay), aux mêmes
+   * employé/horaire. Remplace le contenu des cases cibles (n'efface pas les
+   * autres). Même chemin sécurisé que « Appliquer un poste » : optimistic +
+   * snapshot Ctrl+Z + POST avec gestion des conflits d'absence approuvée.
+   */
+  async function pasteClipboard() {
+    if (clipboard.length === 0) return;
+    const expanded = clipboard.map((c) => ({
+      employeeId: c.employeeId,
+      date: selectedDay,
+      timeSlot: c.timeSlot,
+      type: c.type,
+      taskCode: c.taskCode,
+      absenceCode: c.absenceCode,
+    }));
+
+    pushUndo("collage", expanded);
+    const previousEntries = entries;
+    const visibleDates = new Set(dayDates);
+    setEntries((prev) => applyEntriesUpdate(prev, expanded, visibleDates));
+    flashCells(expanded.map((c) => entryKey(c)));
+    const dayLabel = new Date(`${selectedDay}T12:00:00`).toLocaleDateString(
+      "fr-FR",
+      { weekday: "long", day: "numeric", month: "long" }
+    );
+    toast({
+      tone: "success",
+      title: `${expanded.length} créneau${expanded.length > 1 ? "x" : ""} collé${expanded.length > 1 ? "s" : ""}`,
+      description: `Sur ${dayLabel}`,
+    });
+
+    const result = await postPlanningEntries(expanded);
+    if (result.ok) return;
+    if ("conflicts" in result) {
+      setConflictPrompt({
+        conflicts: result.conflicts,
+        onConfirm: async () => {
+          const r2 = await postPlanningEntries(expanded, true);
+          if (!("ok" in r2) || !r2.ok) {
+            setEntries(previousEntries);
+            const errMsg = "error" in r2 ? r2.error : "Erreur";
+            toast({ tone: "error", title: "Collage annulé", description: errMsg });
+          }
+          setConflictPrompt(null);
+        },
+        onCancel: () => {
+          setEntries(previousEntries);
+          setConflictPrompt(null);
+          toast({
+            tone: "info",
+            title: "Collage annulé",
+            description: "Les créneaux d'absence approuvée sont préservés.",
+          });
+        },
+      });
+      return;
+    }
+    setEntries(previousEntries);
+    toast({ tone: "error", title: "Collage annulé", description: result.error });
+  }
+
   const selectedEmployee = useMemo(
     () => (selection ? employees.find((e) => e.id === selection.employeeId) ?? null : null),
     [selection, employees]
@@ -1403,6 +1569,16 @@ export function PlanningView({
 
   // canEdit effectif : admin uniquement, ET pas en mode verrouillé.
   const effectiveCanEdit = isAdmin && !adminLocked;
+
+  // Synchronise le ref lu par le handler clavier copier/coller avec l'état
+  // courant (fonctions fraîches + garde-fous). Fait à chaque rendu.
+  copyPasteRef.current = {
+    copy: copySelection,
+    paste: pasteClipboard,
+    hasSelection: multiSelection.size > 0,
+    hasClipboard: clipboard.length > 0,
+    canEdit: effectiveCanEdit,
+  };
 
   return (
     <div className="p-3 md:px-6 md:py-3 space-y-2 md:space-y-3 relative">
@@ -1826,40 +2002,82 @@ export function PlanningView({
         onCancel={() => conflictPrompt?.onCancel()}
       />
 
-      {/* Barre d'action flottante (sélection multi) — glass Apple-style */}
-      {effectiveCanEdit && multiSelection.size > 0 && (
-        <div className="no-print fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
-          <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
-          <span className="text-[12.5px] tracking-tight">
-            <span className="font-semibold tabular-nums">{multiSelection.size}</span>{" "}
-            <span className="text-muted-foreground">
-              sélectionné{multiSelection.size > 1 ? "s" : ""}
-            </span>
-          </span>
-          <button
-            onClick={() => setBulkOpen(true)}
-            className="ml-1 h-7 px-3 rounded-full bg-zinc-900 text-white text-[12px] font-medium hover:bg-zinc-800 transition-colors"
-          >
-            Appliquer un poste
-          </button>
-          {/* Poubelle : vide directement les cases sélectionnées (cette
-              semaine), sans passer par le sélecteur. Annulable via Ctrl+Z
-              (handleBulkClear pousse un snapshot d'undo). */}
-          <button
-            onClick={() => void handleBulkClear({ scope: "1" })}
-            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
-            aria-label={`Vider ${multiSelection.size} case${multiSelection.size > 1 ? "s" : ""} sélectionnée${multiSelection.size > 1 ? "s" : ""}`}
-            title="Vider les cases sélectionnées"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => setMultiSelection(new Set())}
-            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted transition-colors"
-            aria-label="Annuler la sélection"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+      {/* Barres d'action flottantes (glass Apple-style) — pastille « Coller »
+          empilée au-dessus de la pastille de sélection multi. */}
+      {effectiveCanEdit && (clipboard.length > 0 || multiSelection.size > 0) && (
+        <div className="no-print fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
+          {/* Presse-papiers actif → coller sur le jour affiché (dispo même sans
+              sélection, ex. après avoir changé de jour). */}
+          {clipboard.length > 0 && (
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
+              <ClipboardPaste className="h-3.5 w-3.5 text-violet-600 shrink-0" />
+              <span className="text-[12.5px] tracking-tight">
+                <span className="font-semibold tabular-nums">{clipboard.length}</span>{" "}
+                <span className="text-muted-foreground">au presse-papiers</span>
+              </span>
+              <button
+                onClick={() => void pasteClipboard()}
+                className="ml-1 h-7 px-3 rounded-full bg-violet-600 text-white text-[12px] font-medium hover:bg-violet-700 transition-colors"
+                title="Coller sur le jour affiché (Ctrl+V)"
+              >
+                Coller ici
+              </button>
+              <button
+                onClick={() => setClipboard([])}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted transition-colors"
+                aria-label="Vider le presse-papiers"
+                title="Vider le presse-papiers"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Sélection multiple → appliquer / copier / vider */}
+          {multiSelection.size > 0 && (
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card shadow-[0_4px_24px_-2px_rgba(0,0,0,0.12),0_2px_6px_-1px_rgba(0,0,0,0.06)] pl-3.5 pr-1 py-1 animate-in fade-in slide-in-from-bottom-4">
+              <Layers className="h-3.5 w-3.5 text-violet-600 shrink-0" />
+              <span className="text-[12.5px] tracking-tight">
+                <span className="font-semibold tabular-nums">{multiSelection.size}</span>{" "}
+                <span className="text-muted-foreground">
+                  sélectionné{multiSelection.size > 1 ? "s" : ""}
+                </span>
+              </span>
+              <button
+                onClick={() => setBulkOpen(true)}
+                className="ml-1 h-7 px-3 rounded-full bg-zinc-900 text-white text-[12px] font-medium hover:bg-zinc-800 transition-colors"
+              >
+                Appliquer un poste
+              </button>
+              {/* Copier la sélection (collable sur un autre jour) */}
+              <button
+                onClick={copySelection}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
+                aria-label="Copier la sélection"
+                title="Copier la sélection (Ctrl+C)"
+              >
+                <ClipboardCopy className="h-3.5 w-3.5" />
+              </button>
+              {/* Poubelle : vide directement les cases sélectionnées (cette
+                  semaine), sans passer par le sélecteur. Annulable via Ctrl+Z
+                  (handleBulkClear pousse un snapshot d'undo). */}
+              <button
+                onClick={() => void handleBulkClear({ scope: "1" })}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
+                aria-label={`Vider ${multiSelection.size} case${multiSelection.size > 1 ? "s" : ""} sélectionnée${multiSelection.size > 1 ? "s" : ""}`}
+                title="Vider les cases sélectionnées"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setMultiSelection(new Set())}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted transition-colors"
+                aria-label="Annuler la sélection"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
