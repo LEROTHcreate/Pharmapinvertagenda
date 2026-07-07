@@ -8,6 +8,8 @@ import {
   Users,
   BarChart3,
   LayoutTemplate,
+  ShieldCheck,
+  Banknote,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,8 +19,10 @@ import { StaffingStrip } from "@/components/accueil/StaffingStrip";
 import { TeamTodayCard } from "@/components/accueil/TeamTodayCard";
 import { NextGardeCard } from "@/components/accueil/NextGardeCard";
 import { ActionsCard } from "@/components/accueil/ActionsCard";
+import { AccueilNews } from "@/components/accueil/AccueilNews";
 import { Greeting } from "@/components/accueil/Greeting";
 import { AccueilDesktop } from "@/components/accueil/AccueilDesktop";
+import { canEditPlanning } from "@/lib/permissions";
 import type { AccueilData } from "@/components/accueil/types";
 
 /**
@@ -34,6 +38,9 @@ export function AccueilView(data: AccueilData) {
     firstName,
     dateLabel,
     isAdmin,
+    role,
+    canViewPayroll,
+    news,
     myDay,
     myWeek,
     nextSlot,
@@ -49,17 +56,30 @@ export function AccueilView(data: AccueilData) {
     unreadMessages,
   } = data;
 
+  const isManager = canEditPlanning(role);
+
+  // Tuiles gatées par capacité (conforme aux 4 rôles) :
+  //  tous → planning/absences/messages/notes/profil ; manageur+ → gabarits/équipe ;
+  //  titulaire/créateur → stats/gardes ; paie → si autorisé.
   const tiles = [
     { href: "/planning", label: "Planning", icon: Calendar, tone: "violet" },
     { href: "/absences", label: "Absences", icon: CalendarOff, tone: "amber" },
     { href: "/messages", label: "Messages", icon: MessageCircle, tone: "blue" },
     { href: "/notes", label: "Notes", icon: StickyNote, tone: "emerald" },
+    ...(isManager
+      ? [
+          { href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, tone: "amber" },
+          { href: "/employes", label: "Équipe", icon: Users, tone: "violet" },
+        ]
+      : []),
     ...(isAdmin
       ? [
-          { href: "/employes", label: "Équipe", icon: Users, tone: "violet" },
           { href: "/stats", label: "Stats", icon: BarChart3, tone: "blue" },
-          { href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, tone: "amber" },
+          { href: "/gardes", label: "Gardes", icon: ShieldCheck, tone: "violet" },
         ]
+      : []),
+    ...(canViewPayroll
+      ? [{ href: "/remuneration", label: "Rému.", icon: Banknote, tone: "emerald" }]
       : []),
     { href: "/profil", label: "Profil", icon: User, tone: "zinc" },
   ];
@@ -130,6 +150,9 @@ export function AccueilView(data: AccueilData) {
 
         {/* Prochaine garde */}
         {nextGarde && <NextGardeCard garde={nextGarde} />}
+
+        {/* Actus pharmacie (défilent, cliquables) */}
+        <AccueilNews items={news} />
 
         {/* Accès rapides */}
         <section>

@@ -9,6 +9,7 @@ import {
   Banknote,
   ShieldCheck,
   LayoutTemplate,
+  UserCog,
   ChevronRight,
   LayoutDashboard,
 } from "lucide-react";
@@ -20,7 +21,9 @@ import { StaffingStrip } from "@/components/accueil/StaffingStrip";
 import { TeamTodayCard } from "@/components/accueil/TeamTodayCard";
 import { NextGardeCard } from "@/components/accueil/NextGardeCard";
 import { ActionsCard } from "@/components/accueil/ActionsCard";
+import { AccueilNews } from "@/components/accueil/AccueilNews";
 import { Greeting } from "@/components/accueil/Greeting";
+import { canEditPlanning } from "@/lib/permissions";
 import type { AccueilData } from "@/components/accueil/types";
 
 /**
@@ -100,6 +103,9 @@ export function AccueilDesktop(data: AccueilData) {
     myDay,
     myWeek,
     nextSlot,
+    role,
+    canViewPayroll,
+    news,
     teamPresent,
     teamSize,
     minStaff,
@@ -114,19 +120,34 @@ export function AccueilDesktop(data: AccueilData) {
   } = data;
 
   const hasPersonal = !!myDay || (!!myWeek && myWeek.contract > 0);
+  // MANAGEUR : accède au planning, aux gabarits et à l'équipe (canEditPlanning).
+  const isManager = canEditPlanning(role);
 
+  // Raccourcis gatés par CAPACITÉ (conforme aux 4 rôles) :
+  //  · tous : planning, absences, messages, notes
+  //  · manageur+ : gabarits, équipe
+  //  · titulaire/créateur : stats, gardes, utilisateurs
+  //  · module paie : uniquement si autorisé (canViewPayroll)
   const shortcuts = [
     { href: "/planning", label: "Planning", icon: Calendar, tone: "violet" as const },
     { href: "/absences", label: "Absences & dispos", icon: CalendarOff, tone: "amber" as const },
     { href: "/messages", label: "Messages", icon: MessageCircle, tone: "blue" as const },
     { href: "/notes", label: "Notes", icon: StickyNote, tone: "emerald" as const },
+    ...(isManager
+      ? [
+          { href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, tone: "amber" as const },
+          { href: "/employes", label: "Équipe", icon: Users, tone: "violet" as const },
+        ]
+      : []),
     ...(isAdmin
       ? [
           { href: "/stats", label: "Statistiques", icon: BarChart3, tone: "blue" as const },
-          { href: "/remuneration", label: "Rémunération", icon: Banknote, tone: "emerald" as const },
           { href: "/gardes", label: "Gardes", icon: ShieldCheck, tone: "violet" as const },
-          { href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, tone: "amber" as const },
+          { href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, tone: "violet" as const },
         ]
+      : []),
+    ...(canViewPayroll
+      ? [{ href: "/remuneration", label: "Rémunération", icon: Banknote, tone: "emerald" as const }]
       : []),
   ];
 
@@ -209,6 +230,9 @@ export function AccueilDesktop(data: AccueilData) {
 
         {/* Colonne latérale */}
         <aside className="space-y-4">
+          {/* Barre « Actus » — dernières infos pharmacie qui défilent */}
+          <AccueilNews items={news} />
+
           <TeamTodayCard
             present={presentToday}
             absents={absentsToday}
