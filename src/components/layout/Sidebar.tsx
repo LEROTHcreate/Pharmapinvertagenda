@@ -18,6 +18,7 @@ import {
   Settings,
   StickyNote,
   ShieldCheck,
+  Newspaper,
   ChevronRight,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
@@ -33,6 +34,7 @@ type NavKey =
   | "accueil"
   | "planning"
   | "infos"
+  | "actualites"
   | "gabarits"
   | "employes"
   | "absences"
@@ -57,6 +59,7 @@ const NAV: NavItem[] = [
   { key: "accueil", href: "/accueil", label: "Accueil", icon: Home },
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
+  { key: "actualites", href: "/actualites", label: "Actualités", icon: Newspaper },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true, manager: true },
   { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true, manager: true },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },

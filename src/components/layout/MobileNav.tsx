@@ -17,6 +17,7 @@ import {
   Settings,
   StickyNote,
   ShieldCheck,
+  Newspaper,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
@@ -37,6 +38,7 @@ import { isAdminLevel, canEditPlanning } from "@/lib/permissions";
 type NavKey =
   | "planning"
   | "infos"
+  | "actualites"
   | "gabarits"
   | "employes"
   | "absences"
@@ -60,6 +62,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
+  { key: "actualites", href: "/actualites", label: "Actualités", icon: Newspaper },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true, manager: true },
   { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true, manager: true },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
