@@ -9,6 +9,10 @@ import { HygieLogo } from "@/components/assistant/HygieLogo";
 type Msg = { role: "user" | "assistant"; content: string };
 type PendingAction = { tool: string; args: Record<string, unknown>; summary: string };
 
+/** Découpe en forme de croix (croix de pharmacie) — branches ~32% d'épaisseur. */
+const CROSS_CLIP =
+  "polygon(34% 0%, 66% 0%, 66% 34%, 100% 34%, 100% 66%, 66% 66%, 66% 100%, 34% 100%, 34% 66%, 0% 66%, 0% 34%, 34% 34%)";
+
 /**
  * Bulle d'assistante IA « Hygie » — flotte en bas à droite sur toutes les pages
  * connectées. Deux casquettes : elle aide l'équipe à comprendre / utiliser
@@ -168,7 +172,7 @@ export function AssistantBubble({
         <div
           className={cn(
             "no-print fixed right-4 z-50 w-[min(240px,calc(100vw-2.5rem))]",
-            "bottom-[calc(72px+env(safe-area-inset-bottom,0px)+66px)] md:bottom-[88px]",
+            "bottom-[calc(72px+env(safe-area-inset-bottom,0px)+76px)] md:bottom-[98px]",
             "animate-in fade-in slide-in-from-bottom-2 duration-300"
           )}
         >
@@ -201,22 +205,28 @@ export function AssistantBubble({
         </div>
       )}
 
-      {/* Bouton flottant */}
+      {/* Bouton flottant EN FORME DE CROIX (croix de pharmacie) — croix verte
+          avec la croix blanche au centre = emblème pharmacie. La forme est
+          obtenue par clip-path ; l'ombre suit la découpe via drop-shadow. */}
       {!open && (
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Ouvrir l'assistante Hygie"
+          title="Hygie — ton assistante"
           className={cn(
-            "no-print fixed right-4 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full",
+            "no-print fixed right-4 z-50 inline-flex h-16 w-16 items-center justify-center",
             "bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6",
             "bg-gradient-to-br from-emerald-500 to-teal-600 text-white",
-            "shadow-[0_8px_24px_-4px_rgba(5,150,105,0.5)] ring-1 ring-white/20",
             "transition-transform hover:scale-105 active:scale-95",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
+            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
           )}
+          style={{
+            clipPath: CROSS_CLIP,
+            filter: "drop-shadow(0 6px 12px rgba(5,150,105,0.45))",
+          }}
         >
-          <HygieLogo className="h-7 w-7" />
+          <HygieLogo className="h-7 w-7 text-white/95" />
         </button>
       )}
 
