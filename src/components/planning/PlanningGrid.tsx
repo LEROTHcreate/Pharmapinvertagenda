@@ -644,9 +644,11 @@ export const PlanningGrid = memo(function PlanningGrid({
               // donc seules les cases vides montrent l'alternance.
               // Zebra plus marqué : blanc franc ↔ gris nettement visible, pour
               // qu'on distingue les demi-heures d'un coup d'œil (retour user).
+              // La 1re ligne (07:30, slotIdx 0) démarre en GRIS, puis alternance
+              // gris / blanc toutes les demi-heures.
               const zebraClass = slotIdx % 2 === 0
-                ? "[&>td:not(.has-content)]:bg-card dark:[&>td:not(.has-content)]:bg-zinc-900"
-                : "[&>td:not(.has-content)]:bg-zinc-200/70 dark:[&>td:not(.has-content)]:bg-zinc-800";
+                ? "[&>td:not(.has-content)]:bg-zinc-200/70 dark:[&>td:not(.has-content)]:bg-zinc-800"
+                : "[&>td:not(.has-content)]:bg-card dark:[&>td:not(.has-content)]:bg-zinc-900";
               return (
                 <tr
                   key={slot}
@@ -660,22 +662,28 @@ export const PlanningGrid = memo(function PlanningGrid({
                   )}
                 >
                   <td
-                    className={cn(
-                      "sticky left-0 z-10 bg-card px-3 py-1 font-mono text-right tabular-nums select-none",
-                      // Trait horaire renforcé — masqué quand c'est le créneau
-                      // courant pour laisser la place au trait rouge.
-                      isHourMark && !isCurrent && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70",
-                      isHourMark
-                        ? "text-foreground font-semibold"
-                        : "text-muted-foreground/40 text-[10.5px]",
-                      isCurrent && "text-rose-600 font-semibold"
-                    )}
+                    className="sticky left-0 z-10 bg-card px-3 font-mono tabular-nums select-none"
                     style={isCurrent ? { boxShadow: CURRENT_TIME_LINE } : undefined}
                   >
-                    {isCurrent && (
-                      <span className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-rose-100" />
-                    )}
-                    {slot}
+                    {/* Heure "à cheval" sur le trait qui sépare deux bandes
+                        (façon agenda) : centrée verticalement sur la bordure
+                        haute de la ligne. La 1re ligne (07:30) n'a pas de bande
+                        au-dessus → label gardé à l'intérieur. */}
+                    <span
+                      className={cn(
+                        "absolute right-3 whitespace-nowrap select-none",
+                        slotIdx === 0 ? "top-1.5" : "top-0 -translate-y-1/2",
+                        isHourMark
+                          ? "text-foreground font-semibold"
+                          : "text-muted-foreground/45 text-[10.5px]",
+                        isCurrent && "text-rose-600 font-semibold"
+                      )}
+                    >
+                      {isCurrent && (
+                        <span className="absolute -left-2.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-rose-100" />
+                      )}
+                      {slot}
+                    </span>
                   </td>
                   {employees.map((emp, empIdx) => {
                     const entry = index.get(emp.id)?.get(date)?.get(slot) ?? null;
@@ -734,10 +742,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                     );
                   })}
                   <td
-                    className={cn(
-                      "sticky right-0 z-10 bg-card px-2 py-1 text-center select-none",
-                      isHourMark && !isCurrent && "border-t-2 border-t-zinc-400/70 dark:border-t-zinc-500/70"
-                    )}
+                    className="sticky right-0 z-10 bg-card px-2 py-1 text-center select-none"
                     style={isCurrent ? { boxShadow: CURRENT_TIME_LINE } : undefined}
                   >
                     <Tooltip>
@@ -918,6 +923,9 @@ function CellView({
 
   const baseClasses = cn(
     "px-1 h-9 text-center font-medium text-[11px] transition-all relative",
+    // Fine ligne verticale entre les salariés (colonnes) — repère net, visible
+    // même par-dessus les blocs colorés, pour mieux séparer les colonnes.
+    "border-r border-r-white/80 dark:border-r-black/30",
     // Toute la colonne en cours de réordonnancement → semi-transparente,
     // pour que l'admin voie clairement quel bloc complet est en train d'être déplacé.
     isInDragSourceCol && "opacity-40",
@@ -971,7 +979,9 @@ function CellView({
         {...handlers}
         className={cn(
           baseClasses,
-          "border-b border-b-zinc-100/80",
+          // Trait horaire fin entre demi-heures — assez visible pour lire les
+          // bandes, et pour que l'heure "à cheval" tombe pile dessus.
+          "border-b border-b-zinc-200/70 dark:border-b-zinc-700/50",
           canEdit && "hover:bg-muted/40",
           isMyColumn && "bg-amber-50/50",
           dropTargetRing
