@@ -141,32 +141,56 @@ async function fetchMerged(queries: string[], limit: number): Promise<NewsItem[]
  * nouvelles missions, convention/rémunération), triée du plus récent au plus
  * ancien. Rafraîchie toutes les heures.
  */
+const GENERAL_QUERIES = [
+  "pharmacie officine actualité when:30d",
+  "pharmacie officine nouvelles missions when:30d",
+  "pharmacie convention rémunération honoraires officine when:30d",
+];
+
+const ALERT_QUERIES = [
+  "rupture stock médicament when:45d",
+  "ANSM rappel de lot médicament when:45d",
+];
+
 export const getPharmacyNews = () =>
-  unstable_cache(
-    () =>
-      fetchMerged(
-        [
-          "pharmacie officine actualité when:30d",
-          "pharmacie officine nouvelles missions when:30d",
-          "pharmacie convention rémunération honoraires officine when:30d",
-        ],
-        8
-      ),
-    ["pharmacy-news-general-v2"],
-    { revalidate: 3600, tags: ["pharmacy-news"] }
-  )();
+  unstable_cache(() => fetchMerged(GENERAL_QUERIES, 8), ["pharmacy-news-general-v2"], {
+    revalidate: 3600,
+    tags: ["pharmacy-news"],
+  })();
 
 /** Ruptures de stock & rappels de lots de médicaments (très actionnable). */
 export const getMedicineAlerts = () =>
-  unstable_cache(
-    () =>
-      fetchMerged(
-        [
-          "rupture stock médicament when:45d",
-          "ANSM rappel de lot médicament when:45d",
-        ],
-        6
-      ),
-    ["pharmacy-news-alerts-v2"],
-    { revalidate: 3600, tags: ["pharmacy-news"] }
-  )();
+  unstable_cache(() => fetchMerged(ALERT_QUERIES, 6), ["pharmacy-news-alerts-v2"], {
+    revalidate: 3600,
+    tags: ["pharmacy-news"],
+  })();
+
+/* ─── Versions « longues » pour la page Actualités plein écran ────────── */
+
+/** Actu pharmacie — liste étendue (page /actualites). */
+export const getPharmacyNewsFull = () =>
+  unstable_cache(() => fetchMerged(GENERAL_QUERIES, 30), ["pharmacy-news-general-full-v2"], {
+    revalidate: 3600,
+    tags: ["pharmacy-news"],
+  })();
+
+/** Ruptures & rappels — liste étendue (page /actualites). */
+export const getMedicineAlertsFull = () =>
+  unstable_cache(() => fetchMerged(ALERT_QUERIES, 24), ["pharmacy-news-alerts-full-v2"], {
+    revalidate: 3600,
+    tags: ["pharmacy-news"],
+  })();
+
+/**
+ * Recherche libre dans l'actu pharmacie (barre de recherche de /actualites).
+ * Requête utilisateur biaisée « récent » (when:90d). Non mise en cache : c'est
+ * une action ponctuelle et la clé varierait à chaque terme.
+ */
+export async function searchPharmacyNews(
+  query: string,
+  limit = 30
+): Promise<NewsItem[]> {
+  const q = query.trim();
+  if (!q) return [];
+  return fetchMerged([`${q} when:90d`], limit);
+}
