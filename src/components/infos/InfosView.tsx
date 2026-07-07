@@ -565,9 +565,13 @@ export function InfosView(data: InfosData) {
               </li>
             ))}
           </ul>
-          <p className="mt-2 px-1 text-[10.5px] text-muted-foreground/70">
-            Source : Google Actualités · liens externes
-          </p>
+          <Link
+            href="/actualites?tab=actu"
+            className="mt-2 inline-flex items-center gap-1 px-1 text-[12px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+          >
+            Toutes les actus &amp; rechercher un sujet
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
         </Section>
       )}
 
@@ -610,9 +614,13 @@ export function InfosView(data: InfosData) {
               </li>
             ))}
           </ul>
-          <p className="mt-2 px-1 text-[10.5px] text-muted-foreground/70">
-            Source : Google Actualités · liens externes
-          </p>
+          <Link
+            href="/actualites?tab=alertes"
+            className="mt-2 inline-flex items-center gap-1 px-1 text-[12px] font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400"
+          >
+            Toutes les ruptures &amp; rechercher
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
         </Section>
       )}
         </aside>

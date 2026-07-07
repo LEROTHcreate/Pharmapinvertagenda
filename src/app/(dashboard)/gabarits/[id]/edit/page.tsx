@@ -53,6 +53,8 @@ export default async function EditTemplatePage({
       templateId={template.id}
       weekType={template.weekType}
       initialName={template.name}
+      initialCategory={template.category}
+      initialDescription={template.description}
       employees={employeesDTO}
       initialEntries={initialEntries}
     />

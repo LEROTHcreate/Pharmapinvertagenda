@@ -60,12 +60,15 @@ async function POST__impl(
   const newName =
     parsed.data.newName?.trim() || `Copie de ${source.name}`;
 
-  // Crée le nouveau gabarit
+  // Crée le nouveau gabarit — on reprend le classement + la note de la source
+  // (la copie sert le même besoin ; l'admin peut les ajuster ensuite).
   const created = await prisma.weekTemplate.create({
     data: {
       pharmacyId: session.user.pharmacyId,
       weekType: targetType,
       name: newName,
+      category: source.category,
+      description: source.description,
     },
     select: { id: true, name: true, weekType: true },
   });

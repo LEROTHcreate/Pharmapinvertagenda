@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { isAdminLevel } from "@/lib/permissions";
+import { canViewPayroll } from "@/lib/payroll-permissions";
 import { prisma } from "@/lib/prisma";
 import { AccueilView } from "@/components/accueil/AccueilView";
 import {
@@ -12,10 +13,12 @@ import {
 import type { TaskCode, AbsenceCode } from "@prisma/client";
 import { toIsoDate, startOfWeek, weekDays } from "@/lib/planning-utils";
 import { GARDE_TYPE_LABELS } from "@/lib/gardes";
+import { getPharmacyNews } from "@/lib/pharmacy-news";
 import {
   getMessagesUnreadCounts,
   getPendingUsersCount,
   getPendingSwapsCount,
+  getPayrollUserContext,
 } from "@/lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +69,8 @@ export default async function AccueilPage() {
     pendingSwaps,
     nextGardeRaw,
     unread,
+    news,
+    payrollCtx,
   ] = await Promise.all([
     // Équipe active (pour nommer présents / absents du jour).
     prisma.employee.findMany({
@@ -133,9 +138,23 @@ export default async function AccueilPage() {
     }),
     // Messages non lus (swap + texte).
     getMessagesUnreadCounts(session.user.id),
+    // Actu pharmacie (flux externe, cache 1 h) — barre latérale « Actus ».
+    getPharmacyNews(),
+    // Contexte paie (flag + statut) pour décider l'accès Rémunération (admin).
+    isAdmin ? getPayrollUserContext(session.user.id) : Promise.resolve(null),
   ]);
 
   const unreadMessages = unread.swap + unread.text;
+  // Accès au module Rémunération : mêmes règles que la sidebar (titulaire
+  // autorisé OU super-admin). Détermine la présence du raccourci sur l'accueil.
+  const canSeePayroll = isAdmin
+    ? canViewPayroll({
+        role: session.user.role,
+        employeeId: session.user.employeeId,
+        canAccessPayroll: payrollCtx?.canAccessPayroll ?? false,
+        employeeStatus: payrollCtx?.employee?.status ?? null,
+      })
+    : false;
   const nameById = new Map(
     employees.map((e) => [e.id, `${e.firstName} ${e.lastName.charAt(0)}.`])
   );
@@ -308,6 +327,9 @@ export default async function AccueilPage() {
       firstName={sessionEmployee?.firstName ?? session.user.name?.split(" ")[0] ?? null}
       dateLabel={dateLabel}
       isAdmin={isAdmin}
+      role={session.user.role}
+      canViewPayroll={canSeePayroll}
+      news={news}
       myDay={myDay}
       myWeek={myWeek}
       nextSlot={nextSlot}

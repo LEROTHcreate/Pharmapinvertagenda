@@ -1,32 +1,36 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, X } from "lucide-react";
+import { MessageCircleQuestion, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Msg = { role: "user" | "assistant"; content: string };
+type PendingAction = { tool: string; args: Record<string, unknown>; summary: string };
 
 /**
- * Bulle d'assistant IA « Pilou » — flotte en bas à droite sur toutes les pages
- * connectées. Aide l'équipe à comprendre / utiliser PharmaPlanning.
+ * Bulle d'assistante IA « Hygie » — flotte en bas à droite sur toutes les pages
+ * connectées. Aide l'équipe à comprendre / utiliser PharmaPlanning, et peut
+ * effectuer certaines actions (poser une absence, signaler une dispo…).
  *
- * La conversation part au serveur (/api/assistant → Groq) ; la clé reste
- * côté serveur. Étape 1 : explique / guide (pas encore d'actions).
+ * La conversation part au serveur (/api/assistant → Groq) ; la clé reste côté
+ * serveur. Les actions qui modifient des données demandent une CONFIRMATION
+ * (boutons) avant d'être exécutées.
  */
 export function AssistantBubble({ firstName }: { firstName: string }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState<PendingAction | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const greeting = `Bonjour ${firstName || ""} 👋 Je suis Pilou, ton assistant. Pose-moi une question sur PharmaPlanning — par exemple « comment poser une absence ? » ou « c'est quoi le poste Échange ? ».`;
+  const greeting = `Bonjour ${firstName || ""} 👋 Je suis Hygie, ton assistante. Pose ta question sur le planning ou l'appli : je t'explique tout et je peux même t'aider pour certaines choses.`;
 
   // Auto-scroll vers le bas à chaque nouveau message / pendant la frappe.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, loading]);
+  }, [messages, loading, pending]);
 
   // Focus l'input à l'ouverture.
   useEffect(() => {
@@ -36,6 +40,7 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
+    setPending(null); // nouvelle question → on abandonne toute action en attente
     const next: Msg[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
@@ -46,10 +51,12 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ messages: next }),
       });
-      const data = (await res.json().catch(() => null)) as { reply?: string } | null;
-      const reply =
-        data?.reply ?? "Désolé, je n'ai pas pu répondre. Réessaie.";
+      const data = (await res.json().catch(() => null)) as
+        | { reply?: string; pendingAction?: PendingAction }
+        | null;
+      const reply = data?.reply ?? "Désolé, je n'ai pas pu répondre. Réessaie.";
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
+      if (data?.pendingAction) setPending(data.pendingAction);
     } catch {
       setMessages((m) => [
         ...m,
@@ -58,6 +65,40 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function confirmAction() {
+    if (!pending || loading) return;
+    const p = pending;
+    setPending(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: { tool: p.tool, args: p.args } }),
+      });
+      const data = (await res.json().catch(() => null)) as { reply?: string } | null;
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: data?.reply ?? "C'est fait." },
+      ]);
+    } catch {
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: "L'action a échoué. Réessaie." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function cancelAction() {
+    setPending(null);
+    setMessages((m) => [
+      ...m,
+      { role: "assistant", content: "Ok, c'est annulé, rien n'a été fait. 👍" },
+    ]);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -78,12 +119,12 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
           className={cn(
             "no-print fixed right-4 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full",
             "bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6",
-            "bg-violet-600 text-white shadow-[0_8px_24px_-4px_rgba(124,58,237,0.5)]",
+            "bg-emerald-600 text-white shadow-[0_8px_24px_-4px_rgba(5,150,105,0.45)]",
             "transition-transform hover:scale-105 active:scale-95",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
           )}
         >
-          <Sparkles className="h-6 w-6" />
+          <MessageCircleQuestion className="h-6 w-6" />
         </button>
       )}
 
@@ -99,14 +140,14 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
           aria-label="Assistant PharmaPlanning"
         >
           {/* En-tête */}
-          <div className="flex items-center gap-2.5 border-b border-border bg-violet-600 px-4 py-3 text-white">
+          <div className="flex items-center gap-2.5 border-b border-border bg-emerald-600 px-4 py-3 text-white">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
-              <Sparkles className="h-4 w-4" />
+              <MessageCircleQuestion className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold leading-tight">Pilou</p>
+              <p className="text-[14px] font-semibold leading-tight">Hygie</p>
               <p className="text-[11px] text-white/80 leading-tight">
-                Assistant PharmaPlanning
+                Assistante PharmaPlanning
               </p>
             </div>
             <button
@@ -128,8 +169,31 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
             {messages.map((m, i) => (
               <Bubble key={i} role={m.role} content={m.content} />
             ))}
-            {loading && (
-              <Bubble role="assistant" content="…" typing />
+            {loading && <Bubble role="assistant" content="…" typing />}
+
+            {/* Carte de confirmation d'action (avant exécution) */}
+            {pending && !loading && (
+              <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30">
+                <p className="mb-2 text-[12.5px] font-medium text-emerald-900 dark:text-emerald-200">
+                  {pending.summary}, confirmer ?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void confirmAction()}
+                    className="h-8 flex-1 rounded-lg bg-emerald-600 text-[13px] font-medium text-white hover:bg-emerald-700"
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelAction}
+                    className="h-8 flex-1 rounded-lg border border-border bg-card text-[13px] font-medium text-foreground hover:bg-muted"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
@@ -143,14 +207,14 @@ export function AssistantBubble({ firstName }: { firstName: string }) {
                 onKeyDown={onKeyDown}
                 rows={1}
                 placeholder="Écris ta question…"
-                className="max-h-28 min-h-[40px] flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:ring-2 focus:ring-violet-400"
+                className="max-h-28 min-h-[40px] flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:ring-2 focus:ring-emerald-400"
               />
               <button
                 type="button"
                 onClick={() => void send()}
                 disabled={!input.trim() || loading}
                 aria-label="Envoyer"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -181,7 +245,7 @@ function Bubble({
         className={cn(
           "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed",
           isUser
-            ? "bg-violet-600 text-white rounded-br-sm"
+            ? "bg-emerald-600 text-white rounded-br-sm"
             : "bg-muted text-foreground rounded-bl-sm",
           typing && "animate-pulse text-muted-foreground"
         )}

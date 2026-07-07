@@ -102,6 +102,16 @@ async function POST__impl(req: Request) {
     }
   }
 
+  // Normalisation classement/note : chaîne vide → null (pas de catégorie).
+  const category =
+    parsed.data.category && parsed.data.category.length > 0
+      ? parsed.data.category
+      : null;
+  const description =
+    parsed.data.description && parsed.data.description.length > 0
+      ? parsed.data.description
+      : null;
+
   // ─── Update si id fourni, création sinon ───
   let templateId: string;
   if (parsed.data.id) {
@@ -115,7 +125,12 @@ async function POST__impl(req: Request) {
     }
     await prisma.weekTemplate.update({
       where: { id: existing.id },
-      data: { name: parsed.data.name, weekType: parsed.data.weekType },
+      data: {
+        name: parsed.data.name,
+        weekType: parsed.data.weekType,
+        category,
+        description,
+      },
     });
     templateId = existing.id;
   } else {
@@ -124,6 +139,8 @@ async function POST__impl(req: Request) {
         pharmacyId: session.user.pharmacyId,
         weekType: parsed.data.weekType,
         name: parsed.data.name,
+        category,
+        description,
       },
       select: { id: true },
     });
