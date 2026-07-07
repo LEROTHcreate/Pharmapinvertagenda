@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Loader2, Copy, ChevronDown } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Copy, ChevronDown, Undo2, Redo2 } from "lucide-react";
 import type { AbsenceCode, ScheduleType, TaskCode } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,43 @@ function parseCellKey(k: CellKey): ParsedCell {
   return { employeeId, date, timeSlot };
 }
 
+/**
+ * Applique un upsert (ou une suppression si `payload` est null) sur une liste
+ * d'entries et renvoie une NOUVELLE liste. Fonction pure : utilisée pour
+ * construire un état complet à confirmer d'un coup dans l'historique
+ * (annuler / rétablir), y compris pour les actions multi-cellules.
+ */
+function applyUpsert(
+  list: TemplateEntryDTO[],
+  employeeId: string,
+  dayOfWeek: number,
+  timeSlot: string,
+  payload:
+    | { type: "TASK" | "ABSENCE"; taskCode?: TaskCode | null; absenceCode?: AbsenceCode | null }
+    | null
+): TemplateEntryDTO[] {
+  const filtered = list.filter(
+    (e) =>
+      !(
+        e.employeeId === employeeId &&
+        e.dayOfWeek === dayOfWeek &&
+        e.timeSlot === timeSlot
+      )
+  );
+  if (!payload) return filtered;
+  return [
+    ...filtered,
+    {
+      employeeId,
+      dayOfWeek,
+      timeSlot,
+      type: payload.type,
+      taskCode: payload.type === "TASK" ? payload.taskCode ?? null : null,
+      absenceCode: payload.type === "ABSENCE" ? payload.absenceCode ?? null : null,
+    },
+  ];
+}
+
 /** Convertit les TemplateEntryDTO en ScheduleEntryDTO factices (date = "tpl-0".."tpl-5") */
 function toFakeScheduleEntries(entries: TemplateEntryDTO[]): ScheduleEntryDTO[] {
   return entries.map((e, i) => ({
@@ -88,6 +125,49 @@ export function TemplateView({
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  // ─── Historique annuler / rétablir ─────────────────────────────────────
+  // Le gabarit vit en state local (pas dans le store Zustand du planning) : on
+  // gère donc ici deux piles de snapshots de `entries`. Chaque ACTION utilisateur
+  // (édition d'une cellule, application groupée, duplication de jour) = un pas.
+  // `entriesRef` reflète toujours `entries` au rendu → lecture synchrone fiable
+  // dans les handlers et les piles, sans dépendre d'un re-render.
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  const [past, setPast] = useState<TemplateEntryDTO[][]>([]);
+  const [future, setFuture] = useState<TemplateEntryDTO[][]>([]);
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
+
+  /** Confirme un nouvel état d'entries en empilant l'ancien dans l'historique. */
+  const commit = useCallback((next: TemplateEntryDTO[]) => {
+    // On borne la pile à 50 pas pour éviter de retenir de gros gabarits en boucle.
+    setPast((p) => [...p.slice(-49), entriesRef.current]);
+    setFuture([]); // toute nouvelle action invalide la pile « rétablir »
+    entriesRef.current = next;
+    setEntries(next);
+    setDirty(true);
+  }, []);
+
+  const undo = useCallback(() => {
+    if (past.length === 0) return;
+    const prev = past[past.length - 1];
+    setFuture((f) => [...f, entriesRef.current]);
+    setPast((p) => p.slice(0, -1));
+    entriesRef.current = prev;
+    setEntries(prev);
+    setDirty(true);
+  }, [past]);
+
+  const redo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[future.length - 1];
+    setPast((p) => [...p, entriesRef.current]);
+    setFuture((f) => f.slice(0, -1));
+    entriesRef.current = next;
+    setEntries(next);
+    setDirty(true);
+  }, [future]);
+
   // Marque dirty au changement de nom (au-delà de l'init)
   useEffect(() => {
     if (name !== initialName) setDirty(true);
@@ -110,42 +190,43 @@ export function TemplateView({
     return () => window.removeEventListener("keydown", onKey);
   }, [multiSelection.size]);
 
+  // Raccourcis annuler / rétablir (Ctrl/⌘+Z, Ctrl+Y ou Ctrl/⌘+Shift+Z) —
+  // mêmes gestes que l'éditeur de planning. On ignore la frappe si le focus est
+  // dans un champ de saisie (ex. le nom du gabarit) pour ne pas casser l'undo natif.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      const isUndo = !e.shiftKey && key === "z";
+      const isRedo = (!e.shiftKey && key === "y") || (e.shiftKey && key === "z");
+      if (!isUndo && !isRedo) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      e.preventDefault();
+      if (isUndo) undo();
+      else redo();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
+
   // Reset selection quand on change de jour
   useEffect(() => {
     setMultiSelection(new Set());
   }, [selectedDay]);
 
-  /** Mutation locale d'une entry (upsert ou supprime) */
+  /** Mutation locale d'une entry (upsert ou supprime) → un pas d'historique. */
   function upsertLocalEntry(
     employeeId: string,
     dayOfWeek: number,
     timeSlot: string,
     payload: { type: "TASK" | "ABSENCE"; taskCode?: TaskCode | null; absenceCode?: AbsenceCode | null } | null
   ) {
-    setEntries((prev) => {
-      const filtered = prev.filter(
-        (e) =>
-          !(
-            e.employeeId === employeeId &&
-            e.dayOfWeek === dayOfWeek &&
-            e.timeSlot === timeSlot
-          )
-      );
-      if (!payload) return filtered;
-      return [
-        ...filtered,
-        {
-          employeeId,
-          dayOfWeek,
-          timeSlot,
-          type: payload.type,
-          taskCode: payload.type === "TASK" ? payload.taskCode ?? null : null,
-          absenceCode:
-            payload.type === "ABSENCE" ? payload.absenceCode ?? null : null,
-        },
-      ];
-    });
-    setDirty(true);
+    commit(applyUpsert(entriesRef.current, employeeId, dayOfWeek, timeSlot, payload));
   }
 
   function handleCellClick(employeeId: string, date: string, timeSlot: string) {
@@ -184,20 +265,24 @@ export function TemplateView({
     absenceCode?: AbsenceCode | null;
   }) {
     const cells = Array.from(multiSelection).map(parseCellKey);
+    // On construit l'état complet cible puis on confirme d'un coup → un seul pas
+    // d'historique pour toute l'application groupée (undo = tout restaurer).
+    let next = entriesRef.current;
     cells.forEach((c) => {
-      const dow = parseDayKey(c.date);
-      upsertLocalEntry(c.employeeId, dow, c.timeSlot, payload);
+      next = applyUpsert(next, c.employeeId, parseDayKey(c.date), c.timeSlot, payload);
     });
+    commit(next);
     setBulkOpen(false);
     setMultiSelection(new Set());
   }
 
   async function handleBulkClear() {
     const cells = Array.from(multiSelection).map(parseCellKey);
+    let next = entriesRef.current;
     cells.forEach((c) => {
-      const dow = parseDayKey(c.date);
-      upsertLocalEntry(c.employeeId, dow, c.timeSlot, null);
+      next = applyUpsert(next, c.employeeId, parseDayKey(c.date), c.timeSlot, null);
     });
+    commit(next);
     setBulkOpen(false);
     setMultiSelection(new Set());
   }
@@ -209,18 +294,16 @@ export function TemplateView({
   function duplicateDayTo(targetDays: number[]) {
     if (targetDays.length === 0) return;
     const sourceDay = dayIndex;
-    setEntries((prev) => {
-      const sourceEntries = prev.filter((e) => e.dayOfWeek === sourceDay);
-      const targetSet = new Set(targetDays);
-      // 1. Retire les entrées existantes sur les jours cibles
-      const cleaned = prev.filter((e) => !targetSet.has(e.dayOfWeek));
-      // 2. Recopie les entrées source pour chaque jour cible
-      const copies = targetDays.flatMap((td) =>
-        sourceEntries.map((e) => ({ ...e, dayOfWeek: td }))
-      );
-      return [...cleaned, ...copies];
-    });
-    setDirty(true);
+    const prev = entriesRef.current;
+    const sourceEntries = prev.filter((e) => e.dayOfWeek === sourceDay);
+    const targetSet = new Set(targetDays);
+    // 1. Retire les entrées existantes sur les jours cibles
+    const cleaned = prev.filter((e) => !targetSet.has(e.dayOfWeek));
+    // 2. Recopie les entrées source pour chaque jour cible
+    const copies = targetDays.flatMap((td) =>
+      sourceEntries.map((e) => ({ ...e, dayOfWeek: td }))
+    );
+    commit([...cleaned, ...copies]);
     const labels = targetDays.map((d) => WEEK_DAYS_SHORT[d]).join(", ");
     toast({
       tone: "success",
@@ -375,6 +458,31 @@ export function TemplateView({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Annuler / rétablir — raccourcis Ctrl+Z / Ctrl+Y (ou ⌘) */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={undo}
+              disabled={!canUndo}
+              title="Annuler (Ctrl+Z)"
+              aria-label="Annuler"
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Rétablir (Ctrl+Y)"
+              aria-label="Rétablir"
+            >
+              <Redo2 className="h-4 w-4" />
+            </Button>
+          </div>
           {dirty && (
             <span className="text-xs italic text-amber-600">
               · Modifications non enregistrées
