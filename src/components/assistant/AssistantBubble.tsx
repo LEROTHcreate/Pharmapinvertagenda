@@ -32,6 +32,9 @@ export function AssistantBubble({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  // Petit conseil qui surgit tout seul de temps en temps (quand la bulle est
+  // fermée) puis disparaît après quelques secondes.
+  const [nudge, setNudge] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,6 +58,35 @@ export function AssistantBubble({
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
+
+  // Interactions aléatoires : quand la bulle est fermée, Hygie glisse parfois un
+  // petit conseil/coup de pouce qui reste quelques secondes puis s'efface, à des
+  // intervalles irréguliers (jamais spammé). Toute ouverture le masque.
+  useEffect(() => {
+    if (open) {
+      setNudge(null);
+      return;
+    }
+    const tips = buildNudges(role);
+    let hideTimer: ReturnType<typeof setTimeout>;
+    let nextTimer: ReturnType<typeof setTimeout>;
+    function schedule(first: boolean) {
+      // 1er conseil ~25-45 s après l'arrivée sur la page, puis toutes les ~2-4 min.
+      const delay = first
+        ? 25000 + Math.random() * 20000
+        : 120000 + Math.random() * 120000;
+      nextTimer = setTimeout(() => {
+        setNudge(tips[Math.floor(Math.random() * tips.length)] ?? null);
+        hideTimer = setTimeout(() => setNudge(null), 8000);
+        schedule(false);
+      }, delay);
+    }
+    schedule(true);
+    return () => {
+      clearTimeout(nextTimer);
+      clearTimeout(hideTimer);
+    };
+  }, [open, role]);
 
   async function send(textArg?: string) {
     const text = (textArg ?? input).trim();
@@ -131,6 +163,44 @@ export function AssistantBubble({
 
   return (
     <>
+      {/* Conseil surgissant (aléatoire, s'efface tout seul) — au-dessus du bouton */}
+      {!open && nudge && (
+        <div
+          className={cn(
+            "no-print fixed right-4 z-50 w-[min(240px,calc(100vw-2.5rem))]",
+            "bottom-[calc(72px+env(safe-area-inset-bottom,0px)+66px)] md:bottom-[88px]",
+            "animate-in fade-in slide-in-from-bottom-2 duration-300"
+          )}
+        >
+          <div className="relative rounded-2xl rounded-br-md border border-emerald-200 bg-card px-3 py-2.5 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.25)] dark:border-emerald-800/60">
+            <button
+              type="button"
+              onClick={() => setNudge(null)}
+              aria-label="Fermer le conseil"
+              className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/50 hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNudge(null);
+                setOpen(true);
+              }}
+              className="block w-full pr-4 text-left"
+            >
+              <span className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                <HygieLogo className="h-3 w-3" />
+                Hygie
+              </span>
+              <span className="text-[12.5px] leading-snug text-foreground">
+                {nudge}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bouton flottant */}
       {!open && (
         <button
@@ -270,6 +340,30 @@ export function AssistantBubble({
       )}
     </>
   );
+}
+
+/** Petits conseils surgissants d'Hygie (aléatoires), adaptés au rôle. */
+function buildNudges(role?: string): string[] {
+  const isAdmin = role === "ADMIN" || role === "CREATEUR" || role === "MANAGEUR";
+  const common = [
+    "Un doute sur un médicament ou une classe ? Demande-moi 💊",
+    "Besoin d'un coup de main sur l'appli ? Clique-moi, je suis là 🙂",
+    "Tu peux me parler normalement, je comprends les questions du quotidien.",
+  ];
+  if (isAdmin) {
+    return [
+      "Astuce : applique un gabarit pour remplir une semaine en un clic ✨",
+      "Pense à jeter un œil à l'effectif du jour sur l'accueil.",
+      "Sur le planning, copie-colle des postes d'un jour à l'autre (Ctrl+C / Ctrl+V).",
+      "Besoin d'un nouveau gabarit ? Importe une semaine déjà planifiée.",
+      ...common,
+    ];
+  }
+  return [
+    "Pense à poser tes congés à l'avance dans « Absences & dispos ».",
+    "Retrouve tes heures de la semaine sur l'accueil.",
+    ...common,
+  ];
 }
 
 /** Suggestions de départ selon le rôle (mélange usage appli + questions pharma). */
