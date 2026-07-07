@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   Newspaper,
   AlertTriangle,
   Search,
   X,
-  Loader2,
   ChevronRight,
 } from "lucide-react";
 import type { NewsItem } from "@/lib/pharmacy-news";
@@ -15,46 +13,51 @@ import { cn } from "@/lib/utils";
 
 type Tab = "actu" | "alertes";
 
+/** Normalise pour une recherche insensible à la casse et aux accents. */
+function norm(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 /**
  * Page « Actualités pharmacie » plein écran : deux rubriques (Actu pharmacie /
- * Ruptures & rappels) en onglets, plus une barre de recherche libre. La
- * recherche déclenche un round-trip serveur (?q=…) qui interroge le flux ;
- * chaque article ouvre sa source dans un nouvel onglet.
+ * Ruptures & rappels) en onglets + un filtre EN DIRECT (au fil de la frappe,
+ * sans bouton). Chaque article ouvre sa source dans un nouvel onglet.
  */
 export function ActualitesView({
-  query,
-  results,
   news,
   alerts,
   initialTab,
 }: {
-  query: string;
-  results: NewsItem[];
   news: NewsItem[];
   alerts: NewsItem[];
   initialTab: Tab;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [term, setTerm] = useState(query);
+  const [term, setTerm] = useState("");
   const [tab, setTab] = useState<Tab>(initialTab);
 
-  const searching = query.length > 0;
+  const q = norm(term.trim());
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const q = term.trim();
-    startTransition(() => {
-      router.push(q ? `/actualites?q=${encodeURIComponent(q)}` : "/actualites");
-    });
-  }
+  // Filtrage instantané des deux rubriques (titre + source).
+  const newsFiltered = useMemo(
+    () =>
+      news.filter(
+        (n) => !q || norm(n.title).includes(q) || norm(n.source).includes(q)
+      ),
+    [news, q]
+  );
+  const alertsFiltered = useMemo(
+    () =>
+      alerts.filter(
+        (n) => !q || norm(n.title).includes(q) || norm(n.source).includes(q)
+      ),
+    [alerts, q]
+  );
 
-  function clearSearch() {
-    setTerm("");
-    startTransition(() => router.push("/actualites"));
-  }
-
-  const list = searching ? results : tab === "actu" ? news : alerts;
+  const list = tab === "actu" ? newsFiltered : alertsFiltered;
+  const filtering = q.length > 0;
 
   return (
     <div className="w-full p-3 md:p-4 lg:p-6 pb-16">
@@ -68,85 +71,65 @@ export function ActualitesView({
             Actualités pharmacie
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
-            L&apos;actu de l&apos;officine et les ruptures / rappels — cherchez un
-            sujet ou parcourez les rubriques.
+            L&apos;actu de l&apos;officine et les ruptures / rappels — filtre au fil
+            de ta frappe ou parcours les rubriques.
           </p>
         </div>
       </header>
 
-      {/* Barre de recherche */}
-      <form onSubmit={submit} className="mb-5 flex items-center gap-2">
-        <div className="relative flex-1">
+      {/* Filtre en direct (sans bouton) */}
+      <div className="mb-5">
+        <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            placeholder="Rechercher un sujet : rupture, vaccination, convention, DPC…"
+            autoFocus
+            placeholder="Filtrer : rupture, vaccination, convention, DPC, un médicament…"
             className="h-11 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-[14px] text-foreground outline-none transition-colors focus:border-rose-400 focus:ring-2 focus:ring-rose-200 dark:focus:ring-rose-900/40"
           />
           {term && (
             <button
               type="button"
-              onClick={clearSearch}
-              aria-label="Effacer"
+              onClick={() => setTerm("")}
+              aria-label="Effacer le filtre"
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-rose-600 px-4 text-[14px] font-medium text-white transition-colors hover:bg-rose-700 disabled:opacity-60"
-        >
-          {isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="h-4 w-4" />
-          )}
-          Rechercher
-        </button>
-      </form>
+      </div>
 
-      {/* Onglets (masqués en mode recherche) */}
-      {!searching && (
-        <div className="mb-4 inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
-          <TabButton
-            active={tab === "actu"}
-            onClick={() => setTab("actu")}
-            icon={<Newspaper className="h-3.5 w-3.5" />}
-            label="Actu pharmacie"
-            count={news.length}
-          />
-          <TabButton
-            active={tab === "alertes"}
-            onClick={() => setTab("alertes")}
-            icon={<AlertTriangle className="h-3.5 w-3.5" />}
-            label="Ruptures & rappels"
-            count={alerts.length}
-          />
-        </div>
-      )}
+      {/* Onglets — compteurs qui reflètent le filtre */}
+      <div className="mb-4 inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
+        <TabButton
+          active={tab === "actu"}
+          onClick={() => setTab("actu")}
+          icon={<Newspaper className="h-3.5 w-3.5" />}
+          label="Actu pharmacie"
+          count={filtering ? newsFiltered.length : news.length}
+        />
+        <TabButton
+          active={tab === "alertes"}
+          onClick={() => setTab("alertes")}
+          icon={<AlertTriangle className="h-3.5 w-3.5" />}
+          label="Ruptures & rappels"
+          count={filtering ? alertsFiltered.length : alerts.length}
+        />
+      </div>
 
-      {/* Bandeau résultats de recherche */}
-      {searching && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 text-[13px]">
-          <span className="text-muted-foreground">
-            <span className="font-semibold tabular-nums text-foreground">
-              {results.length}
-            </span>{" "}
-            résultat{results.length > 1 ? "s" : ""} pour «&nbsp;
-            <span className="font-medium text-foreground">{query}</span>&nbsp;»
-          </span>
-          <button
-            onClick={clearSearch}
-            className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[12px] font-medium text-foreground/80 transition hover:bg-muted/70"
-          >
-            <X className="h-3 w-3" /> Effacer la recherche
-          </button>
-        </div>
+      {/* Ligne de résultats du filtre */}
+      {filtering && (
+        <p className="mb-3 text-[13px] text-muted-foreground">
+          <span className="font-semibold tabular-nums text-foreground">
+            {list.length}
+          </span>{" "}
+          résultat{list.length > 1 ? "s" : ""} pour «&nbsp;
+          <span className="font-medium text-foreground">{term}</span>&nbsp;» dans
+          cette rubrique
+        </p>
       )}
 
       {/* Grille d'articles */}
@@ -156,12 +139,12 @@ export function ActualitesView({
             <Search className="h-5 w-5" />
           </span>
           <p className="mt-3 text-[14px] font-medium text-foreground">
-            {searching ? "Aucun résultat" : "Rien à afficher pour le moment"}
+            {filtering ? "Aucun article ne correspond" : "Rien à afficher pour le moment"}
           </p>
           <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">
-            {searching
-              ? "Essayez d'autres mots-clés (ex. « paracétamol », « honoraires », « garde »)."
-              : "Le flux d'actualité est momentanément indisponible — réessayez plus tard."}
+            {filtering
+              ? "Essaie d'autres mots-clés, ou regarde l'autre rubrique."
+              : "Le flux d'actualité est momentanément indisponible — réessaie plus tard."}
           </p>
         </div>
       ) : (
