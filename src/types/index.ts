@@ -52,7 +52,7 @@ export const TASK_COLORS: Record<TaskCode, CellStyle> = {
   COMMANDE: { bg: "#fef9c3", text: "#854d0e", border: "#fde047" },
   MISE_A_PRIX: { bg: "#f3e8ff", text: "#6b21a8", border: "#d8b4fe" },
   PARAPHARMACIE: { bg: "#ffe4e6", text: "#9f1239", border: "#fda4af" },
-  SECRETARIAT: { bg: "#fce7f3", text: "#9d174d", border: "#f9a8d4" },
+  SECRETARIAT: { bg: "#dcfce7", text: "#166534", border: "#86efac" },
   MAIL: { bg: "#ede9fe", text: "#5b21b6", border: "#c4b5fd" },
   FORMATION: { bg: "#e0e7ff", text: "#3730a3", border: "#a5b4fc" },
   HEURES_SUP: { bg: "#ffedd5", text: "#9a3412", border: "#fdba74" },
