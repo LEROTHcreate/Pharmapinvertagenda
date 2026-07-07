@@ -5,6 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { EmployeesTable } from "@/components/employees/EmployeesTable";
 import type { EmployeeRowData } from "@/components/employees/EmployeesTable";
 import { HrDeadlinesCard } from "@/components/employees/HrDeadlinesCard";
+import {
+  TeamEventsPanel,
+  type TeamEventRow,
+} from "@/components/employees/TeamEventsPanel";
 import { upcomingDeadlines } from "@/lib/hr-deadlines";
 import { sweepInactiveEmployees } from "@/lib/employee-lifecycle";
 
@@ -75,8 +79,37 @@ export default async function EmployesPage() {
     todayIso
   );
 
+  // Événements d'équipe à venir (repas, animations labo, entretiens…).
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+  const events = await prisma.teamEvent.findMany({
+    where: { pharmacyId: session.user.pharmacyId, date: { gte: startOfToday } },
+    orderBy: [{ date: "asc" }, { time: "asc" }],
+    take: 40,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      date: true,
+      time: true,
+      type: true,
+      location: true,
+    },
+  });
+  const eventRows: TeamEventRow[] = events.map((e) => ({
+    id: e.id,
+    title: e.title,
+    description: e.description,
+    date: e.date.toISOString().slice(0, 10),
+    time: e.time,
+    type: e.type,
+    location: e.location,
+  }));
+
+  const canManageEvents = canManageTeam(session.user.role);
+
   return (
-    <div className="p-3 sm:p-4 lg:p-6 max-w-6xl space-y-4">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4">
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Équipe</h1>
@@ -87,9 +120,18 @@ export default async function EmployesPage() {
         </div>
       </header>
 
-      <HrDeadlinesCard deadlines={deadlines} />
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+        {/* Colonne gauche : échéances RH + tableau de l'équipe */}
+        <div className="min-w-0 flex-1 space-y-4">
+          <HrDeadlinesCard deadlines={deadlines} />
+          <EmployeesTable employees={rows} />
+        </div>
 
-      <EmployeesTable employees={rows} />
+        {/* Colonne droite : la vie de l'équipe (événements animés) */}
+        <div className="xl:w-[360px] xl:shrink-0">
+          <TeamEventsPanel events={eventRows} canManage={canManageEvents} />
+        </div>
+      </div>
     </div>
   );
 }

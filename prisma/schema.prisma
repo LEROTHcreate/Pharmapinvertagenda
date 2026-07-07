@@ -87,6 +87,17 @@ enum WeekType {
   S2
 }
 
+/// Type d'événement d'équipe (vie de l'officine) — chaque type a son ambiance
+/// visuelle (couleur + animation) côté UI.
+enum TeamEventType {
+  REPAS               // Repas d'équipe (mensuel, trimestriel, resto…)
+  ANIMATION_LABO      // Animation / journée d'un laboratoire
+  REUNION_FOURNISSEUR // Réunion fournisseur / représentant
+  ENTRETIEN           // Entretien individuel collaborateur
+  FORMATION           // Formation / atelier interne
+  AUTRE               // Autre événement
+}
+
 enum MessageType {
   TEXT          // Message texte simple
   SWAP_REQUEST  // Message structuré portant une demande d'échange
@@ -152,6 +163,7 @@ model Pharmacy {
   availabilityWishes AvailabilityWish[]
   monthlyRevenues    MonthlyRevenue[]
   gardes             Garde[]
+  teamEvents         TeamEvent[]
 
   @@map("pharmacies")
 }
@@ -463,6 +475,30 @@ model WeekTemplateEntry {
 
   @@unique([templateId, employeeId, dayOfWeek, timeSlot])
   @@map("week_template_entries")
+}
+
+/// Événement de la vie de l'officine (repas d'équipe, animation labo, réunion
+/// fournisseur, entretien…). Ajouté par les titulaires/manageurs, affiché à
+/// droite de la page Équipe avec une ambiance visuelle par type.
+model TeamEvent {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  /// Date de l'événement (à minuit UTC). L'heure éventuelle est dans `time`.
+  date        DateTime
+  /// Heure optionnelle "HH:MM" (null = journée / horaire non précisé).
+  time        String?
+  type        TeamEventType @default(AUTRE)
+  location    String?       // Lieu optionnel (resto, salle, labo…)
+  createdById String?       // User ayant créé (référence libre, best-effort)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId, date])
+  @@map("team_events")
 }
 
 // ─── MESSAGERIE INTERNE ──────────────────────────────────────────
