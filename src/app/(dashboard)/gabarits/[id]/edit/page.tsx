@@ -17,10 +17,16 @@ export default async function EditTemplatePage({
   if (!session?.user) redirect("/login");
   if (!canApplyTemplates(session.user.role)) redirect("/planning");
 
-  const template = await prisma.weekTemplate.findFirst({
-    where: { id: params.id, pharmacyId: session.user.pharmacyId },
-    include: { entries: true },
-  });
+  const [template, pharmacy] = await Promise.all([
+    prisma.weekTemplate.findFirst({
+      where: { id: params.id, pharmacyId: session.user.pharmacyId },
+      include: { entries: true },
+    }),
+    prisma.pharmacy.findUnique({
+      where: { id: session.user.pharmacyId },
+      select: { minStaff: true },
+    }),
+  ]);
   if (!template) redirect("/gabarits");
 
   const employees = await prisma.employee.findMany({
@@ -55,6 +61,7 @@ export default async function EditTemplatePage({
       initialName={template.name}
       initialCategory={template.category}
       initialDescription={template.description}
+      minStaff={pharmacy?.minStaff ?? 4}
       employees={employeesDTO}
       initialEntries={initialEntries}
     />

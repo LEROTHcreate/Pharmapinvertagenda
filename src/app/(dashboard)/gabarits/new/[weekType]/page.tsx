@@ -34,9 +34,15 @@ export default async function NewTemplatePage({
   });
 
   // Suggestion de nom basée sur le nb de gabarits existants pour ce type
-  const existing = await prisma.weekTemplate.count({
-    where: { pharmacyId: session.user.pharmacyId, weekType: weekType as "S1" | "S2" },
-  });
+  const [existing, pharmacy] = await Promise.all([
+    prisma.weekTemplate.count({
+      where: { pharmacyId: session.user.pharmacyId, weekType: weekType as "S1" | "S2" },
+    }),
+    prisma.pharmacy.findUnique({
+      where: { id: session.user.pharmacyId },
+      select: { minStaff: true },
+    }),
+  ]);
   const suggestion =
     existing === 0
       ? `Semaine type ${weekType}`
@@ -46,6 +52,7 @@ export default async function NewTemplatePage({
     <TemplateView
       weekType={weekType as "S1" | "S2"}
       initialName={suggestion}
+      minStaff={pharmacy?.minStaff ?? 4}
       employees={employees as EmployeeDTO[]}
       initialEntries={[]}
     />

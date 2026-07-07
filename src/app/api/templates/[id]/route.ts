@@ -35,7 +35,7 @@ async function PATCH__impl(
 
   const target = await prisma.weekTemplate.findFirst({
     where: { id: params.id, pharmacyId: session.user.pharmacyId },
-    select: { id: true },
+    select: { id: true, weekType: true },
   });
   if (!target) {
     return NextResponse.json({ error: "Gabarit introuvable" }, { status: 404 });
@@ -47,6 +47,7 @@ async function PATCH__impl(
     category?: string | null;
     description?: string | null;
     weekType?: "S1" | "S2";
+    isDefault?: boolean;
   } = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.weekType !== undefined) data.weekType = parsed.data.weekType;
@@ -55,6 +56,23 @@ async function PATCH__impl(
   }
   if (parsed.data.description !== undefined) {
     data.description = parsed.data.description ? parsed.data.description : null;
+  }
+  if (parsed.data.isDefault !== undefined) data.isDefault = parsed.data.isDefault;
+
+  // Un seul gabarit "par défaut" par type/pharmacie : si on épingle celui-ci,
+  // on désépingle d'abord les autres du même type (type effectif = nouveau si
+  // fourni dans le même patch, sinon l'actuel).
+  if (parsed.data.isDefault === true) {
+    const effectiveType = parsed.data.weekType ?? target.weekType;
+    await prisma.weekTemplate.updateMany({
+      where: {
+        pharmacyId: session.user.pharmacyId,
+        weekType: effectiveType,
+        isDefault: true,
+        id: { not: target.id },
+      },
+      data: { isDefault: false },
+    });
   }
 
   const updated = await prisma.weekTemplate.update({
@@ -66,6 +84,7 @@ async function PATCH__impl(
       weekType: true,
       category: true,
       description: true,
+      isDefault: true,
     },
   });
 

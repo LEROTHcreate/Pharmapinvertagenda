@@ -32,37 +32,74 @@ function buildPreview(
   return grid;
 }
 
+/**
+ * Compte les créneaux OCCUPÉS mais sous l'effectif minimum (0 < effectif <
+ * minStaff). On ignore les créneaux à 0 (hors ouverture, normaux) pour ne pas
+ * générer de fausses alertes sur les heures non travaillées.
+ */
+function countUnderstaffed(preview: number[][], minStaff: number): number {
+  let n = 0;
+  for (const row of preview) {
+    for (const v of row) {
+      if (v > 0 && v < minStaff) n++;
+    }
+  }
+  return n;
+}
+
 export default async function GabaritsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canApplyTemplates(session.user.role)) redirect("/planning");
 
-  const templates = await prisma.weekTemplate.findMany({
-    where: { pharmacyId: session.user.pharmacyId },
-    orderBy: [{ category: "asc" }, { weekType: "asc" }, { name: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      weekType: true,
-      category: true,
-      description: true,
-      updatedAt: true,
-      entries: {
-        select: { dayOfWeek: true, timeSlot: true, type: true },
+  const [pharmacy, templates] = await Promise.all([
+    prisma.pharmacy.findUnique({
+      where: { id: session.user.pharmacyId },
+      select: { minStaff: true },
+    }),
+    prisma.weekTemplate.findMany({
+      where: { pharmacyId: session.user.pharmacyId },
+      orderBy: [
+        { isDefault: "desc" },
+        { category: "asc" },
+        { weekType: "asc" },
+        { name: "asc" },
+      ],
+      select: {
+        id: true,
+        name: true,
+        weekType: true,
+        category: true,
+        description: true,
+        isDefault: true,
+        updatedAt: true,
+        entries: {
+          select: { employeeId: true, dayOfWeek: true, timeSlot: true, type: true },
+        },
       },
-    },
-  });
+    }),
+  ]);
+  const minStaff = pharmacy?.minStaff ?? 4;
 
-  const rows: GabaritRow[] = templates.map((t) => ({
-    id: t.id,
-    name: t.name,
-    weekType: t.weekType,
-    category: t.category,
-    description: t.description,
-    entryCount: t.entries.length,
-    updatedAt: t.updatedAt.toISOString(),
-    preview: buildPreview(t.entries),
-  }));
+  const rows: GabaritRow[] = templates.map((t) => {
+    const preview = buildPreview(t.entries);
+    const taskEntries = t.entries.filter((e) => e.type === ScheduleType.TASK);
+    return {
+      id: t.id,
+      name: t.name,
+      weekType: t.weekType,
+      category: t.category,
+      description: t.description,
+      isDefault: t.isDefault,
+      entryCount: t.entries.length,
+      updatedAt: t.updatedAt.toISOString(),
+      preview,
+      // 1 créneau = 30 min = 0,5 h ; on ne compte que les TÂCHES (pas les absences).
+      weeklyHours: taskEntries.length * 0.5,
+      peopleCount: new Set(taskEntries.map((e) => e.employeeId)).size,
+      understaffedSlots: countUnderstaffed(preview, minStaff),
+    };
+  });
 
   // Lundi ISO de la semaine courante — point de départ par défaut pour le
   // bouton « Appliquer un gabarit » directement depuis cette page.

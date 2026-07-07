@@ -47,15 +47,32 @@ export const patchTemplateMetaInput = z
     category: templateCategory,
     description: templateDescription,
     weekType: weekTypeEnum.optional(),
+    /** Marque/démarque ce gabarit comme "par défaut" pour son type. */
+    isDefault: z.boolean().optional(),
   })
   .refine(
     (v) =>
       v.name !== undefined ||
       v.category !== undefined ||
       v.description !== undefined ||
-      v.weekType !== undefined,
+      v.weekType !== undefined ||
+      v.isDefault !== undefined,
     { message: "Aucune modification fournie" }
   );
+
+/**
+ * Création d'un gabarit À PARTIR d'une semaine réelle du planning (miroir de
+ * l'application). On lit les créneaux de la semaine donnée et on les fige en
+ * gabarit. `weekStart` peut être n'importe quelle date de la semaine — le
+ * serveur la ramène au lundi ISO.
+ */
+export const templateFromWeekInput = z.object({
+  weekStart: isoDate,
+  weekType: weekTypeEnum,
+  name: z.string().trim().min(1, "Nom requis").max(80),
+  category: templateCategory,
+  description: templateDescription,
+});
 
 export const applyTemplateInput = z.object({
   weekStart: isoDate,

@@ -432,6 +432,7 @@ model WeekTemplate {
   weekType WeekType                            // S1 ou S2
   category String?                             // Classement libre selon les besoins (ex: "Vacances scolaires", "Renfort", "Été")
   description String?                          // Note libre décrivant l'usage du gabarit
+  isDefault Boolean @default(false)            // Gabarit "par défaut" pour son type (1 max par type/pharmacie) — pré-sélectionné à l'application
   isActive Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

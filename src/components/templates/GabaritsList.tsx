@@ -4,15 +4,20 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
+  CalendarPlus,
   Check,
+  Clock,
   Copy,
   LayoutTemplate,
   Loader2,
   Pencil,
   Plus,
   Search,
+  Star,
   Tag,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import type { WeekType } from "@prisma/client";
@@ -34,10 +39,17 @@ export type GabaritRow = {
   weekType: WeekType;
   category: string | null;
   description: string | null;
+  isDefault: boolean;
   entryCount: number;
   updatedAt: string;
   /** Heatmap [jour 0-5][créneau] = nb de collaborateurs en TÂCHE. */
   preview: number[][];
+  /** Heures de travail hebdo du gabarit (TÂCHES × 0,5). */
+  weeklyHours: number;
+  /** Nombre de personnes distinctes affectées à une tâche dans le gabarit. */
+  peopleCount: number;
+  /** Créneaux occupés mais sous l'effectif minimum de l'officine. */
+  understaffedSlots: number;
 };
 
 const TYPES: WeekType[] = ["S1", "S2"];
@@ -59,6 +71,8 @@ export function GabaritsList({
   const [confirmTarget, setConfirmTarget] = useState<GabaritRow | null>(null);
   const [duplicateTarget, setDuplicateTarget] = useState<GabaritRow | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [settingDefault, setSettingDefault] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -89,6 +103,8 @@ export function GabaritsList({
     }
     const sorted = [...list];
     sorted.sort((a, b) => {
+      // Les gabarits « par défaut » remontent toujours en tête de leur groupe.
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
       if (sort === "name") return a.name.localeCompare(b.name, "fr");
       if (sort === "size") return b.entryCount - a.entryCount;
       // recent
@@ -135,6 +151,28 @@ export function GabaritsList({
     }
   }
 
+  // Épingle / désépingle un gabarit comme « par défaut » pour son type.
+  async function toggleDefault(target: GabaritRow) {
+    setError(null);
+    setSettingDefault(target.id);
+    try {
+      const res = await fetch(`/api/templates/${target.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ isDefault: !target.isDefault }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Erreur lors de la mise à jour");
+      }
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSettingDefault(null);
+    }
+  }
+
   const totalCount = rows.length;
   const shownCount = filtered.length;
 
@@ -148,6 +186,7 @@ export function GabaritsList({
           row={g}
           editing={editingId === g.id}
           busyDelete={busyDelete === g.id}
+          settingDefault={settingDefault === g.id}
           onStartEdit={() => setEditingId(g.id)}
           onCancelEdit={() => setEditingId(null)}
           onSaved={() => {
@@ -156,6 +195,7 @@ export function GabaritsList({
           }}
           onDelete={() => setConfirmTarget(g)}
           onDuplicate={() => setDuplicateTarget(g)}
+          onToggleDefault={() => toggleDefault(g)}
         />
       ))}
     </div>
@@ -222,6 +262,15 @@ export function GabaritsList({
             onApplied={() => startTransition(() => router.refresh())}
             alwaysConfirm
           />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+            title="Créer un gabarit à partir d'une semaine déjà planifiée"
+          >
+            <CalendarPlus className="h-4 w-4" />
+            Importer une semaine
+          </Button>
           {TYPES.map((type) => (
             <Button key={type} asChild size="sm" variant="outline">
               <Link href={`/gabarits/new/${type}`}>
@@ -306,6 +355,17 @@ export function GabaritsList({
         }}
       />
 
+      {/* Dialog import depuis une semaine réelle */}
+      <ImportWeekDialog
+        open={importOpen}
+        defaultWeekStart={currentWeekStart}
+        onClose={() => setImportOpen(false)}
+        onSuccess={(newId) => {
+          setImportOpen(false);
+          router.push(`/gabarits/${newId}/edit`);
+        }}
+      />
+
       {/* Confirmation suppression */}
       <Dialog
         open={!!confirmTarget}
@@ -348,23 +408,34 @@ function GabaritCard({
   row,
   editing,
   busyDelete,
+  settingDefault,
   onStartEdit,
   onCancelEdit,
   onSaved,
   onDelete,
   onDuplicate,
+  onToggleDefault,
 }: {
   row: GabaritRow;
   editing: boolean;
   busyDelete: boolean;
+  settingDefault: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaved: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onToggleDefault: () => void;
 }) {
   return (
-    <div className="hover-lift flex flex-col rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
+    <div
+      className={cn(
+        "hover-lift flex flex-col rounded-2xl border bg-card p-4 shadow-sm",
+        row.isDefault
+          ? "border-amber-300/80 dark:border-amber-700/60"
+          : "border-border/70"
+      )}
+    >
       {/* Aperçu heatmap */}
       <MiniGrid preview={row.preview} />
 
@@ -381,6 +452,12 @@ function GabaritCard({
                 <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
                   {row.weekType}
                 </span>
+                {row.isDefault && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                    <Star className="h-2.5 w-2.5 fill-current" />
+                    Défaut
+                  </span>
+                )}
                 <p className="truncate text-[14px] font-medium tracking-tight text-foreground">
                   {row.name}
                 </p>
@@ -390,14 +467,49 @@ function GabaritCard({
                   {row.description}
                 </p>
               )}
-              <p className="mt-1 text-[11px] text-muted-foreground/80">
-                {row.entryCount} créneau{row.entryCount > 1 ? "x" : ""} · modifié
-                le {formatDate(row.updatedAt)}
+              {/* Stats : heures/semaine + nb de personnes + alerte sous-effectif */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {formatHours(row.weeklyHours)}/sem
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  {row.peopleCount} pers.
+                </span>
+                {row.understaffedSlots > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                    title="Créneaux occupés mais sous l'effectif minimum de l'officine"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    {row.understaffedSlots} sous l&apos;effectif
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[10.5px] text-muted-foreground/70">
+                modifié le {formatDate(row.updatedAt)}
               </p>
             </div>
           </div>
 
           <div className="mt-3 flex items-center justify-end gap-1 border-t border-border/60 pt-2.5">
+            <IconButton
+              title={
+                row.isDefault
+                  ? `Retirer « par défaut » (${row.weekType})`
+                  : `Définir comme gabarit ${row.weekType} par défaut`
+              }
+              onClick={onToggleDefault}
+              disabled={busyDelete || settingDefault}
+              amber={row.isDefault}
+            >
+              {settingDefault ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Star className={cn("h-4 w-4", row.isDefault && "fill-current")} />
+              )}
+            </IconButton>
             <IconButton
               title="Renommer / classer / décrire"
               onClick={onStartEdit}
@@ -443,12 +555,14 @@ function IconButton({
   onClick,
   disabled,
   danger,
+  amber,
 }: {
   children: React.ReactNode;
   title: string;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  amber?: boolean;
 }) {
   return (
     <button
@@ -459,12 +573,19 @@ function IconButton({
       disabled={disabled}
       className={cn(
         "inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
-        danger && "text-red-600 hover:bg-red-50 hover:text-red-700"
+        danger && "text-red-600 hover:bg-red-50 hover:text-red-700",
+        amber && "text-amber-500 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/40"
       )}
     >
       {children}
     </button>
   );
+}
+
+function formatHours(h: number): string {
+  // 37,5 h → "37,5 h" ; 40 → "40 h". Virgule française, sans décimale inutile.
+  const s = Number.isInteger(h) ? String(h) : h.toFixed(1).replace(".", ",");
+  return `${s} h`;
 }
 
 /* ─── Édition inline des métadonnées ────────────────────────────── */
@@ -786,6 +907,177 @@ function DuplicateDialog({
               <Copy className="h-4 w-4" />
             )}
             Dupliquer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── Import depuis une semaine réelle ──────────────────────────── */
+
+function ImportWeekDialog({
+  open,
+  defaultWeekStart,
+  onClose,
+  onSuccess,
+}: {
+  open: boolean;
+  defaultWeekStart: string;
+  onClose: () => void;
+  onSuccess: (newId: string) => void;
+}) {
+  const [weekStart, setWeekStart] = useState(defaultWeekStart);
+  const [weekType, setWeekType] = useState<WeekType>("S1");
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // À l'ouverture : repart de la semaine courante + nom suggéré.
+  useEffect(() => {
+    if (open) {
+      setWeekStart(defaultWeekStart);
+      setName(`Semaine du ${formatDate(defaultWeekStart)}`);
+      setCategory("");
+      setError(null);
+    }
+  }, [open, defaultWeekStart]);
+
+  async function handleImport() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Le nom est obligatoire");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/templates/from-week", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          weekStart,
+          weekType,
+          name: trimmed,
+          category: category.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Erreur lors de l'import");
+        return;
+      }
+      onSuccess(data.id);
+    } catch {
+      setError("Réseau indisponible");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Importer une semaine</DialogTitle>
+          <DialogDescription>
+            Crée un gabarit à partir d&apos;une semaine déjà planifiée. Choisis
+            n&apos;importe quelle date de la semaine à figer.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Date dans la semaine à importer */}
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-foreground/85">
+              Semaine source (une date de la semaine)
+            </label>
+            <input
+              type="date"
+              value={weekStart}
+              onChange={(e) => setWeekStart(e.target.value)}
+              disabled={busy}
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-[13px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            />
+          </div>
+
+          {/* Nom */}
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-foreground/85">
+              Nom du gabarit
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={busy}
+              maxLength={80}
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-[13px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              placeholder="Nom du gabarit"
+            />
+          </div>
+
+          {/* Catégorie (optionnelle) */}
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-foreground/85">
+              Catégorie <span className="text-muted-foreground/70">(optionnel)</span>
+            </label>
+            <input
+              type="text"
+              list="gabarit-categories"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={busy}
+              maxLength={40}
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-[13px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              placeholder="Ex : Vacances scolaires"
+            />
+          </div>
+
+          {/* Type S1 / S2 */}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Type de semaine
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {TYPES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setWeekType(t)}
+                  disabled={busy}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-[13px] font-medium transition-colors",
+                    weekType === t
+                      ? "border-violet-300 bg-violet-50 text-violet-700"
+                      : "border-border bg-card text-foreground/85 hover:bg-muted/40"
+                  )}
+                >
+                  Semaine {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-md bg-red-50 px-3 py-2 text-[12.5px] text-red-700 ring-1 ring-inset ring-red-100">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Annuler
+          </Button>
+          <Button onClick={handleImport} disabled={busy || !name.trim()}>
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CalendarPlus className="h-4 w-4" />
+            )}
+            Importer
           </Button>
         </DialogFooter>
       </DialogContent>
