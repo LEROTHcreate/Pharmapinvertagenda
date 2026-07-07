@@ -9,7 +9,6 @@ import {
   BarChart3,
   LayoutTemplate,
   ChevronRight,
-  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MyDayCard } from "@/components/accueil/MyDayCard";
@@ -17,6 +16,7 @@ import { MyWeekCard } from "@/components/accueil/MyWeekCard";
 import { StaffingStrip } from "@/components/accueil/StaffingStrip";
 import { TeamTodayCard } from "@/components/accueil/TeamTodayCard";
 import { NextGardeCard } from "@/components/accueil/NextGardeCard";
+import { ActionsCard } from "@/components/accueil/ActionsCard";
 import { Greeting } from "@/components/accueil/Greeting";
 import { AccueilDesktop } from "@/components/accueil/AccueilDesktop";
 import type { AccueilData } from "@/components/accueil/types";
@@ -38,11 +38,14 @@ export function AccueilView(data: AccueilData) {
     myWeek,
     nextSlot,
     teamSize,
+    minStaff,
     presentBySlot,
     presentToday,
     absentsToday,
     nextGarde,
     pendingAbsences,
+    pendingUsers,
+    pendingSwaps,
     unreadMessages,
   } = data;
 
@@ -69,7 +72,6 @@ export function AccueilView(data: AccueilData) {
     zinc: "bg-muted text-foreground/70",
   };
 
-  const showAbsAlert = isAdmin && pendingAbsences > 0;
   const showMsgAlert = unreadMessages > 0;
 
   return (
@@ -87,36 +89,29 @@ export function AccueilView(data: AccueilData) {
           <p className="text-[13px] text-muted-foreground capitalize mt-0.5">{dateLabel}</p>
         </header>
 
-        {/* Alertes actionnables */}
-        {(showAbsAlert || showMsgAlert) && (
-          <div className="space-y-2">
-            {showAbsAlert && (
-              <Link
-                href="/absences"
-                className="flex items-center gap-3 rounded-xl border border-amber-200/70 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/20 px-3.5 py-3 active:scale-[0.99] transition-transform"
-              >
-                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-                <p className="flex-1 text-[13.5px] font-medium text-amber-900 dark:text-amber-200">
-                  <span className="tabular-nums font-bold">{pendingAbsences}</span> absence
-                  {pendingAbsences > 1 ? "s" : ""} à valider
-                </p>
-                <ChevronRight className="h-4 w-4 text-amber-600/60 shrink-0" />
-              </Link>
-            )}
-            {showMsgAlert && (
-              <Link
-                href="/messages"
-                className="flex items-center gap-3 rounded-xl border border-blue-200/70 bg-blue-50/70 dark:border-blue-900/40 dark:bg-blue-950/20 px-3.5 py-3 active:scale-[0.99] transition-transform"
-              >
-                <MessageCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
-                <p className="flex-1 text-[13.5px] font-medium text-blue-900 dark:text-blue-200">
-                  <span className="tabular-nums font-bold">{unreadMessages}</span> message
-                  {unreadMessages > 1 ? "s" : ""} non lu{unreadMessages > 1 ? "s" : ""}
-                </p>
-                <ChevronRight className="h-4 w-4 text-blue-600/60 shrink-0" />
-              </Link>
-            )}
-          </div>
+        {/* À traiter (responsables) — absences / inscriptions / échanges */}
+        {isAdmin && (
+          <ActionsCard
+            pendingAbsences={pendingAbsences}
+            pendingUsers={pendingUsers}
+            pendingSwaps={pendingSwaps}
+            hideWhenEmpty
+          />
+        )}
+
+        {/* Messages non lus */}
+        {showMsgAlert && (
+          <Link
+            href="/messages"
+            className="flex items-center gap-3 rounded-xl border border-blue-200/70 bg-blue-50/70 dark:border-blue-900/40 dark:bg-blue-950/20 px-3.5 py-3 active:scale-[0.99] transition-transform"
+          >
+            <MessageCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+            <p className="flex-1 text-[13.5px] font-medium text-blue-900 dark:text-blue-200">
+              <span className="tabular-nums font-bold">{unreadMessages}</span> message
+              {unreadMessages > 1 ? "s" : ""} non lu{unreadMessages > 1 ? "s" : ""}
+            </p>
+            <ChevronRight className="h-4 w-4 text-blue-600/60 shrink-0" />
+          </Link>
         )}
 
         {/* Ma journée */}
@@ -128,7 +123,7 @@ export function AccueilView(data: AccueilData) {
         )}
 
         {/* Affluence de l'équipe */}
-        <StaffingStrip presentBySlot={presentBySlot} />
+        <StaffingStrip presentBySlot={presentBySlot} minStaff={minStaff} />
 
         {/* L'équipe aujourd'hui (présents / absents) */}
         <TeamTodayCard present={presentToday} absents={absentsToday} teamSize={teamSize} />

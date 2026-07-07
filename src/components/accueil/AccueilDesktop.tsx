@@ -19,6 +19,7 @@ import { TeamNowStat } from "@/components/accueil/TeamNowStat";
 import { StaffingStrip } from "@/components/accueil/StaffingStrip";
 import { TeamTodayCard } from "@/components/accueil/TeamTodayCard";
 import { NextGardeCard } from "@/components/accueil/NextGardeCard";
+import { ActionsCard } from "@/components/accueil/ActionsCard";
 import { Greeting } from "@/components/accueil/Greeting";
 import type { AccueilData } from "@/components/accueil/types";
 
@@ -101,11 +102,14 @@ export function AccueilDesktop(data: AccueilData) {
     nextSlot,
     teamPresent,
     teamSize,
+    minStaff,
     presentBySlot,
     presentToday,
     absentsToday,
     nextGarde,
     pendingAbsences,
+    pendingUsers,
+    pendingSwaps,
     unreadMessages,
   } = data;
 
@@ -172,6 +176,13 @@ export function AccueilDesktop(data: AccueilData) {
       {/* Corps : colonne principale + colonne latérale */}
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-4">
+          {isAdmin && (
+            <ActionsCard
+              pendingAbsences={pendingAbsences}
+              pendingUsers={pendingUsers}
+              pendingSwaps={pendingSwaps}
+            />
+          )}
           {myDay && <MyDayCard hours={myDay.hours} blocks={myDay.blocks} nextSlot={nextSlot} />}
           {!hasPersonal && (
             <Link
@@ -190,7 +201,7 @@ export function AccueilDesktop(data: AccueilData) {
               <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
             </Link>
           )}
-          <StaffingStrip presentBySlot={presentBySlot} />
+          <StaffingStrip presentBySlot={presentBySlot} minStaff={minStaff} />
           {myWeek && myWeek.contract > 0 && (
             <MyWeekCard done={myWeek.done} contract={myWeek.contract} />
           )}

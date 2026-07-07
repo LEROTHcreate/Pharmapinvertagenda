@@ -24,10 +24,14 @@ export type AccueilData = {
   nextSlot: { when: string; from: string; label: string } | null;
   teamPresent: number;
   teamSize: number;
+  /** Effectif minimum paramétré pour l'officine (seuil de sous-effectif). */
+  minStaff: number;
   presentBySlot: Record<string, number>;
   presentToday: PersonRef[];
   absentsToday: AbsentRef[];
   nextGarde: NextGarde | null;
   pendingAbsences: number;
+  pendingUsers: number;
+  pendingSwaps: number;
   unreadMessages: number;
 };

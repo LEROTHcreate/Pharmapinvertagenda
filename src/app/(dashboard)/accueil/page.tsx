@@ -12,7 +12,11 @@ import {
 import type { TaskCode, AbsenceCode } from "@prisma/client";
 import { toIsoDate, startOfWeek, weekDays } from "@/lib/planning-utils";
 import { GARDE_TYPE_LABELS } from "@/lib/gardes";
-import { getMessagesUnreadCounts } from "@/lib/dashboard-data";
+import {
+  getMessagesUnreadCounts,
+  getPendingUsersCount,
+  getPendingSwapsCount,
+} from "@/lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Accueil — PharmaPlanning" };
@@ -56,7 +60,10 @@ export default async function AccueilPage() {
     sessionEmployee,
     todayEntries,
     weekEntries,
+    pharmacy,
     pendingAbsences,
+    pendingUsers,
+    pendingSwaps,
     nextGardeRaw,
     unread,
   ] = await Promise.all([
@@ -101,12 +108,19 @@ export default async function AccueilPage() {
           },
         })
       : Promise.resolve([]),
-    // Absences à valider (admin uniquement).
+    // Effectif minimum de l'officine (pour colorer l'affluence / sous-effectif).
+    prisma.pharmacy.findUnique({
+      where: { id: pharmacyId },
+      select: { minStaff: true },
+    }),
+    // Files d'attente à valider (admin uniquement).
     isAdmin
       ? prisma.absenceRequest.count({
           where: { pharmacyId, status: "PENDING" },
         })
       : Promise.resolve(0),
+    isAdmin ? getPendingUsersCount(pharmacyId) : Promise.resolve(0),
+    isAdmin ? getPendingSwapsCount(pharmacyId) : Promise.resolve(0),
     // Prochaine garde (visible par tous) — savoir qui est de garde et quand.
     prisma.garde.findFirst({
       where: { pharmacyId, date: { gte: dayStart } },
@@ -299,11 +313,14 @@ export default async function AccueilPage() {
       nextSlot={nextSlot}
       teamPresent={teamPresent}
       teamSize={employees.length}
+      minStaff={pharmacy?.minStaff ?? 4}
       presentBySlot={presentBySlot}
       presentToday={presentToday}
       absentsToday={absentsToday}
       nextGarde={nextGarde}
       pendingAbsences={pendingAbsences}
+      pendingUsers={pendingUsers}
+      pendingSwaps={pendingSwaps}
       unreadMessages={unreadMessages}
     />
   );
