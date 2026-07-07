@@ -503,12 +503,17 @@ export const PlanningGrid = memo(function PlanningGrid({
       if (
         !drag.moved &&
         !drag.additive &&
-        onCellClick &&
         empIdx === drag.startEmpIdx &&
         slotIdx === drag.startSlotIdx
       ) {
-        onCellClick(employees[empIdx].id, date, TIME_SLOTS[slotIdx]);
-        onSelectionChange(new Set());
+        // Clic simple : si une sélection multiple est active, on se contente de
+        // l'ANNULER (sans ouvrir l'éditeur de poste) — un 2e clic éditera. Sinon,
+        // clic direct = ouvrir l'éditeur.
+        if (selectionRef.current.size > 0) {
+          onSelectionChange(new Set());
+        } else if (onCellClick) {
+          onCellClick(employees[empIdx].id, date, TIME_SLOTS[slotIdx]);
+        }
       } else if (!drag.moved && drag.additive) {
         const k = makeCellKey(employees[empIdx].id, date, TIME_SLOTS[slotIdx]);
         const next = new Set(selectionRef.current);
@@ -526,11 +531,16 @@ export const PlanningGrid = memo(function PlanningGrid({
   // toute la grille à la moindre interaction.
   const onCellClickAt = useCallback(
     (empIdx: number, slotIdx: number) => {
+      // Clic simple pendant une sélection multiple = l'annuler, sans éditer.
+      if (selectionRef.current.size > 0) {
+        onSelectionChange(new Set());
+        return;
+      }
       if (onCellClick && employees[empIdx]) {
         onCellClick(employees[empIdx].id, date, TIME_SLOTS[slotIdx]);
       }
     },
-    [onCellClick, employees, date]
+    [onCellClick, employees, date, onSelectionChange]
   );
 
   if (employees.length === 0) {

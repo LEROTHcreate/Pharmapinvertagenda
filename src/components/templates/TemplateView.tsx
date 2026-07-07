@@ -3,7 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Loader2, Copy, ChevronDown, Undo2, Redo2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  ArrowLeft,
+  Save,
+  Loader2,
+  Copy,
+  ChevronDown,
+  Undo2,
+  Redo2,
+  ClipboardCopy,
+  ClipboardPaste,
+} from "lucide-react";
 import type { AbsenceCode, ScheduleType, TaskCode } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +53,20 @@ type Selection = {
   date: string;
   timeSlot: string;
 } | null;
+
+/**
+ * Élément du presse-papiers : le contenu d'une cellule, VOLONTAIREMENT
+ * jour-agnostique (on ne retient que l'employé + l'horaire + le poste). Le collage
+ * réapplique donc le poste au même employé/horaire sur le jour affiché → sert à
+ * répéter des postes d'un jour à l'autre dans la semaine.
+ */
+type ClipItem = {
+  employeeId: string;
+  timeSlot: string;
+  payload:
+    | { type: "TASK" | "ABSENCE"; taskCode: TaskCode | null; absenceCode: AbsenceCode | null }
+    | null;
+};
 
 type ParsedCell = { employeeId: string; date: string; timeSlot: string };
 function parseCellKey(k: CellKey): ParsedCell {
@@ -124,6 +149,8 @@ export function TemplateView({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Confirmation avant de quitter le gabarit avec des modifs non enregistrées.
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   // ─── Historique annuler / rétablir ─────────────────────────────────────
   // Le gabarit vit en state local (pas dans le store Zustand du planning) : on
@@ -137,6 +164,10 @@ export function TemplateView({
   const [future, setFuture] = useState<TemplateEntryDTO[][]>([]);
   const canUndo = past.length > 0;
   const canRedo = future.length > 0;
+
+  // Presse-papiers de postes (jour-agnostique) : copier une sélection puis la
+  // coller sur un autre jour aux mêmes positions employé/horaire.
+  const [clipboard, setClipboard] = useState<ClipItem[]>([]);
 
   /** Confirme un nouvel état d'entries en empilant l'ancien dans l'historique. */
   const commit = useCallback((next: TemplateEntryDTO[]) => {
@@ -168,10 +199,73 @@ export function TemplateView({
     setDirty(true);
   }, [future]);
 
+  /** Copie le contenu de la sélection courante dans le presse-papiers. */
+  const copySelection = useCallback(() => {
+    const cells = Array.from(multiSelection).map(parseCellKey);
+    if (cells.length === 0) return;
+    const items: ClipItem[] = cells.map((c) => {
+      const dow = parseDayKey(c.date);
+      const existing = entriesRef.current.find(
+        (e) =>
+          e.employeeId === c.employeeId &&
+          e.dayOfWeek === dow &&
+          e.timeSlot === c.timeSlot
+      );
+      return {
+        employeeId: c.employeeId,
+        timeSlot: c.timeSlot,
+        payload: existing
+          ? {
+              type: existing.type,
+              taskCode: existing.taskCode,
+              absenceCode: existing.absenceCode,
+            }
+          : null,
+      };
+    });
+    setClipboard(items);
+    toast({
+      tone: "success",
+      title: `${items.length} cellule(s) copiée(s)`,
+      description: "Ctrl+V pour coller sur le jour affiché.",
+    });
+  }, [multiSelection, toast]);
+
+  /**
+   * Colle le presse-papiers sur le JOUR AFFICHÉ, aux mêmes positions
+   * employé/horaire. Les cellules copiées vides effacent la cible (copie fidèle
+   * du bloc, à la manière d'un tableur). Un seul pas d'historique.
+   */
+  const pasteToCurrentDay = useCallback(() => {
+    if (clipboard.length === 0) return;
+    let next = entriesRef.current;
+    clipboard.forEach((item) => {
+      next = applyUpsert(next, item.employeeId, dayIndex, item.timeSlot, item.payload);
+    });
+    commit(next);
+    toast({
+      tone: "success",
+      title: `Collé sur ${WEEK_DAYS[dayIndex]}`,
+      description: `${clipboard.length} cellule(s).`,
+    });
+  }, [clipboard, dayIndex, commit, toast]);
+
   // Marque dirty au changement de nom (au-delà de l'init)
   useEffect(() => {
     if (name !== initialName) setDirty(true);
   }, [name, initialName]);
+
+  // Garde-fou navigateur : prévient à la fermeture / au rafraîchissement de
+  // l'onglet tant qu'il reste des modifications non enregistrées.
+  useEffect(() => {
+    if (!dirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = ""; // requis par certains navigateurs pour afficher l'invite
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   const dayDates = useMemo(() => [0, 1, 2, 3, 4, 5].map(dayKey), []);
   const selectedDay = dayDates[dayIndex];
@@ -213,6 +307,36 @@ export function TemplateView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo]);
+
+  // Copier / coller des postes (Ctrl/⌘+C, Ctrl/⌘+V). Ctrl+C ne s'active que si des
+  // cellules sont sélectionnées ET qu'aucun texte n'est sélectionné (on laisse le
+  // copier-coller de texte natif) ; Ctrl+V que si le presse-papiers a du contenu.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod || e.shiftKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      if (key === "c") {
+        if (multiSelection.size === 0) return;
+        const sel = window.getSelection();
+        if (sel && sel.toString().length > 0) return; // laisse copier du texte
+        e.preventDefault();
+        copySelection();
+      } else {
+        if (clipboard.length === 0) return;
+        e.preventDefault();
+        pasteToCurrentDay();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [multiSelection.size, clipboard.length, copySelection, pasteToCurrentDay]);
 
   // Reset selection quand on change de jour
   useEffect(() => {
@@ -430,7 +554,17 @@ export function TemplateView({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button asChild variant="outline" size="sm">
-            <Link href="/gabarits">
+            <Link
+              href="/gabarits"
+              onClick={(e) => {
+                // Modifs non enregistrées → on bloque la navigation et on
+                // demande confirmation pour éviter de perdre le travail.
+                if (dirty) {
+                  e.preventDefault();
+                  setConfirmLeave(true);
+                }
+              }}
+            >
               <ArrowLeft className="h-4 w-4" />
               Retour
             </Link>
@@ -518,6 +652,20 @@ export function TemplateView({
           </TabsList>
         </Tabs>
 
+        <div className="flex items-center gap-2 shrink-0">
+        {/* Coller le presse-papiers sur le jour affiché (visible dès qu'on a copié) */}
+        {clipboard.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={pasteToCurrentDay}
+            title={`Coller ${clipboard.length} cellule(s) sur ${WEEK_DAYS[dayIndex]} (Ctrl+V)`}
+          >
+            <ClipboardPaste className="h-4 w-4" />
+            Coller ({clipboard.length})
+          </Button>
+        )}
+
         {/* Dropdown : dupliquer le jour courant vers… */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -567,6 +715,7 @@ export function TemplateView({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
 
       {/* Grille (réutilise PlanningGrid avec dates factices) */}
@@ -605,6 +754,21 @@ export function TemplateView({
         onClearAll={handleBulkClear}
       />
 
+      {/* Confirmation avant de quitter avec des modifications non enregistrées */}
+      <ConfirmDialog
+        open={confirmLeave}
+        variant="destructive"
+        title="Modifications non enregistrées"
+        description="Ce gabarit contient des changements qui n'ont pas encore été enregistrés. Vérifie qu'il est bien sauvegardé (bouton « Enregistrer ») avant de partir, sinon ton travail sera perdu."
+        confirmLabel="Quitter sans enregistrer"
+        cancelLabel="Rester sur le gabarit"
+        onConfirm={() => {
+          setConfirmLeave(false);
+          router.push("/gabarits");
+        }}
+        onClose={() => setConfirmLeave(false)}
+      />
+
       {/* Barre flottante multi-sélection */}
       {multiSelection.size > 0 && (
         <div className="fixed bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border bg-card shadow-2xl px-4 py-2.5">
@@ -615,6 +779,15 @@ export function TemplateView({
           <div className="h-5 w-px bg-border" />
           <Button size="sm" onClick={() => setBulkOpen(true)}>
             Appliquer un poste
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={copySelection}
+            title="Copier la sélection (Ctrl+C) — collable sur un autre jour"
+          >
+            <ClipboardCopy className="h-4 w-4" />
+            Copier
           </Button>
           <Button
             size="sm"

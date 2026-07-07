@@ -4,14 +4,17 @@ import { unstable_cache } from "next/cache";
  * Actualité « pharmacie » pour la page Infos & conseils.
  *
  * Source : Google Actualités (flux RSS de recherche) — agrège la presse
- * française sur l'officine : médicaments, remboursements, votes/mesures
- * concernant les pharmaciens, ruptures & rappels de lots, etc. Fiable et
- * toujours alimenté, contrairement à beaucoup de flux d'éditeurs (l'ANSM, par
- * ex., renvoie un flux vide).
+ * française sur l'officine : médicaments, remboursements, nouvelles missions,
+ * convention/rémunération, ruptures & rappels de lots, etc.
  *
- * On ne stocke rien : lecture serveur, mise en cache 1 h (unstable_cache), et
- * on ne renvoie que des titres + liens externes (aucun contenu recopié). En
- * cas d'erreur réseau ou de flux illisible → tableau vide (section masquée).
+ * ⚠ Google Actualités trie par PERTINENCE, pas par date. On RE-TRIE donc par
+ * date décroissante après fusion de plusieurs requêtes (couverture large) et
+ * dédoublonnage (une même dépêche revient via plusieurs sources) : la section
+ * affiche ainsi toujours le plus RÉCENT en tête et se rafraîchit avec l'actu.
+ *
+ * On ne stocke rien : lecture serveur, cache 1 h (unstable_cache), et on ne
+ * renvoie que des titres + liens externes (aucun contenu recopié). En cas
+ * d'erreur réseau ou de flux illisible → tableau vide (section masquée).
  */
 
 export type NewsItem = {
@@ -21,6 +24,9 @@ export type NewsItem = {
   /** Date de publication formatée (fr-FR), ex. "2 juil.". */
   dateLabel: string;
 };
+
+/** Item interne enrichi d'un timestamp pour le tri par fraîcheur. */
+type ParsedItem = NewsItem & { ts: number };
 
 function feedUrl(query: string): string {
   return (
@@ -54,11 +60,30 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function fetchFeed(query: string, limit: number): Promise<NewsItem[]> {
+/** Clé de dédoublonnage : titre normalisé (sans accents/ponctuation/casse). */
+function dedupKey(title: string): string {
+  return title
+    // Les pages « Commentez sur l'article "X" » du Moniteur pointent vers X :
+    // on retire le préfixe pour qu'elles dédoublonnent avec l'article réel.
+    .replace(/^Commentez sur l'article\s*[«"]?\s*/i, "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Titres à écarter (pages non-articles : sondages, commentaires…). */
+function isNoise(title: string): boolean {
+  return /^Commentez sur l'article/i.test(title);
+}
+
+/** Récupère et parse un flux RSS Google Actualités (une requête). */
+async function fetchQuery(query: string): Promise<ParsedItem[]> {
   try {
     const res = await fetch(feedUrl(query), {
       headers: { "user-agent": "Mozilla/5.0 (PharmaPlanning)" },
-      // unstable_cache gère déjà le cache applicatif → pas de double cache.
+      // unstable_cache gère le cache applicatif → pas de double cache HTTP.
       cache: "no-store",
       // Borne le temps de réponse pour ne jamais bloquer le rendu de /infos.
       signal: AbortSignal.timeout(5000),
@@ -66,7 +91,7 @@ async function fetchFeed(query: string, limit: number): Promise<NewsItem[]> {
     if (!res.ok) return [];
     const xml = await res.text();
 
-    const items: NewsItem[] = [];
+    const items: ParsedItem[] = [];
     const blocks = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
     for (const block of blocks) {
       const rawTitle = tag(block, "title");
@@ -79,12 +104,11 @@ async function fetchFeed(query: string, limit: number): Promise<NewsItem[]> {
         .trim();
       const pub = tag(block, "pubDate");
       const d = pub ? new Date(pub) : null;
-      const dateLabel =
-        d && !Number.isNaN(d.getTime())
-          ? d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-          : "";
-      items.push({ title: title || rawTitle, link, source, dateLabel });
-      if (items.length >= limit) break;
+      const ts = d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+      const dateLabel = ts
+        ? new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+        : "";
+      items.push({ title: title || rawTitle, link, source, ts, dateLabel });
     }
     return items;
   } catch {
@@ -92,15 +116,43 @@ async function fetchFeed(query: string, limit: number): Promise<NewsItem[]> {
   }
 }
 
-/** Actu pharmacie généraliste (officine, médicaments, remboursements, mesures). */
+/**
+ * Fusionne plusieurs requêtes → dédoublonne (par titre normalisé) → trie par
+ * date décroissante → garde les `limit` plus récentes.
+ */
+async function fetchMerged(queries: string[], limit: number): Promise<NewsItem[]> {
+  const results = await Promise.all(queries.map(fetchQuery));
+  const seen = new Set<string>();
+  const merged: ParsedItem[] = [];
+  for (const it of results.flat()) {
+    if (isNoise(it.title)) continue;
+    const key = dedupKey(it.title);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(it);
+  }
+  merged.sort((a, b) => b.ts - a.ts); // plus récent en tête
+  // On retire le `ts` interne (le DTO public reste titre/lien/source/date).
+  return merged.slice(0, limit).map(({ ts: _ts, ...rest }) => rest);
+}
+
+/**
+ * Actu pharmacie généraliste — couverture large (officine, remboursements,
+ * nouvelles missions, convention/rémunération), triée du plus récent au plus
+ * ancien. Rafraîchie toutes les heures.
+ */
 export const getPharmacyNews = () =>
   unstable_cache(
     () =>
-      fetchFeed(
-        "pharmacie officine médicament remboursement when:30d",
-        7
+      fetchMerged(
+        [
+          "pharmacie officine actualité when:30d",
+          "pharmacie officine nouvelles missions when:30d",
+          "pharmacie convention rémunération honoraires officine when:30d",
+        ],
+        8
       ),
-    ["pharmacy-news-general"],
+    ["pharmacy-news-general-v2"],
     { revalidate: 3600, tags: ["pharmacy-news"] }
   )();
 
@@ -108,10 +160,13 @@ export const getPharmacyNews = () =>
 export const getMedicineAlerts = () =>
   unstable_cache(
     () =>
-      fetchFeed(
-        '"rupture" médicament OR "rappel de lot" médicament OR pénurie médicament when:45d',
-        5
+      fetchMerged(
+        [
+          "rupture stock médicament when:45d",
+          "ANSM rappel de lot médicament when:45d",
+        ],
+        6
       ),
-    ["pharmacy-news-alerts"],
+    ["pharmacy-news-alerts-v2"],
     { revalidate: 3600, tags: ["pharmacy-news"] }
   )();

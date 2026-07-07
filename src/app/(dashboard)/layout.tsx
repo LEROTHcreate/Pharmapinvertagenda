@@ -16,6 +16,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { AssistantBubble } from "@/components/assistant/AssistantBubble";
 
 /**
  * Surcharge dynamique du favicon : sur les pages connectées, on affiche le
@@ -155,6 +156,9 @@ export default async function DashboardLayout({
         unreadSwapMessages={messagesUnread.swap}
         unreadTextMessages={messagesUnread.text}
       />
+
+      {/* Assistant IA « Pilou » — bulle flottante sur toutes les pages connectées. */}
+      <AssistantBubble firstName={session.user.name?.split(/\s+/)[0] ?? ""} />
     </div>
   );
 }
