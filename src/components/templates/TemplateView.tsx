@@ -150,6 +150,7 @@ export function TemplateView({
   initialName,
   initialCategory,
   initialDescription,
+  minStaff = 4,
   employees,
   initialEntries,
 }: {
@@ -161,6 +162,8 @@ export function TemplateView({
   initialCategory?: string | null;
   /** Note libre décrivant l'usage du gabarit. */
   initialDescription?: string | null;
+  /** Seuil d'effectif minimum de l'officine — indicateur d'effectif dans la grille. */
+  minStaff?: number;
   employees: EmployeeDTO[];
   initialEntries: TemplateEntryDTO[];
 }) {
@@ -680,24 +683,25 @@ export function TemplateView({
                 {templateId ? "Édition" : "Nouveau gabarit"}
               </span>
             </div>
-            <Input
-              type="text"
-              placeholder={`Nom du gabarit (ex : ${weekType} standard)`}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={80}
-              className="mt-0.5 h-8 max-w-md border-0 border-b border-zinc-200 bg-transparent px-0 text-lg font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-xl"
-            />
-            {/* Classement libre + note — servent à ranger le gabarit selon les
-                besoins et à décrire son usage (visibles sur sa carte). */}
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            {/* Nom + classement + note sur UNE même ligne (qui s'enroule
+                seulement si l'écran est vraiment trop étroit) : l'en-tête reste
+                bas → un maximum de place pour le planning sur petit écran. */}
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Input
+                type="text"
+                placeholder={`Nom du gabarit (ex : ${weekType} standard)`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={80}
+                className="h-8 w-auto min-w-[150px] max-w-[240px] border-0 border-b border-zinc-200 bg-transparent px-0 text-lg font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-xl"
+              />
               <input
                 type="text"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 maxLength={40}
                 placeholder="Catégorie (ex : Vacances scolaires)"
-                className="h-8 w-full max-w-[240px] rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                className="h-8 w-[45%] min-w-[130px] max-w-[190px] rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
               />
               <input
                 type="text"
@@ -705,7 +709,7 @@ export function TemplateView({
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={280}
                 placeholder="Note (à quoi sert ce gabarit ?)"
-                className="h-8 w-full max-w-md rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                className="h-8 w-[45%] min-w-[150px] max-w-xs rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
               />
             </div>
           </div>
@@ -855,7 +859,7 @@ export function TemplateView({
         weekDates={dayDates}
         index={index}
         canEdit={true}
-        minStaff={4}
+        minStaff={minStaff}
         selection={multiSelection}
         onSelectionChange={setMultiSelection}
         onCellClick={handleCellClick}

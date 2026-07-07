@@ -26,6 +26,7 @@ type TemplateInfo = {
   name: string;
   weekType: WeekType;
   count: number;
+  isDefault: boolean;
 };
 
 const TYPES: WeekType[] = ["S1", "S2"];
@@ -107,14 +108,21 @@ export function ApplyTemplateButton({
             name: string;
             weekType: WeekType;
             entries: unknown[];
+            isDefault?: boolean;
           }) => ({
             id: t.id,
             name: t.name,
             weekType: t.weekType,
             count: Array.isArray(t.entries) ? t.entries.length : 0,
+            isDefault: !!t.isDefault,
           })
         );
         setTemplates(list);
+        // Pré-sélection : gabarit « par défaut » de chaque type, s'il existe.
+        const defS1 = list.find((t) => t.weekType === "S1" && t.isDefault);
+        const defS2 = list.find((t) => t.weekType === "S2" && t.isDefault);
+        if (defS1) setS1Id(defS1.id);
+        if (defS2) setS2Id(defS2.id);
       })
       .catch(() => setError("Impossible de charger les gabarits"))
       .finally(() => setLoading(false));
@@ -250,8 +258,8 @@ export function ApplyTemplateButton({
                           {list.map((t) => (
                             <TemplateRadio
                               key={t.id}
-                              label={t.name}
-                              sub={`${t.count} créneau${t.count > 1 ? "x" : ""}`}
+                              label={t.isDefault ? `★ ${t.name}` : t.name}
+                              sub={`${t.count} créneau${t.count > 1 ? "x" : ""}${t.isDefault ? " · par défaut" : ""}`}
                               selected={selectedId === t.id}
                               onSelect={() => setSelected(t.id)}
                               disabled={busy}
