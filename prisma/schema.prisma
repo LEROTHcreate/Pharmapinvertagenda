@@ -133,6 +133,13 @@ model Pharmacy {
   // seedées). Null = fallback sur le logo générique PharmaPlanning.
   logoUrl   String?
 
+  // ─── Mémo du jour / consignes ──────────────────────────────────────
+  // Note courte posée par un responsable, visible par toute l'équipe (bandeau
+  // app-wide). Null/vide = pas de consigne affichée. `dailyNoticeAt` sert à
+  // ré-afficher le bandeau à chacun quand la consigne change (clé de rappel).
+  dailyNotice   String?
+  dailyNoticeAt DateTime?
+
   // ─── Réglages Rémunération ─────────────────────────────────────────
   // Région de référence pour le benchmark marché (NATIONAL, IDF,
   // GRANDE_METROPOLE, PROVINCE, RURAL). Null = NATIONAL par défaut.
