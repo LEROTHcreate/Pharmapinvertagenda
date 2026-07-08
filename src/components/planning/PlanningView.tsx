@@ -27,7 +27,8 @@ import { TASK_LABELS, STATUS_LABELS } from "@/types";
 import type { ApplyScope } from "@/components/planning/ApplyScopeSelector";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
 import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
-import type { EmployeeStatus } from "@prisma/client";
+import { useMetierFilter } from "@/components/planning/useMetierFilter";
+import { appendCurrentMetier } from "@/lib/metier-filter";
 import { ViewModeSelector } from "@/components/planning/ViewModeSelector";
 import { PrintButton } from "@/components/planning/PrintButton";
 import { useToast } from "@/components/ui/toast";
@@ -273,8 +274,9 @@ export function PlanningView({
   // Piles undo/redo (Ctrl+Z / Ctrl+Y) : gérées dans le store Zustand. Lues via
   // getState() dans les handlers ; aucun rendu ne dépend de leur contenu
   // (undo/redo sont clavier-seul) → pas de souscription, pas de re-render.
-  // Filtre par statut : Set vide = aucun filtre (tous les collaborateurs visibles)
-  const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
+  // Filtre par métier : partagé et persistant dans l'URL (?metier=…), commun aux
+  // vues jour / semaine / mois. Set vide = aucun filtre (tous visibles).
+  const { selected: statusFilter, setSelected: setStatusFilter } = useMetierFilter();
 
   // ─── Mode d'affichage mobile ─────────────────────────────────────
   // "mine" : timeline verticale du jour de l'utilisateur connecté (par
@@ -722,7 +724,8 @@ export function PlanningView({
       next.setDate(next.getDate() + delta * 7);
       const iso = toIsoDate(next);
       setMultiSelection(new Set());
-      router.replace(`?week=${iso}`, { scroll: false });
+      // Préserve le filtre métier courant (?metier=…) à travers la navigation.
+      router.replace(appendCurrentMetier(`?week=${iso}`), { scroll: false });
     },
     [monday, router]
   );
@@ -733,7 +736,7 @@ export function PlanningView({
     const todayWeekday = Math.min(5, Math.max(0, (new Date().getDay() + 6) % 7));
     setDayIndex(todayWeekday);
     setMultiSelection(new Set());
-    router.replace(`?week=${today}`, { scroll: false });
+    router.replace(appendCurrentMetier(`?week=${today}`), { scroll: false });
   }, [router]);
 
   // Naviguer vers une date précise (depuis le date picker de la toolbar).
@@ -751,7 +754,10 @@ export function PlanningView({
       const dayInWeek = Math.min(5, Math.max(0, (dow + 6) % 7));
       setDayIndex(dayInWeek);
       setMultiSelection(new Set());
-      router.replace(`?week=${mondayIso}&day=${dayInWeek}`, { scroll: false });
+      router.replace(
+        appendCurrentMetier(`?week=${mondayIso}&day=${dayInWeek}`),
+        { scroll: false }
+      );
     },
     [router]
   );

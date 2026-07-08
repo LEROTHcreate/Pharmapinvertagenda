@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import type { AbsenceCode, EmployeeStatus, TaskCode } from "@prisma/client";
+import type { AbsenceCode, TaskCode } from "@prisma/client";
 import {
   ABSENCE_LABELS,
   ABSENCE_STYLES,
@@ -25,6 +25,8 @@ import {
 import { TIME_SLOTS } from "@/types";
 import { cn } from "@/lib/utils";
 import { RolesLegend } from "@/components/planning/RolesLegend";
+import { OverviewEmptyState } from "@/components/planning/OverviewEmptyState";
+import { useMetierFilter } from "@/components/planning/useMetierFilter";
 
 /** Section d'une journée (matin OU après-midi).
  *  hours = nombre d'heures TASK travaillées dans la plage
@@ -61,9 +63,10 @@ export function WeekOverview({
   entries: ScheduleEntryDTO[];
   minStaff: number;
 }) {
-  // Filtre par métier (statut) — Set vide = tous visibles. Piloté par la
-  // légende des rôles cliquable (plus de dropdown séparé).
-  const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
+  // Filtre par métier — partagé et persistant dans l'URL (?metier=…), commun aux
+  // vues jour / semaine / mois. Piloté par la légende des rôles cliquable.
+  const { selected: statusFilter, toggle: toggleStatus, reset: resetStatus } =
+    useMetierFilter();
   const visibleEmployees = useMemo(
     () =>
       statusFilter.size === 0
@@ -71,14 +74,6 @@ export function WeekOverview({
         : employees.filter((e) => statusFilter.has(e.status)),
     [employees, statusFilter]
   );
-  const toggleStatus = useCallback((s: EmployeeStatus) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
-  }, []);
 
   const monday = useMemo(() => new Date(`${weekStart}T00:00:00`), [weekStart]);
   const days = useMemo(() => weekDays(monday), [monday]);
@@ -188,9 +183,16 @@ export function WeekOverview({
         employees={employees}
         selected={statusFilter}
         onToggle={toggleStatus}
-        onReset={() => setStatusFilter(new Set())}
+        onReset={resetStatus}
       />
 
+      {visibleEmployees.length === 0 ? (
+        <OverviewEmptyState
+          filtering={statusFilter.size > 0}
+          onReset={resetStatus}
+        />
+      ) : (
+        <>
       {/* En-tête sticky : jours de la semaine */}
       <div className="sticky top-0 z-10 -mx-4 bg-gradient-to-b from-white via-white/95 to-transparent px-4 pb-2 pt-1 md:-mx-6 md:px-6">
         <div
@@ -371,6 +373,8 @@ export function WeekOverview({
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

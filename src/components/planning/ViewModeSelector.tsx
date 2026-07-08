@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CalendarDays, CalendarRange, Grid3x3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { appendCurrentMetier } from "@/lib/metier-filter";
 
 export type ViewMode = "day" | "week" | "month";
 
@@ -56,6 +58,7 @@ export function ViewModeSelector({
   current: ViewMode;
   weekStart: string;
 }) {
+  const router = useRouter();
   return (
     <div
       role="tablist"
@@ -64,13 +67,20 @@ export function ViewModeSelector({
     >
       {MODES.map(({ mode, label, icon: Icon, pathFor }) => {
         const active = mode === current;
+        const href = pathFor(weekStart);
         return (
           <Link
             key={mode}
-            href={pathFor(weekStart)}
+            href={href}
             role="tab"
             aria-selected={active}
             prefetch
+            // Préserve le filtre métier courant (?metier=…) lu au moment du clic
+            // (le href statique ne le connaît pas car écrit via replaceState).
+            onClick={(e) => {
+              e.preventDefault();
+              router.push(appendCurrentMetier(href));
+            }}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200",
               active

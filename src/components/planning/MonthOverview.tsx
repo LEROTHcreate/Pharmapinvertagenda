@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-import type { AbsenceCode, EmployeeStatus } from "@prisma/client";
+import type { AbsenceCode } from "@prisma/client";
 import {
   ABSENCE_LABELS,
   ABSENCE_STYLES,
@@ -18,6 +18,8 @@ import {
 } from "@/lib/planning-utils";
 import { cn } from "@/lib/utils";
 import { RolesLegend } from "@/components/planning/RolesLegend";
+import { OverviewEmptyState } from "@/components/planning/OverviewEmptyState";
+import { useMetierFilter } from "@/components/planning/useMetierFilter";
 
 const WEEKDAY_LETTERS = ["L", "M", "M", "J", "V", "S", "D"] as const;
 
@@ -49,9 +51,10 @@ export function MonthOverview({
 }) {
   const router = useRouter();
 
-  // Filtre par métier (statut) — Set vide = tous visibles. Piloté par la
-  // légende des rôles cliquable (plus de dropdown séparé).
-  const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
+  // Filtre par métier — partagé et persistant dans l'URL (?metier=…), commun aux
+  // vues jour / semaine / mois. Piloté par la légende des rôles cliquable.
+  const { selected: statusFilter, toggle: toggleStatus, reset: resetStatus } =
+    useMetierFilter();
   const visibleEmployees = useMemo(
     () =>
       statusFilter.size === 0
@@ -59,14 +62,6 @@ export function MonthOverview({
         : employees.filter((e) => statusFilter.has(e.status)),
     [employees, statusFilter]
   );
-  const toggleStatus = useCallback((s: EmployeeStatus) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
-  }, []);
 
   /**
    * Double-click sur une cellule jour → ouvre la vue journalière de ce jour
@@ -196,6 +191,22 @@ export function MonthOverview({
     });
   }, [visibleEmployees, days, index]);
 
+  // Récap affiché quand un filtre métier est actif : effectif filtré + heures
+  // du mois + absences, pour analyser un métier d'un coup d'œil.
+  const filterSummary = useMemo(() => {
+    if (statusFilter.size === 0) return null;
+    const totalHours = employeeRows.reduce((s, r) => s + r.workedHours, 0);
+    const totalAbs = employeeRows.reduce(
+      (s, r) =>
+        s + Array.from(r.absencesCount.values()).reduce((a, b) => a + b, 0),
+      0
+    );
+    const labels = Array.from(statusFilter)
+      .map((s) => STATUS_LABELS[s])
+      .join(" · ");
+    return { count: visibleEmployees.length, totalHours, totalAbs, labels };
+  }, [statusFilter, employeeRows, visibleEmployees.length]);
+
   // Colonnes élastiques (1fr) : la grille remplit toute la largeur de l'écran ;
   // sur petit écran elle garde une largeur mini par jour et scrolle.
   const gridTemplate = `minmax(180px, 240px) repeat(${days.length}, minmax(22px, 1fr)) minmax(80px, 104px)`;
@@ -207,9 +218,35 @@ export function MonthOverview({
         employees={employees}
         selected={statusFilter}
         onToggle={toggleStatus}
-        onReset={() => setStatusFilter(new Set())}
+        onReset={resetStatus}
       />
 
+      {/* Récap quand un filtre métier est actif. */}
+      {filterSummary && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-violet-200/70 bg-violet-50/50 px-3.5 py-2 text-[12.5px]">
+          <span className="font-semibold text-violet-900">
+            {filterSummary.labels}
+          </span>
+          <span className="text-violet-700">
+            {filterSummary.count} pers.
+          </span>
+          <span className="font-mono tabular-nums text-violet-700">
+            {filterSummary.totalHours.toFixed(0)} h ce mois
+          </span>
+          {filterSummary.totalAbs > 0 && (
+            <span className="text-amber-700">
+              {filterSummary.totalAbs} demi-j. d&apos;absence
+            </span>
+          )}
+        </div>
+      )}
+
+      {visibleEmployees.length === 0 ? (
+        <OverviewEmptyState
+          filtering={statusFilter.size > 0}
+          onReset={resetStatus}
+        />
+      ) : (
       <div className="overflow-x-auto rounded-2xl border border-border/60 bg-card p-1 shadow-sm">
         <div className="w-full rounded-xl">
           {/* En-tête : jours du mois */}
@@ -218,7 +255,8 @@ export function MonthOverview({
             style={{ gridTemplateColumns: gridTemplate }}
             onMouseLeave={() => setHover(null)}
           >
-            <div className="px-4 py-3 text-[12px] font-semibold capitalize tracking-tight text-foreground/85">
+            {/* Colonne « mois » figée à gauche pendant le scroll horizontal. */}
+            <div className="sticky left-0 z-20 bg-zinc-50 px-4 py-3 text-[12px] font-semibold capitalize tracking-tight text-foreground/85 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
               {monthLabel}
             </div>
             {days.map((d, colIdx) => {
@@ -281,11 +319,13 @@ export function MonthOverview({
                     opacity: 0,
                   }}
                 >
-                  {/* Identité */}
+                  {/* Identité — colonne figée à gauche (scroll horizontal).
+                      Fond opaque obligatoire pour masquer les cases qui défilent
+                      dessous. */}
                   <div
                     className={cn(
-                      "flex items-center gap-3 px-4 py-2 transition-colors",
-                      isHoverRow && "bg-violet-50/40"
+                      "sticky left-0 z-10 flex items-center gap-3 px-4 py-2 transition-colors shadow-[1px_0_0_0_rgba(0,0,0,0.05)]",
+                      isHoverRow ? "bg-violet-50" : "bg-card"
                     )}
                   >
                     <div
@@ -362,7 +402,7 @@ export function MonthOverview({
             className="grid items-center border-t-2 border-border/70 bg-muted/40"
             style={{ gridTemplateColumns: gridTemplate }}
           >
-            <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="sticky left-0 z-10 bg-muted px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
               Récap équipe
             </div>
             {dayTotals.map((t, i) => {
@@ -397,6 +437,7 @@ export function MonthOverview({
           </div>
         </div>
       </div>
+      )}
 
       <Legend />
     </div>

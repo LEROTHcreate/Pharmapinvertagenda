@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeSelector } from "@/components/planning/ViewModeSelector";
 import { startOfWeek, toIsoDate } from "@/lib/planning-utils";
+import { appendCurrentMetier } from "@/lib/metier-filter";
 
 /**
  * En-tête de la vue mois — navigation au mois (≠ semaine pour les autres vues).
@@ -23,13 +24,22 @@ export function MonthHeader({ monthStart }: { monthStart: string }) {
     const next = new Date(month);
     next.setMonth(next.getMonth() + delta);
     next.setDate(1);
-    router.push(`/planning/mois?month=${monthIso(next)}`);
+    // Préserve le filtre métier courant (?metier=…) à travers la navigation.
+    router.push(appendCurrentMetier(`/planning/mois?month=${monthIso(next)}`));
   }
 
   function goThisMonth() {
     const t = new Date();
     t.setDate(1);
-    router.push(`/planning/mois?month=${monthIso(t)}`);
+    router.push(appendCurrentMetier(`/planning/mois?month=${monthIso(t)}`));
+  }
+
+  // Export Excel du mois affiché (respecte le filtre métier courant).
+  function exportExcel() {
+    const href = appendCurrentMetier(
+      `/api/planning/export-mois?month=${monthIso(month)}`
+    );
+    window.location.href = href;
   }
 
   // Pour le sélecteur Jour/Semaine : on retombe sur la 1re semaine du mois.
@@ -67,6 +77,26 @@ export function MonthHeader({ monthStart }: { monthStart: string }) {
             aria-label="Mois suivant"
           >
             <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportExcel}
+            title="Exporter le mois en Excel"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Excel</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            aria-label="Imprimer / enregistrer en PDF"
+            title="Imprimer / enregistrer en PDF"
+          >
+            <Printer className="h-4 w-4" />
           </Button>
         </div>
       </div>

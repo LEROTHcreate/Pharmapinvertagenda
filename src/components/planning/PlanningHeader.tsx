@@ -13,6 +13,7 @@ import {
   toIsoDate,
   weekTypeFor,
 } from "@/lib/planning-utils";
+import { appendCurrentMetier } from "@/lib/metier-filter";
 
 /**
  * En-tête commun aux trois vues planning (jour / semaine / mois).
@@ -41,12 +42,13 @@ export function PlanningHeader({
     const next = new Date(monday);
     next.setDate(next.getDate() + delta * 7);
     const iso = toIsoDate(next);
-    router.push(`${basePath}?week=${iso}`);
+    // Préserve le filtre métier courant (?metier=…) à travers la navigation.
+    router.push(appendCurrentMetier(`${basePath}?week=${iso}`));
   }
 
   function goToday() {
     const iso = toIsoDate(startOfWeek(new Date()));
-    router.push(`${basePath}?week=${iso}`);
+    router.push(appendCurrentMetier(`${basePath}?week=${iso}`));
   }
 
   return (
