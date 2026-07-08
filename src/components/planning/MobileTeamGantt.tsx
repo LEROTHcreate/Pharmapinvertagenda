@@ -161,7 +161,7 @@ export function MobileTeamGantt({
     }
     if (cur && slots.length) segs.push({ ...cur, toMin: toMin(slots[slots.length - 1]) + 30 });
     return segs;
-  }, [date, counterIds, index, minStaff, winStart, winEnd]);
+  }, [date, counterIds, allIds, index, minStaff, winStart, winEnd]);
 
   // Horloge auto-rafraîchie chaque minute. `null` jusqu'au montage côté client
   // (évite tout décalage d'hydratation SSR) ; idéal pour une tablette de
