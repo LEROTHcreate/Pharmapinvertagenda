@@ -27,13 +27,24 @@ const GREETINGS: DailyGreeting[] = [
 
   // ─── Saviez-vous (faits curieux) ───────────────────────────────
   { text: "Les abeilles reconnaissent les visages humains. Soyez aimable, on ne sait jamais." },
-  { text: "Les pieuvres ont 3 cœurs et 9 cerveaux. Vous gérez avec moins, chapeau." },
+  { text: "Les pieuvres ont 3 cœurs et 9 cerveaux pour piloter 8 bras. Vous, deux mains et un cerveau, et le comptoir tourne quand même — chapeau." },
   { text: "Un câlin de 20 secondes libère autant d'ocytocine qu'une victoire professionnelle." },
   { text: "Les flamants roses dorment sur une seule patte. Vous, faites les deux, c'est plus prudent." },
   { text: "Le mot « pharmacie » vient du grec pharmakon : à la fois remède et poison. Tout est question de dose." },
   { text: "La caféine met 45 minutes à atteindre son pic. Programmez votre café avant les patients." },
   { text: "Sourire utilise 17 muscles. Faire la tête en utilise 43. Optimisez." },
   { text: "Il pleut chaque jour quelque part sur Terre. Si c'est ici, ce n'est pas personnel." },
+  { text: "L'aspirine vient de l'écorce de saule, un remède déjà noté par Hippocrate. 2400 ans plus tard, elle traverse encore votre comptoir." },
+  { text: "La pénicilline a été découverte grâce à une boîte oubliée dans un labo en désordre. Preuve qu'un peu de bazar a parfois du génie." },
+  { text: "Le placebo agit même quand le patient sait que c'est un placebo. La confiance : le principe actif maison de l'officine." },
+  { text: "90 % d'un comprimé, c'est l'excipient ; le principe actif tient sur une tête d'épingle. Comme la petite phrase qui rassure un patient." },
+  { text: "Le paracétamol a été synthétisé en 1878, commercialisé 70 ans plus tard. La patience paie — même un samedi de rush." },
+  { text: "Un pilulier, ça existait déjà dans l'Égypte antique. Vos aïeux triaient les remèdes par jour de la semaine." },
+  { text: "Le foie métabolise la quasi-totalité de vos médicaments. Il bosse plus dur que le robot, remerciez-le." },
+  { text: "La blouse blanche fait mesurablement baisser la tension des patients. Vous soignez avant même d'avoir parlé." },
+  { text: "Un éternuement file à près de 160 km/h. Reculez d'un pas : question de principe. Actif." },
+  { text: "Le mot « comprimé » vient de comprimere, presser. Un peu comme le planning un jour de garde." },
+  { text: "En France, le codex pharmaceutique existe depuis 1818. Deux siècles de « lisez bien la notice »." },
 
   // ─── Encouragement / feel-good ─────────────────────────────────
   { text: "Vous serez peut-être la première personne souriante que certains croiseront aujourd'hui." },
