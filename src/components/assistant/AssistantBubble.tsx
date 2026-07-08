@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Send, Sparkles, X } from "lucide-react";
+import { ExternalLink, Pill, Send, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HygieLogo } from "@/components/assistant/HygieLogo";
 
@@ -291,6 +291,9 @@ export function AssistantBubble({
             </button>
           </div>
 
+          {/* Outil : recherche médicament sur la base publique (BDPM) */}
+          <MedicamentSearch />
+
           {/* Messages */}
           <div
             ref={scrollRef}
@@ -503,6 +506,51 @@ function buildSuggestions(role?: string): string[] {
     "Où voir mes heures de la semaine ?",
     ...pharma,
   ];
+}
+
+/**
+ * Recherche médicament — ouvre la fiche du médicament sur la Base de données
+ * publique des médicaments (BDPM, ANSM/gouv). Pré-remplit la recherche par nom.
+ * Barre compacte sous l'en-tête d'Hygie, toujours disponible.
+ */
+function MedicamentSearch() {
+  const [q, setQ] = useState("");
+  const term = q.trim();
+
+  function openBdpm() {
+    if (!term) return;
+    const url =
+      "https://base-donnees-publique.medicaments.gouv.fr/index.php?page=liste&choixRecherche=medicament&nom=" +
+      encodeURIComponent(term);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        openBdpm();
+      }}
+      className="flex items-center gap-1.5 border-b border-border bg-muted/40 px-3 py-2"
+    >
+      <Pill className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Rechercher un médicament (base publique)…"
+        aria-label="Rechercher un médicament sur la base de données publique"
+        className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-muted-foreground"
+      />
+      <button
+        type="submit"
+        disabled={!term}
+        title="Ouvrir la fiche sur la base publique des médicaments (ANSM)"
+        className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[11.5px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
+      >
+        <ExternalLink className="h-3 w-3" aria-hidden /> Ouvrir
+      </button>
+    </form>
+  );
 }
 
 function Bubble({

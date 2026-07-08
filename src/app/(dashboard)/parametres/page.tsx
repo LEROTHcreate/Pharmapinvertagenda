@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { ParametresForm } from "@/components/parametres/ParametresForm";
 import { PharmacyLogoForm } from "@/components/parametres/PharmacyLogoForm";
 import { PayrollSettingsForm } from "@/components/parametres/PayrollSettingsForm";
+import { VitrineSettings } from "@/components/parametres/VitrineSettings";
+import { vitrinePath } from "@/lib/vitrine";
+import { parseWeekHours } from "@/lib/opening-hours";
 import { canEditPayroll, isSuperAdmin } from "@/lib/payroll-permissions";
 import { canEditSettings } from "@/lib/permissions";
 import { REGION_LABELS, type Region } from "@/lib/payroll-reference";
@@ -33,6 +36,7 @@ export default async function ParametresPage() {
         siret: true,
         minStaff: true,
         logoUrl: true,
+        openingHours: true,
         payrollRegion: true,
         payrollContribEmployee: true,
         payrollContribEmployer: true,
@@ -109,6 +113,12 @@ export default async function ParametresPage() {
         }}
         canEdit={canEdit}
         canEditSiret={canEditSiret}
+      />
+
+      <VitrineSettings
+        vitrinePath={vitrinePath(pharmacy.id)}
+        initialHours={parseWeekHours(pharmacy.openingHours)}
+        canEdit={canEdit}
       />
 
       {canSeePayrollSettings && (

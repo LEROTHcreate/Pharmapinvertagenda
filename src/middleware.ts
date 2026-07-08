@@ -123,6 +123,9 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/cgu") ||
     path.startsWith("/confidentialite") ||
     path.startsWith("/mentions-legales") ||
+    // Écran vitrine public (salle d'attente) : protégé par un jeton HMAC dans
+    // l'URL (validé par la page), doit être accessible sans connexion.
+    path.startsWith("/vitrine") ||
     // Fichiers statiques publics (logo des emails, icônes + manifest PWA…) :
     // ne JAMAIS les mettre derrière l'auth, sinon le logo casse dans les
     // emails et l'installation PWA échoue. Le matcher exclut déjà /_next ;
