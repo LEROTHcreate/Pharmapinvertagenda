@@ -34,14 +34,16 @@ export function PrintButton({
 }) {
   const router = useRouter();
 
-  // Cas simple : pas de fiche perso → bouton direct sur la grille équipe
+  // Cas simple : pas de fiche perso → feuille A4 hebdo de l'équipe
   if (!currentEmployeeId) {
     return (
       <Button
         variant="outline"
         size="sm"
-        onClick={() => window.print()}
-        title="Imprimer ou enregistrer en PDF (Ctrl+P)"
+        onClick={() =>
+          router.push(weekStart ? `/planning/imprimer?week=${weekStart}` : `/planning/imprimer`)
+        }
+        title="Imprimer ou enregistrer en PDF (feuille A4 de la semaine)"
       >
         <Printer className="h-4 w-4" />
         Imprimer / PDF
@@ -80,14 +82,20 @@ export function PrintButton({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => window.print()}
+          onClick={() => {
+            // Feuille A4 hebdo dédiée (collaborateurs × jours, plages horaires).
+            const url = weekStart
+              ? `/planning/imprimer?week=${weekStart}`
+              : `/planning/imprimer`;
+            router.push(url);
+          }}
           className="cursor-pointer"
         >
           <Users className="h-4 w-4 mr-2 text-zinc-600" />
           <div className="flex flex-col">
             <span className="text-sm font-medium">Équipe entière</span>
             <span className="text-[10.5px] text-zinc-500">
-              Grille complète compressée sur 1 page
+              Feuille A4 de la semaine (back-office)
             </span>
           </div>
         </DropdownMenuItem>
