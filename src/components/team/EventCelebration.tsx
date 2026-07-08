@@ -121,15 +121,15 @@ export function TodayEventCelebration({
     >
       {mounted && <EventConfetti colors={colors} />}
       <div className="relative z-[1] flex items-center justify-center gap-3">
-        <span className="tev-bob flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/70 text-amber-600 ring-1 ring-amber-200/80 dark:bg-white/10 dark:text-amber-300 dark:ring-amber-900/50">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/70 text-amber-600 ring-1 ring-amber-200/80 dark:bg-white/10 dark:text-amber-300 dark:ring-amber-900/50">
           <Icon className="h-5 w-5" />
         </span>
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700/80 dark:text-amber-300/75">
+        <div className="flex min-w-0 flex-col justify-center">
+          <p className="text-[10px] font-semibold uppercase leading-none tracking-[0.14em] text-amber-700/80 dark:text-amber-300/75">
             Aujourd&apos;hui
           </p>
-          <p className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
-            <span className="truncate">
+          <p className="mt-1 flex items-center gap-2 leading-none text-foreground">
+            <span className="truncate text-[14px] font-semibold">
               {single ? single.title : `${events.length} moments d'équipe`}
             </span>
             {meta && (
