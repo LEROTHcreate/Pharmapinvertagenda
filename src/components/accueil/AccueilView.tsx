@@ -22,6 +22,7 @@ import { ActionsCard } from "@/components/accueil/ActionsCard";
 import { AccueilNews } from "@/components/accueil/AccueilNews";
 import { OnboardingChecklist } from "@/components/accueil/OnboardingChecklist";
 import { Greeting } from "@/components/accueil/Greeting";
+import { WeatherChip } from "@/components/accueil/WeatherChip";
 import { AccueilDesktop } from "@/components/accueil/AccueilDesktop";
 import { canEditPlanning } from "@/lib/permissions";
 import type { AccueilData } from "@/components/accueil/types";
@@ -105,11 +106,14 @@ export function AccueilView(data: AccueilData) {
       {/* < lg : version mobile */}
       <div className="lg:hidden p-4 md:px-6 md:py-5 space-y-4 max-w-2xl mx-auto">
         {/* Salutation */}
-        <header>
-          <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-foreground">
-            <Greeting firstName={firstName} />
-          </h1>
-          <p className="text-[13px] text-muted-foreground capitalize mt-0.5">{dateLabel}</p>
+        <header className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[22px] md:text-[26px] font-semibold tracking-tight text-foreground">
+              <Greeting firstName={firstName} />
+            </h1>
+            <p className="text-[13px] text-muted-foreground capitalize mt-0.5">{dateLabel}</p>
+          </div>
+          <WeatherChip className="mt-1 shrink-0" />
         </header>
 
         {/* Checklist de démarrage (manageur+, tant que non configuré) */}
