@@ -141,6 +141,17 @@ export default async function PlanningPage({
     ...seasonalTips(todayIso, 14).slice(0, 3),
   ];
 
+  // Événements d'équipe du JOUR → petite fête (confettis + bandeau) en bas du planning.
+  const todayStart = new Date(`${todayIso}T00:00:00Z`);
+  const todayEventRows = await prisma.teamEvent.findMany({
+    where: {
+      pharmacyId: session.user.pharmacyId,
+      date: { gte: todayStart, lt: new Date(todayStart.getTime() + 86400000) },
+    },
+    orderBy: { time: "asc" },
+    select: { title: true, type: true },
+  });
+
   return (
     <div className="space-y-2 sm:space-y-2.5">
       <WelcomeBanner
@@ -165,6 +176,7 @@ export default async function PlanningPage({
             role={session.user.role}
             minStaff={pharmacy?.minStaff ?? 4}
             currentEmployeeId={session.user.employeeId ?? null}
+            todayEvents={todayEventRows}
           />
         </>
       )}

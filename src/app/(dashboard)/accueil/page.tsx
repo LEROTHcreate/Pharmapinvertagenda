@@ -341,6 +341,13 @@ export default async function AccueilPage() {
     month: "long",
   });
 
+  // Événements d'équipe du JOUR → fête (confettis + bandeau) sur l'accueil.
+  const todayEventRows = await prisma.teamEvent.findMany({
+    where: { pharmacyId, date: { gte: dayStart, lt: dayEnd } },
+    orderBy: { time: "asc" },
+    select: { title: true, type: true },
+  });
+
   return (
     <AccueilView
       firstName={sessionEmployee?.firstName ?? session.user.name?.split(" ")[0] ?? null}
@@ -368,6 +375,7 @@ export default async function AccueilPage() {
       pendingUsers={pendingUsers}
       pendingSwaps={pendingSwaps}
       unreadMessages={unreadMessages}
+      todayEvents={todayEventRows}
     />
   );
 }

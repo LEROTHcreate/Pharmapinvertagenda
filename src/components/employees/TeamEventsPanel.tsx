@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarHeart,
+  Clock,
   FlaskConical,
   GraduationCap,
   Handshake,
@@ -34,6 +35,7 @@ import {
   updateTeamEvent,
   deleteTeamEvent,
 } from "@/app/(dashboard)/employes/team-events-actions";
+import { EventConfetti } from "@/components/team/EventCelebration";
 
 export type TeamEventRow = {
   id: string;
@@ -137,9 +139,9 @@ function daysUntil(iso: string): number {
   return Math.round((d.getTime() - today.getTime()) / 86400000);
 }
 
+/** Compte à rebours (utilisé UNIQUEMENT pour les événements à venir). */
 function countdownLabel(iso: string): string {
   const n = daysUntil(iso);
-  if (n <= 0) return "Aujourd'hui";
   if (n === 1) return "Demain";
   if (n < 7) return `Dans ${n} jours`;
   if (n < 14) return "La semaine prochaine";
@@ -170,7 +172,7 @@ export function TeamEventsPanel({
     }
   }
 
-  // Événements du JOUR → déclenche la fête (confettis + bandeau).
+  // Événements du JOUR → déclenche la fête (confettis + bandeau, UNE seule fois).
   const todayEvents = events.filter((e) => daysUntil(e.date) <= 0);
   const confettiColors = Array.from(
     new Set(todayEvents.flatMap((e) => TYPE_CONFIG[e.type].confetti))
@@ -179,11 +181,11 @@ export function TeamEventsPanel({
   return (
     <section className="relative overflow-hidden rounded-2xl border border-border bg-card/60 p-4 shadow-sm">
       {/* Confettis le jour d'un événement */}
-      {todayEvents.length > 0 && <Confetti colors={confettiColors} />}
+      {todayEvents.length > 0 && <EventConfetti colors={confettiColors} />}
 
-      {/* Bandeau festif « c'est le jour ! » */}
+      {/* Bandeau festif « c'est le jour ! » — SEUL endroit qui dit « aujourd'hui » */}
       {todayEvents.length > 0 && (
-        <div className="tev-today-banner relative z-[1] mb-3 flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-200 via-rose-200 to-violet-200 px-3 py-2 text-center text-[12.5px] font-semibold text-foreground shadow-sm dark:from-amber-500/30 dark:via-rose-500/30 dark:to-violet-500/30">
+        <div className="tev-today-banner relative z-[1] mb-3 flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-200 via-rose-200 to-violet-200 px-3 py-2 text-center text-[13px] font-semibold text-foreground shadow-sm dark:from-amber-500/30 dark:via-rose-500/30 dark:to-violet-500/30">
           <PartyPopper className="h-4 w-4 shrink-0 tev-bob" />
           {todayEvents.length === 1
             ? `Aujourd'hui : ${todayEvents[0].title} !`
@@ -194,11 +196,11 @@ export function TeamEventsPanel({
       {/* En-tête */}
       <div className="relative z-[1] mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight">
+          <h2 className="flex items-center gap-1.5 text-[16.5px] font-bold tracking-tight">
             <Sparkles className="h-4 w-4 text-violet-500 tev-sparkle" />
             La vie de l&apos;équipe
           </h2>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
             Repas, animations labo, rendez-vous… les prochains moments à partager.
           </p>
         </div>
@@ -278,189 +280,117 @@ function EventCard({
   return (
     <li
       className={cn(
-        "group/ev relative overflow-hidden rounded-2xl bg-gradient-to-br p-3 transition-transform duration-200 hover:-translate-y-0.5",
+        "group/ev relative overflow-hidden rounded-2xl bg-gradient-to-br p-3.5 transition-transform duration-200 hover:-translate-y-0.5",
         cfg.card,
         isToday ? "tev-today-card ring-2" : "ring-1",
         cfg.ring
       )}
       style={isToday ? ({ ["--glow"]: cfg.glow } as React.CSSProperties) : undefined}
     >
-      {/* Ruban « aujourd'hui » */}
-      {isToday && (
-        <div className="absolute right-0 top-0 z-10 flex items-center gap-0.5 rounded-bl-lg bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-foreground shadow-sm dark:bg-black/40">
-          <PartyPopper className="h-2.5 w-2.5 tev-wiggle" /> Aujourd&apos;hui
-        </div>
-      )}
-
       {/* Reflet doux qui balaie la carte au survol */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover/ev:translate-x-full dark:via-white/10"
       />
 
-      <div className="relative flex items-start gap-3">
-        {/* Pastille date + icône du type */}
-        <div className="flex flex-col items-center gap-1.5">
-          <div className="flex h-14 w-14 flex-col items-center justify-center rounded-xl bg-white/70 shadow-sm ring-1 ring-black/5 dark:bg-black/20">
-            <span className="text-[10px] font-medium uppercase leading-none text-muted-foreground">
-              {WEEKDAYS[d.getDay()]}
-            </span>
-            <span className="font-mono text-[20px] font-bold leading-tight tabular-nums text-foreground">
-              {d.getDate()}
-            </span>
-            <span className="text-[9px] font-medium leading-none text-muted-foreground">
-              {MONTHS[d.getMonth()]}
-            </span>
-          </div>
-          <div
-            className={cn(
-              "flex items-center justify-center rounded-lg",
-              isToday ? "h-9 w-9" : "h-8 w-8",
-              cfg.chip,
-              cfg.anim
-            )}
-          >
-            <Icon className={isToday ? "h-5 w-5" : "h-4 w-4"} />
-          </div>
+      <div className="relative grid grid-cols-[58px_1fr] items-start gap-3.5">
+        {/* Tuile date — bien centrée */}
+        <div className="flex h-[58px] flex-col items-center justify-center rounded-xl bg-white/75 shadow-sm ring-1 ring-black/5 dark:bg-black/25">
+          <span className="text-[10px] font-semibold uppercase leading-none tracking-wide text-muted-foreground">
+            {WEEKDAYS[d.getDay()]}
+          </span>
+          <span className="font-mono text-[22px] font-extrabold leading-tight tabular-nums text-foreground">
+            {d.getDate()}
+          </span>
+          <span className="text-[10px] font-semibold leading-none text-muted-foreground">
+            {MONTHS[d.getMonth()]}
+          </span>
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
+            {/* Type (icône + libellé) */}
             <span
               className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
                 cfg.chip
               )}
             >
+              <Icon className={cn("h-3 w-3 shrink-0", cfg.anim)} />
               {cfg.label}
             </span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                soon
-                  ? "bg-violet-600 text-white tev-pulse"
-                  : "bg-white/70 text-foreground/70 dark:bg-black/25"
-              )}
-            >
-              {countdownLabel(ev.date)}
-            </span>
+            {/* Compte à rebours — pas le jour J (le bandeau + la lueur suffisent) */}
+            {!isToday && (
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
+                  soon
+                    ? "bg-violet-600 text-white tev-pulse"
+                    : "bg-white/70 text-foreground/70 dark:bg-black/25"
+                )}
+              >
+                {countdownLabel(ev.date)}
+              </span>
+            )}
           </div>
 
-          <p className="mt-1 text-[14px] font-semibold leading-snug tracking-tight text-foreground">
+          <p className="mt-1 text-[15px] font-bold leading-snug tracking-tight text-foreground">
             {ev.title}
           </p>
 
           {ev.description && (
-            <p className="mt-0.5 text-[12px] leading-snug text-foreground/70">
+            <p className="mt-0.5 text-[12.5px] leading-snug text-foreground/70">
               {ev.description}
             </p>
           )}
 
-          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-foreground/60">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-foreground/60">
             {ev.time && (
-              <span className="font-mono tabular-nums">{ev.time}</span>
+              <span className="inline-flex items-center gap-1 font-mono tabular-nums">
+                <Clock className="h-3 w-3" />
+                {ev.time}
+              </span>
             )}
             {ev.location && (
-              <span className="inline-flex items-center gap-0.5">
+              <span className="inline-flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
                 {ev.location}
               </span>
             )}
           </div>
         </div>
-
-        {/* Actions manager (au survol) */}
-        {canManage && (
-          <div className="flex shrink-0 flex-col gap-1 opacity-0 transition-opacity group-hover/ev:opacity-100">
-            <button
-              type="button"
-              onClick={onEdit}
-              disabled={deleting}
-              title="Modifier"
-              aria-label="Modifier"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-foreground/60 hover:bg-white/60 hover:text-foreground dark:hover:bg-black/30"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={deleting}
-              title="Supprimer"
-              aria-label="Supprimer"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-            >
-              {deleting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Actions manager (au survol) — en haut à droite */}
+      {canManage && (
+        <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover/ev:opacity-100">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={deleting}
+            title="Modifier"
+            aria-label="Modifier"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/70 text-foreground/60 shadow-sm hover:text-foreground dark:bg-black/40"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            title="Supprimer"
+            aria-label="Supprimer"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/70 text-red-600 shadow-sm hover:bg-red-50 dark:bg-black/40 dark:hover:bg-red-950/40"
+          >
+            {deleting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      )}
     </li>
-  );
-}
-
-/* ─── Confettis (le jour d'un événement) ─────────────────────────── */
-
-type Piece = {
-  left: number;
-  delay: number;
-  dur: number;
-  color: string;
-  size: number;
-  round: boolean;
-  drift: number;
-};
-
-function Confetti({ colors }: { colors: string[] }) {
-  // Généré côté client (après montage) → pas d'écart d'hydratation dû au hasard.
-  const [pieces, setPieces] = useState<Piece[]>([]);
-  useEffect(() => {
-    if (colors.length === 0) {
-      setPieces([]);
-      return;
-    }
-    const arr: Piece[] = Array.from({ length: 34 }, (_, i) => ({
-      left: Math.round(Math.random() * 100),
-      delay: Math.round(Math.random() * 5000) / 1000,
-      dur: 3 + Math.round(Math.random() * 3000) / 1000,
-      color: colors[i % colors.length],
-      size: 5 + Math.round(Math.random() * 5),
-      round: Math.random() > 0.55,
-      drift: Math.round((Math.random() * 2 - 1) * 30),
-    }));
-    setPieces(arr);
-  }, [colors]);
-
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
-    >
-      {pieces.map((p, i) => (
-        <span
-          key={i}
-          className={cn(
-            "tev-confetti absolute top-0 block",
-            p.round ? "rounded-full" : "rounded-[1px]"
-          )}
-          style={
-            {
-              left: `${p.left}%`,
-              width: `${p.size}px`,
-              height: `${p.round ? p.size : Math.round(p.size * 0.5)}px`,
-              backgroundColor: p.color,
-              animationDelay: `${p.delay}s`,
-              animationDuration: `${p.dur}s`,
-              ["--drift"]: `${p.drift}px`,
-            } as React.CSSProperties
-          }
-        />
-      ))}
-    </div>
   );
 }
 

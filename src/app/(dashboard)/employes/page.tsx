@@ -152,7 +152,7 @@ export default async function EmployesPage() {
         </div>
 
         {/* Colonne droite : la vie de l'équipe (événements animés) */}
-        <div className="xl:w-[360px] xl:shrink-0">
+        <div className="xl:w-[420px] xl:shrink-0">
           <TeamEventsPanel events={eventRows} canManage={canManageEvents} />
         </div>
       </div>
