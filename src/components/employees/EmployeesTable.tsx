@@ -149,11 +149,13 @@ export function EmployeesTable({
   };
 
   // Numéro d'ordre affiché = RANG parmi les ACTIFS uniquement (contigu, sans
-  // trou). Un inactif n'a pas de numéro. La liste arrive déjà triée (actifs par
-  // displayOrder, puis inactifs).
+  // trou), démarré à 1 (lecture humaine — le 1er collaborateur, pas le 0e). Un
+  // inactif n'a pas de numéro. La liste arrive déjà triée (actifs par
+  // displayOrder, puis inactifs). Purement cosmétique : ne touche pas
+  // displayOrder, qui pilote le tri/réordonnancement.
   const activeRankById = React.useMemo(() => {
     const map = new Map<string, number>();
-    let rank = 0;
+    let rank = 1;
     for (const e of employees) {
       if (e.isActive) map.set(e.id, rank++);
     }
