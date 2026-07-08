@@ -56,11 +56,18 @@ describe("analyzeCcnCompliance", () => {
     expect(v).toEqual([]);
   });
 
-  it("repos quotidien < 11h (finit 21:30, reprend 07:30 → 10h) → erreur REPOS_QUOTIDIEN", () => {
+  it("repos quotidien sous le seuil (fin 20:00, reprise 07:30 = 11h30) → erreur REPOS_QUOTIDIEN", () => {
+    // NB : dans la grille standard 07:30–20:00, le repos minimal possible entre
+    // deux journées est de 11h30 (dernier créneau 19:30→20:00, reprise 07:30) —
+    // donc le seuil LÉGAL de 11h ne peut jamais être enfreint. On relève ici le
+    // seuil à 12h (accord d'entreprise plus strict) pour vérifier que la règle
+    // se DÉCLENCHE bien quand le repos passe sous le minimum configuré.
     const e: ScheduleEntryDTO[] = [];
-    fill(e, "p1", WD[0], "14:00", "21:30");
+    fill(e, "p1", WD[0], "14:00", "20:00");
     fill(e, "p1", WD[1], "07:30", "12:00");
-    const v = analyzeCcnCompliance([emp("p1")], WD, indexEntriesByEmployee(e));
+    const v = analyzeCcnCompliance([emp("p1")], WD, indexEntriesByEmployee(e), {
+      reposQuotidienMin: 12 * 60,
+    });
     expect(types(v)).toContain("REPOS_QUOTIDIEN");
     expect(v.find((x) => x.type === "REPOS_QUOTIDIEN")?.severity).toBe("error");
   });
