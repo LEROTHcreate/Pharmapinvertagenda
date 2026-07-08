@@ -1,10 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PartyPopper } from "lucide-react";
+import {
+  PartyPopper,
+  UtensilsCrossed,
+  Sparkles,
+  Handshake,
+  GraduationCap,
+  MessagesSquare,
+  CalendarHeart,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TEAM_EVENT_CONFETTI } from "@/lib/team-event-style";
 import type { TeamEventType } from "@/validators/team-event";
+
+/** Icône + libellé court par type d'événement (pour le bandeau du jour). */
+const TYPE_META: Record<TeamEventType, { icon: LucideIcon; label: string }> = {
+  REPAS: { icon: UtensilsCrossed, label: "Repas d'équipe" },
+  ANIMATION_LABO: { icon: Sparkles, label: "Animation labo" },
+  REUNION_FOURNISSEUR: { icon: Handshake, label: "Réunion fournisseur" },
+  ENTRETIEN: { icon: MessagesSquare, label: "Entretien" },
+  FORMATION: { icon: GraduationCap, label: "Formation" },
+  AUTRE: { icon: CalendarHeart, label: "Événement" },
+};
 
 type Piece = {
   left: number;
@@ -89,10 +108,9 @@ export function TodayEventCelebration({
   const colors = Array.from(
     new Set(events.flatMap((e) => TEAM_EVENT_CONFETTI[e.type]))
   );
-  const label =
-    events.length === 1
-      ? `Aujourd'hui : ${events[0].title}`
-      : `${events.length} moments d'équipe aujourd'hui`;
+  const single = events.length === 1 ? events[0] : null;
+  const meta = single ? TYPE_META[single.type] : null;
+  const Icon = meta?.icon ?? PartyPopper;
 
   return (
     <div
@@ -102,9 +120,25 @@ export function TodayEventCelebration({
       )}
     >
       {mounted && <EventConfetti colors={colors} />}
-      <div className="relative z-[1] flex items-center justify-center gap-2 text-center text-[13.5px] font-semibold text-foreground">
-        <PartyPopper className="h-4 w-4 shrink-0 text-amber-500 tev-bob" />
-        <span>🎉 {label} — profitez-en&nbsp;!</span>
+      <div className="relative z-[1] flex items-center justify-center gap-3">
+        <span className="tev-bob flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/70 text-amber-600 ring-1 ring-amber-200/80 dark:bg-white/10 dark:text-amber-300 dark:ring-amber-900/50">
+          <Icon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700/80 dark:text-amber-300/75">
+            Aujourd&apos;hui
+          </p>
+          <p className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
+            <span className="truncate">
+              {single ? single.title : `${events.length} moments d'équipe`}
+            </span>
+            {meta && (
+              <span className="hidden shrink-0 rounded-full bg-white/60 px-2 py-0.5 text-[11px] font-medium text-foreground/65 ring-1 ring-black/5 sm:inline dark:bg-white/10 dark:text-foreground/70 dark:ring-white/10">
+                {meta.label}
+              </span>
+            )}
+          </p>
+        </div>
       </div>
     </div>
   );
