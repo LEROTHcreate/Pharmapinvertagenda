@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isAdminLevel, canApplyTemplates } from "@/lib/permissions";
+import { isTaskAllowed } from "@/lib/role-task-rules";
+import { isNonWorkedTask, STATUS_LABELS } from "@/types";
+import type { TaskCode } from "@prisma/client";
 
 /**
  * Contexte serveur transmis pour les actions ADMIN : Hygie agit en appelant les
@@ -162,6 +165,29 @@ const appliquerGabaritDef: ToolDef = {
   },
 };
 
+const suggererRemplacantDef: ToolDef = {
+  type: "function",
+  function: {
+    name: "suggerer_remplacant",
+    description:
+      "(Manageur/Titulaire) Propose des collaborateurs pouvant REMPLACER une personne un jour donné : rôle compatible avec ce qu'elle fait, non absents ce jour-là, et les MOINS chargés en heures cette semaine. Utilise-le pour « qui peut remplacer Marie mardi ? ».",
+    parameters: {
+      type: "object",
+      properties: {
+        employeeName: {
+          type: "string",
+          description: "Nom ou prénom de la personne à remplacer",
+        },
+        date: {
+          type: "string",
+          description: "Jour concerné, format YYYY-MM-DD (défaut : aujourd'hui)",
+        },
+      },
+      required: ["employeeName"],
+    },
+  },
+};
+
 /** Renvoie les outils disponibles selon le rôle de l'utilisateur. */
 export function getToolsForUser(user: ToolUser): ToolDef[] {
   const tools: ToolDef[] = [];
@@ -173,9 +199,9 @@ export function getToolsForUser(user: ToolUser): ToolDef[] {
   if (isAdminLevel(user.role)) {
     tools.push(absencesAValiderDef, validerAbsenceDef);
   }
-  // Application de gabarit : manageur et plus.
+  // Application de gabarit + suggestion de remplaçant : manageur et plus.
   if (canApplyTemplates(user.role)) {
-    tools.push(appliquerGabaritDef);
+    tools.push(appliquerGabaritDef, suggererRemplacantDef);
   }
   return tools;
 }
@@ -239,6 +265,19 @@ const appliquerGabaritArgs = z.object({
   weekType: z.enum(["S1", "S2"]),
   when: z.enum(["this", "next"]).default("this"),
 });
+
+const suggererRemplacantArgs = z.object({
+  employeeName: z.string().trim().min(1).max(80),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+/** Lundi (UTC, YYYY-MM-DD) de la semaine contenant `dateIso`. */
+function mondayOf(dateIso: string): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const dow = (d.getUTCDay() + 6) % 7; // 0 = lundi
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
 
 /** Lundi (UTC, YYYY-MM-DD) de cette semaine ou de la semaine prochaine. */
 function mondayIso(when: "this" | "next"): string {
@@ -449,6 +488,124 @@ export async function executeTool(
     return {
       ok: true,
       message: `✅ Gabarit ${weekType} « ${tpl.name} » appliqué sur ${whenLabel} : ${inserted} créneau(x) ajouté(s)${preserved ? `, ${preserved} déjà présent(s) conservé(s)` : ""}.`,
+    };
+  }
+
+  // ── suggerer_remplacant (manageur+, lecture) ──
+  if (name === "suggerer_remplacant") {
+    if (!canApplyTemplates(user.role)) {
+      return { ok: false, message: "Réservé aux manageurs et titulaires." };
+    }
+    const parsed = suggererRemplacantArgs.safeParse(rawArgs);
+    if (!parsed.success) {
+      return { ok: false, message: "Précise qui remplacer (et le jour si besoin)." };
+    }
+    const dateIso = parsed.data.date ?? todayIso();
+    const q = parsed.data.employeeName.trim().toLowerCase();
+
+    const team = await prisma.employee.findMany({
+      where: { pharmacyId: user.pharmacyId, isActive: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        weeklyHours: true,
+      },
+    });
+    const absent = team.find((e) => {
+      const full = `${e.firstName} ${e.lastName}`.toLowerCase();
+      return (
+        full.includes(q) ||
+        e.firstName.toLowerCase().includes(q) ||
+        e.lastName.toLowerCase().includes(q)
+      );
+    });
+    if (!absent) {
+      return { ok: false, message: `Je ne trouve pas « ${parsed.data.employeeName} » dans l'équipe active.` };
+    }
+
+    const day = new Date(`${dateIso}T00:00:00Z`);
+    const dayEnd = new Date(day.getTime() + 86_400_000);
+    const monday = new Date(`${mondayOf(dateIso)}T00:00:00Z`);
+    const saturday = new Date(monday.getTime() + 6 * 86_400_000);
+
+    const [absentEntries, weekEntries, approved] = await Promise.all([
+      prisma.scheduleEntry.findMany({
+        where: { employeeId: absent.id, date: { gte: day, lt: dayEnd }, type: "TASK" },
+        select: { taskCode: true },
+      }),
+      prisma.scheduleEntry.findMany({
+        where: { pharmacyId: user.pharmacyId, date: { gte: monday, lte: saturday } },
+        select: { employeeId: true, date: true, type: true, taskCode: true },
+      }),
+      prisma.absenceRequest.findMany({
+        where: {
+          pharmacyId: user.pharmacyId,
+          status: "APPROVED",
+          dateStart: { lte: day },
+          dateEnd: { gte: day },
+        },
+        select: { employeeId: true },
+      }),
+    ]);
+
+    // Tâches à couvrir : ce que l'absent faisait ce jour ; sinon COMPTOIR s'il
+    // est comptoir-capable ; sinon on retombe sur « même métier ».
+    const neededSet = new Set<TaskCode>();
+    for (const e of absentEntries) {
+      if (e.taskCode && !isNonWorkedTask(e.taskCode)) neededSet.add(e.taskCode);
+    }
+    let needed: TaskCode[] = [...neededSet];
+    if (needed.length === 0 && isTaskAllowed(absent.status, "COMPTOIR")) {
+      needed = ["COMPTOIR"];
+    }
+
+    // Déjà absents ce jour (absence approuvée OU cellule ABSENCE).
+    const absentToday = new Set(approved.map((a) => a.employeeId));
+    for (const e of weekEntries) {
+      if (e.type === "ABSENCE" && e.date.toISOString().slice(0, 10) === dateIso) {
+        absentToday.add(e.employeeId);
+      }
+    }
+
+    // Heures TASK (hors échange) de la semaine par collaborateur.
+    const hoursByEmp = new Map<string, number>();
+    for (const e of weekEntries) {
+      if (e.type === "TASK" && e.taskCode && !isNonWorkedTask(e.taskCode)) {
+        hoursByEmp.set(e.employeeId, (hoursByEmp.get(e.employeeId) ?? 0) + 0.5);
+      }
+    }
+
+    const candidates = team.filter((c) => {
+      if (c.id === absent.id || absentToday.has(c.id)) return false;
+      if (needed.length > 0) return needed.some((t) => isTaskAllowed(c.status, t));
+      return c.status === absent.status; // métier spécialisé sans poste ce jour
+    });
+
+    if (candidates.length === 0) {
+      return {
+        ok: true,
+        message: `Personne de disponible et compatible pour remplacer ${absent.firstName} le ${frDate(dateIso)}.`,
+      };
+    }
+
+    const ranked = candidates
+      .map((c) => ({ c, worked: hoursByEmp.get(c.id) ?? 0 }))
+      .sort(
+        (a, b) =>
+          b.c.weeklyHours - b.worked - (a.c.weeklyHours - a.worked)
+      )
+      .slice(0, 5);
+
+    const lines = ranked.map(({ c, worked }) => {
+      const room = Math.round((c.weeklyHours - worked) * 10) / 10;
+      const dispo = room > 0 ? `, ${room}h dispo` : " (déjà au contrat)";
+      return `• ${c.firstName} ${c.lastName} (${STATUS_LABELS[c.status]}) — ${worked}h/${c.weeklyHours}h${dispo}`;
+    });
+    return {
+      ok: true,
+      message: `Pour remplacer ${absent.firstName} le ${frDate(dateIso)} (du moins chargé au plus chargé) :\n${lines.join("\n")}`,
     };
   }
 

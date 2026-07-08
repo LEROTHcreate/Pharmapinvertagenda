@@ -255,6 +255,9 @@ export function buildSystemPrompt(user: AssistantUser): string {
     user.isAdmin
       ? `- appliquer_gabarit : appliquer un gabarit S1 ou S2 sur cette semaine ou la semaine prochaine (« applique le S1 sur la semaine prochaine »). Préserve les créneaux déjà saisis.`
       : ``,
+    user.isAdmin
+      ? `- suggerer_remplacant : proposer qui peut remplacer une personne un jour donné (« qui peut remplacer Marie mardi ? ») — rôle compatible, non absent, le moins chargé. C'est une SUGGESTION (lecture), sans confirmation.`
+      : ``,
     `RÈGLES D'ACTION :`,
     `- N'utilise un outil QUE si la personne le demande clairement.`,
     `- S'il manque une info (la date, le type de congé, quel collaborateur…),`,
