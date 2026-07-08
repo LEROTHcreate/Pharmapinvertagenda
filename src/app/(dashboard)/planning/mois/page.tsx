@@ -70,7 +70,7 @@ export default async function PlanningMoisPage({
   const employeesDTO: EmployeeDTO[] = employees;
 
   return (
-    <div className="space-y-4 p-3 md:p-4">
+    <div className="space-y-4 p-3 md:p-4 lg:px-6">
       <MonthHeader monthStart={monthStartIso} />
 
       <MonthOverview

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import type { AbsenceCode, EmployeeStatus, TaskCode } from "@prisma/client";
 import {
@@ -25,7 +25,6 @@ import {
 import { TIME_SLOTS } from "@/types";
 import { cn } from "@/lib/utils";
 import { RolesLegend } from "@/components/planning/RolesLegend";
-import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
 
 /** Section d'une journée (matin OU après-midi).
  *  hours = nombre d'heures TASK travaillées dans la plage
@@ -62,7 +61,8 @@ export function WeekOverview({
   entries: ScheduleEntryDTO[];
   minStaff: number;
 }) {
-  // Filtre par métier (statut) — Set vide = tous visibles.
+  // Filtre par métier (statut) — Set vide = tous visibles. Piloté par la
+  // légende des rôles cliquable (plus de dropdown séparé).
   const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
   const visibleEmployees = useMemo(
     () =>
@@ -71,6 +71,14 @@ export function WeekOverview({
         : employees.filter((e) => statusFilter.has(e.status)),
     [employees, statusFilter]
   );
+  const toggleStatus = useCallback((s: EmployeeStatus) => {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }, []);
 
   const monday = useMemo(() => new Date(`${weekStart}T00:00:00`), [weekStart]);
   const days = useMemo(() => weekDays(monday), [monday]);
@@ -175,10 +183,13 @@ export function WeekOverview({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <RolesLegend employees={visibleEmployees} />
-        <EmployeeStatusFilter selected={statusFilter} onChange={setStatusFilter} />
-      </div>
+      {/* Légende des rôles CLIQUABLE = filtre par métier (plus de dropdown). */}
+      <RolesLegend
+        employees={employees}
+        selected={statusFilter}
+        onToggle={toggleStatus}
+        onReset={() => setStatusFilter(new Set())}
+      />
 
       {/* En-tête sticky : jours de la semaine */}
       <div className="sticky top-0 z-10 -mx-4 bg-gradient-to-b from-white via-white/95 to-transparent px-4 pb-2 pt-1 md:-mx-6 md:px-6">

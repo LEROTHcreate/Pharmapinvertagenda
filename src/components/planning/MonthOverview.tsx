@@ -8,6 +8,7 @@ import {
   ABSENCE_LABELS,
   ABSENCE_STYLES,
   STATUS_LABELS,
+  isNonWorkedTask,
   type EmployeeDTO,
   type ScheduleEntryDTO,
 } from "@/types";
@@ -17,18 +18,25 @@ import {
 } from "@/lib/planning-utils";
 import { cn } from "@/lib/utils";
 import { RolesLegend } from "@/components/planning/RolesLegend";
-import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
 
 const WEEKDAY_LETTERS = ["L", "M", "M", "J", "V", "S", "D"] as const;
+
+/** Frontière matin / après-midi (cohérent avec la vue semaine). */
+const MIDDAY = "12:00";
 
 type DayState =
   | { kind: "off" }
   | { kind: "absence"; code: AbsenceCode }
   | { kind: "worked"; hours: number };
 
+/** Une journée = deux demi-journées (matin + après-midi). */
+type DayCells = { am: DayState; pm: DayState };
+
 /**
- * Vue mois — heatmap polie : cellules arrondies, hover crosshair (ligne+colonne),
- * tooltip riche, animation d'entrée échelonnée.
+ * Vue mois — heatmap polie : chaque jour est coupé en deux (matin / après-midi),
+ * cellules arrondies, hover crosshair (ligne+colonne), tooltip riche.
+ * Pleine largeur (colonnes élastiques) + filtre par métier via la légende des
+ * rôles cliquable.
  */
 export function MonthOverview({
   monthStart,
@@ -41,7 +49,8 @@ export function MonthOverview({
 }) {
   const router = useRouter();
 
-  // Filtre par métier (statut) — Set vide = tous visibles.
+  // Filtre par métier (statut) — Set vide = tous visibles. Piloté par la
+  // légende des rôles cliquable (plus de dropdown séparé).
   const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
   const visibleEmployees = useMemo(
     () =>
@@ -50,6 +59,14 @@ export function MonthOverview({
         : employees.filter((e) => statusFilter.has(e.status)),
     [employees, statusFilter]
   );
+  const toggleStatus = useCallback((s: EmployeeStatus) => {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }, []);
 
   /**
    * Double-click sur une cellule jour → ouvre la vue journalière de ce jour
@@ -105,29 +122,58 @@ export function MonthOverview({
   const [hover, setHover] = useState<{ row: number; col: number } | null>(null);
 
   const employeeRows = useMemo(() => {
+    const off: DayState = { kind: "off" };
     return visibleEmployees.map((emp) => {
-      const cells: DayState[] = days.map(({ iso, weekday }) => {
-        if (weekday === 6) return { kind: "off" };
+      const cells: DayCells[] = days.map(({ iso, weekday }) => {
+        if (weekday === 6) return { am: off, pm: off };
         const day = index.get(emp.id)?.get(iso);
-        if (!day || day.size === 0) return { kind: "off" };
+        if (!day || day.size === 0) return { am: off, pm: off };
 
-        const abs = Array.from(day.values()).find((e) => e.type === "ABSENCE");
-        if (abs?.absenceCode) return { kind: "absence", code: abs.absenceCode };
+        // Ventile les créneaux du jour entre matin (< 12:00) et après-midi.
+        let amHours = 0;
+        let pmHours = 0;
+        let amAbs: AbsenceCode | null = null;
+        let pmAbs: AbsenceCode | null = null;
+        day.forEach((e, slot) => {
+          const isAm = slot < MIDDAY;
+          if (e.type === "ABSENCE" && e.absenceCode) {
+            if (isAm) amAbs = amAbs ?? e.absenceCode;
+            else pmAbs = pmAbs ?? e.absenceCode;
+          } else if (e.type === "TASK" && !isNonWorkedTask(e.taskCode)) {
+            // ECHANGE (texturé) = la personne n'est pas là → hors décompte.
+            if (isAm) amHours += 0.5;
+            else pmHours += 0.5;
+          }
+        });
 
-        const hours = dailyTaskHours(emp.id, iso, index);
-        if (hours === 0) return { kind: "off" };
-        return { kind: "worked", hours };
+        const half = (abs: AbsenceCode | null, hours: number): DayState =>
+          abs
+            ? { kind: "absence", code: abs }
+            : hours > 0
+              ? { kind: "worked", hours }
+              : { kind: "off" };
+
+        return { am: half(amAbs, amHours), pm: half(pmAbs, pmHours) };
       });
 
       let workedHours = 0;
       let workedDays = 0;
       const absencesCount = new Map<AbsenceCode, number>();
-      cells.forEach((c) => {
-        if (c.kind === "worked") {
-          workedHours += c.hours;
-          workedDays++;
-        } else if (c.kind === "absence") {
-          absencesCount.set(c.code, (absencesCount.get(c.code) ?? 0) + 1);
+      cells.forEach(({ am, pm }) => {
+        let dayWorked = 0;
+        if (am.kind === "worked") dayWorked += am.hours;
+        if (pm.kind === "worked") dayWorked += pm.hours;
+        workedHours += dayWorked;
+        if (dayWorked > 0) workedDays++;
+        // Une absence sur le jour (matin OU après-midi) = 1 jour d'absence.
+        const absCode =
+          am.kind === "absence"
+            ? am.code
+            : pm.kind === "absence"
+              ? pm.code
+              : null;
+        if (absCode) {
+          absencesCount.set(absCode, (absencesCount.get(absCode) ?? 0) + 1);
         }
       });
       return { emp, cells, workedHours, workedDays, absencesCount };
@@ -150,18 +196,22 @@ export function MonthOverview({
     });
   }, [visibleEmployees, days, index]);
 
-  // Largeur de cellule + colonne collaborateur : on essaie de garder du confort visuel
-  const gridTemplate = `220px repeat(${days.length}, 32px) 96px`;
+  // Colonnes élastiques (1fr) : la grille remplit toute la largeur de l'écran ;
+  // sur petit écran elle garde une largeur mini par jour et scrolle.
+  const gridTemplate = `minmax(180px, 240px) repeat(${days.length}, minmax(22px, 1fr)) minmax(80px, 104px)`;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <RolesLegend employees={visibleEmployees} />
-        <EmployeeStatusFilter selected={statusFilter} onChange={setStatusFilter} />
-      </div>
+      {/* Légende des rôles CLIQUABLE = filtre par métier (plus de dropdown). */}
+      <RolesLegend
+        employees={employees}
+        selected={statusFilter}
+        onToggle={toggleStatus}
+        onReset={() => setStatusFilter(new Set())}
+      />
 
       <div className="overflow-x-auto rounded-2xl border border-border/60 bg-card p-1 shadow-sm">
-        <div className="min-w-fit rounded-xl">
+        <div className="w-full rounded-xl">
           {/* En-tête : jours du mois */}
           <div
             className="grid items-center bg-gradient-to-b from-zinc-50/80 to-white/40 backdrop-blur"
@@ -230,14 +280,6 @@ export function MonthOverview({
                     animationDelay: `${Math.min(rowIdx * 24, 240)}ms`,
                     opacity: 0,
                   }}
-                  onMouseLeave={(e) => {
-                    if (
-                      !(e.relatedTarget instanceof Node) ||
-                      !e.currentTarget.contains(e.relatedTarget)
-                    ) {
-                      // hover géré au niveau cell
-                    }
-                  }}
                 >
                   {/* Identité */}
                   <div
@@ -268,11 +310,12 @@ export function MonthOverview({
                     </div>
                   </div>
 
-                  {/* Cellules jours */}
+                  {/* Cellules jours (matin + après-midi) */}
                   {cells.map((cell, colIdx) => (
                     <DayHeatCell
                       key={days[colIdx].iso}
-                      state={cell}
+                      am={cell.am}
+                      pm={cell.pm}
                       weekday={days[colIdx].weekday}
                       iso={days[colIdx].iso}
                       empName={`${emp.firstName}${emp.lastName !== "—" ? " " + emp.lastName : ""}`}
@@ -360,11 +403,11 @@ export function MonthOverview({
   );
 }
 
-/* ─── Cellule heatmap ─────────────────────────────────────────────── */
+/* ─── Cellule heatmap (matin + après-midi) ────────────────────────── */
 
 /**
  * Convertit "#rrggbb" en "rgba(r, g, b, alpha)".
- * Sert à appliquer la couleur du rôle du collaborateur sur les cellules
+ * Sert à appliquer la couleur du rôle du collaborateur sur les demi-journées
  * "travaillé" tout en modulant l'opacité selon le nombre d'heures faites.
  */
 function hexToRgba(hex: string, alpha: number): string {
@@ -380,7 +423,8 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 function DayHeatCell({
-  state,
+  am,
+  pm,
   weekday,
   iso,
   empName,
@@ -391,7 +435,8 @@ function DayHeatCell({
   onEnter,
   onOpenDay,
 }: {
-  state: DayState;
+  am: DayState;
+  pm: DayState;
   weekday: number;
   iso: string;
   empName: string;
@@ -405,75 +450,96 @@ function DayHeatCell({
   onOpenDay: (iso: string) => void;
 }) {
   const isWeekend = weekday >= 5;
+  const bothOff = am.kind === "off" && pm.kind === "off";
 
-  let bg = "transparent";
-  let inner: React.ReactNode = null;
-  let title = "";
+  const title =
+    `${empName} — ${formatHumanDate(iso)}\n` +
+    `Matin : ${halfLabel(am)} · Après-midi : ${halfLabel(pm)}\n` +
+    `(double-clic : ouvrir le planning de ce jour)`;
 
-  if (state.kind === "off") {
-    bg = isWeekend ? "rgb(244 244 245 / 0.5)" : "rgb(250 250 251 / 0.6)";
-    title = `${empName} — ${formatHumanDate(iso)} : repos`;
-  } else if (state.kind === "absence") {
-    const s = ABSENCE_STYLES[state.code];
-    bg = s.bg;
-    // Hachures diagonales identiques à la vue journalière (PlanningGrid) →
-    // signal visuel constant "absence" peu importe la vue. Mêmes paramètres
-    // de pattern (45°, 1.5px de hachure tous les 6px) pour cohérence.
-    inner = (
+  return (
+    <div
+      className={cn(
+        "h-12 px-0.5 py-1 transition-all duration-150 cursor-pointer select-none",
+        isHoverCross && "bg-violet-50/40",
+        isToday && "bg-violet-50/30"
+      )}
+      onMouseEnter={onEnter}
+      onDoubleClick={() => onOpenDay(iso)}
+      title={title}
+      aria-label={title}
+    >
       <div
-        className="h-full w-full rounded-md ring-1 ring-inset"
+        className={cn(
+          "flex h-full w-full flex-col overflow-hidden rounded-md transition-all duration-150",
+          bothOff ? "bg-transparent" : "ring-1 ring-inset ring-black/5",
+          isHoverExact &&
+            "scale-110 shadow-[0_4px_12px_-4px_rgba(124,58,237,0.4)] ring-2 ring-violet-400"
+        )}
+      >
+        {/* Matin (haut) */}
+        <HalfBlock state={am} empColor={empColor} isWeekend={isWeekend} />
+        {/* Fin séparateur matin / après-midi */}
+        <div className="h-px w-full bg-white/70" aria-hidden />
+        {/* Après-midi (bas) */}
+        <HalfBlock state={pm} empColor={empColor} isWeekend={isWeekend} />
+      </div>
+    </div>
+  );
+}
+
+/** Une demi-journée colorée (matin OU après-midi). */
+function HalfBlock({
+  state,
+  empColor,
+  isWeekend,
+}: {
+  state: DayState;
+  empColor: string;
+  isWeekend: boolean;
+}) {
+  if (state.kind === "off") {
+    return (
+      <div
+        className="flex-1"
         style={{
-          borderColor: s.border,
+          backgroundColor: isWeekend
+            ? "rgb(244 244 245 / 0.5)"
+            : "rgb(250 250 251 / 0.7)",
+        }}
+      />
+    );
+  }
+  if (state.kind === "absence") {
+    const s = ABSENCE_STYLES[state.code];
+    // Hachures diagonales identiques à la vue journalière (PlanningGrid) →
+    // signal visuel constant "absence" quelle que soit la vue.
+    return (
+      <div
+        className="flex-1"
+        style={{
           backgroundColor: s.bg,
           backgroundImage:
             "repeating-linear-gradient(45deg, rgba(0,0,0,0.18) 0 1.5px, transparent 1.5px 6px)",
         }}
       />
     );
-    title = `${empName} — ${formatHumanDate(iso)} : ${ABSENCE_LABELS[state.code]}`;
-  } else {
-    // Couleur de la case = couleur du rôle du collaborateur, opacité modulée
-    // par l'intensité (heures faites). Plus le collab a de TASK ce jour-là,
-    // plus la case est saturée.
-    const intensity = clamp(state.hours / 7.5, 0.3, 1);
-    bg = hexToRgba(empColor, intensity * 0.7);
-    inner = (
-      <div
-        className="h-full w-full rounded-md"
-        style={{ backgroundColor: bg }}
-      />
-    );
-    title = `${empName} — ${formatHumanDate(iso)} : ${state.hours.toFixed(1)}h`;
   }
-
+  // Travaillé : couleur du rôle, opacité modulée par les heures de la
+  // demi-journée (une demi-journée pleine ≈ 4h+ → saturation max).
+  const intensity = clamp(state.hours / 4, 0.35, 1);
   return (
     <div
-      className={cn(
-        "h-10 px-0.5 py-1 transition-all duration-150 cursor-pointer select-none",
-        isHoverCross && "bg-violet-50/40",
-        isToday && "bg-violet-50/30"
-      )}
-      onMouseEnter={onEnter}
-      onDoubleClick={() => onOpenDay(iso)}
-      title={`${title}\n(double-clic : ouvrir le planning de ce jour)`}
-    >
-      <div
-        className={cn(
-          "h-full w-full rounded-md transition-all duration-150",
-          state.kind === "off"
-            ? "bg-transparent"
-            : "ring-1 ring-inset ring-black/5",
-          isHoverExact &&
-            "scale-110 shadow-[0_4px_12px_-4px_rgba(124,58,237,0.4)] ring-2 ring-violet-400"
-        )}
-        style={{
-          backgroundColor: state.kind === "off" ? bg : undefined,
-        }}
-      >
-        {inner}
-      </div>
-    </div>
+      className="flex-1"
+      style={{ backgroundColor: hexToRgba(empColor, intensity * 0.78) }}
+    />
   );
+}
+
+function halfLabel(state: DayState): string {
+  if (state.kind === "off") return "—";
+  if (state.kind === "absence") return ABSENCE_LABELS[state.code];
+  return `${state.hours.toFixed(1)}h`;
 }
 
 /* ─── Légende — dépliable via <details> natif ─────────────────────
@@ -494,6 +560,16 @@ function Legend() {
         </span>
       </summary>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border/40 px-4 py-2.5">
+        {/* Rappel : chaque case est coupée en deux (haut = matin, bas = a-m). */}
+        <span className="inline-flex items-center gap-2">
+          <span className="flex h-6 w-4 flex-col overflow-hidden rounded-md ring-1 ring-border">
+            <span className="flex-1 bg-violet-400/70" />
+            <span className="h-px bg-white/70" />
+            <span className="flex-1 bg-violet-400/40" />
+          </span>
+          Haut = matin · Bas = après-midi
+        </span>
+
         <span className="inline-flex items-center gap-2">
           <span className="flex h-3 overflow-hidden rounded-md ring-1 ring-border">
             {[0.3, 0.5, 0.75, 1].map((a) => (
@@ -501,8 +577,8 @@ function Legend() {
                 key={a}
                 className="h-3 w-3.5"
                 // Gradient gris neutre — la VRAIE couleur est celle du rôle
-                // (cf. RolesLegend juste au-dessus). Ici on montre uniquement
-                // que l'intensité reflète le nombre d'heures travaillées.
+                // (cf. RolesLegend en haut). Ici on montre uniquement que
+                // l'intensité reflète le nombre d'heures travaillées.
                 style={{ backgroundColor: `rgba(82, 82, 91, ${a * 0.7})` }}
               />
             ))}
