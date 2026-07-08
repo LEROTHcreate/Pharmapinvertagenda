@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-import type { AbsenceCode } from "@prisma/client";
+import type { AbsenceCode, EmployeeStatus } from "@prisma/client";
 import {
   ABSENCE_LABELS,
   ABSENCE_STYLES,
@@ -17,6 +17,7 @@ import {
 } from "@/lib/planning-utils";
 import { cn } from "@/lib/utils";
 import { RolesLegend } from "@/components/planning/RolesLegend";
+import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
 
 const WEEKDAY_LETTERS = ["L", "M", "M", "J", "V", "S", "D"] as const;
 
@@ -39,6 +40,16 @@ export function MonthOverview({
   entries: ScheduleEntryDTO[];
 }) {
   const router = useRouter();
+
+  // Filtre par métier (statut) — Set vide = tous visibles.
+  const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
+  const visibleEmployees = useMemo(
+    () =>
+      statusFilter.size === 0
+        ? employees
+        : employees.filter((e) => statusFilter.has(e.status)),
+    [employees, statusFilter]
+  );
 
   /**
    * Double-click sur une cellule jour → ouvre la vue journalière de ce jour
@@ -94,7 +105,7 @@ export function MonthOverview({
   const [hover, setHover] = useState<{ row: number; col: number } | null>(null);
 
   const employeeRows = useMemo(() => {
-    return employees.map((emp) => {
+    return visibleEmployees.map((emp) => {
       const cells: DayState[] = days.map(({ iso, weekday }) => {
         if (weekday === 6) return { kind: "off" };
         const day = index.get(emp.id)?.get(iso);
@@ -121,14 +132,14 @@ export function MonthOverview({
       });
       return { emp, cells, workedHours, workedDays, absencesCount };
     });
-  }, [employees, days, index]);
+  }, [visibleEmployees, days, index]);
 
   const dayTotals = useMemo(() => {
     return days.map(({ iso, weekday }) => {
       if (weekday === 6) return { teamHours: 0, absent: 0 };
       let teamHours = 0;
       let absent = 0;
-      employees.forEach((emp) => {
+      visibleEmployees.forEach((emp) => {
         teamHours += dailyTaskHours(emp.id, iso, index);
         const day = index.get(emp.id)?.get(iso);
         if (day && Array.from(day.values()).some((e) => e.type === "ABSENCE")) {
@@ -137,14 +148,17 @@ export function MonthOverview({
       });
       return { teamHours, absent };
     });
-  }, [employees, days, index]);
+  }, [visibleEmployees, days, index]);
 
   // Largeur de cellule + colonne collaborateur : on essaie de garder du confort visuel
   const gridTemplate = `220px repeat(${days.length}, 32px) 96px`;
 
   return (
     <div className="space-y-4">
-      <RolesLegend employees={employees} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <RolesLegend employees={visibleEmployees} />
+        <EmployeeStatusFilter selected={statusFilter} onChange={setStatusFilter} />
+      </div>
 
       <div className="overflow-x-auto rounded-2xl border border-border/60 bg-card p-1 shadow-sm">
         <div className="min-w-fit rounded-xl">

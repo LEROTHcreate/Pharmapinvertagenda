@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { AbsenceCode, TaskCode } from "@prisma/client";
+import type { AbsenceCode, EmployeeStatus, TaskCode } from "@prisma/client";
 import {
   ABSENCE_LABELS,
   ABSENCE_STYLES,
@@ -25,6 +25,7 @@ import {
 import { TIME_SLOTS } from "@/types";
 import { cn } from "@/lib/utils";
 import { RolesLegend } from "@/components/planning/RolesLegend";
+import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
 
 /** Section d'une journée (matin OU après-midi).
  *  hours = nombre d'heures TASK travaillées dans la plage
@@ -61,6 +62,16 @@ export function WeekOverview({
   entries: ScheduleEntryDTO[];
   minStaff: number;
 }) {
+  // Filtre par métier (statut) — Set vide = tous visibles.
+  const [statusFilter, setStatusFilter] = useState<Set<EmployeeStatus>>(new Set());
+  const visibleEmployees = useMemo(
+    () =>
+      statusFilter.size === 0
+        ? employees
+        : employees.filter((e) => statusFilter.has(e.status)),
+    [employees, statusFilter]
+  );
+
   const monday = useMemo(() => new Date(`${weekStart}T00:00:00`), [weekStart]);
   const days = useMemo(() => weekDays(monday), [monday]);
   const dayDates = useMemo(() => days.map(toIsoDate), [days]);
@@ -69,7 +80,7 @@ export function WeekOverview({
   const index = useMemo(() => indexEntriesByEmployee(entries), [entries]);
 
   const employeeRows = useMemo(() => {
-    return employees.map((emp) => {
+    return visibleEmployees.map((emp) => {
       const perDay: DaySummary[] = dayDates.map((iso) => {
         const day = index.get(emp.id)?.get(iso);
         const empty: DaySection = { hours: 0, range: null, tasks: [] };
@@ -134,14 +145,14 @@ export function WeekOverview({
       const total = weeklyTaskHours(emp.id, dayDates, index);
       return { emp, perDay, total };
     });
-  }, [employees, dayDates, index]);
+  }, [visibleEmployees, dayDates, index]);
 
   const dayTotals = useMemo(() => {
-    const ids = employees.map((e) => e.id);
+    const ids = visibleEmployees.map((e) => e.id);
     return dayDates.map((iso) => {
       let hours = 0;
       let absent = 0;
-      employees.forEach((emp) => {
+      visibleEmployees.forEach((emp) => {
         hours += dailyTaskHours(emp.id, iso, index);
         const day = index.get(emp.id)?.get(iso);
         if (day && Array.from(day.values()).some((e) => e.type === "ABSENCE")) {
@@ -158,13 +169,16 @@ export function WeekOverview({
       if (!isFinite(minCoverage)) minCoverage = 0;
       return { hours, absent, minCoverage };
     });
-  }, [employees, dayDates, index]);
+  }, [visibleEmployees, dayDates, index]);
 
   const teamTotal = employeeRows.reduce((s, r) => s + r.total, 0);
 
   return (
     <div className="space-y-3">
-      <RolesLegend employees={employees} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <RolesLegend employees={visibleEmployees} />
+        <EmployeeStatusFilter selected={statusFilter} onChange={setStatusFilter} />
+      </div>
 
       {/* En-tête sticky : jours de la semaine */}
       <div className="sticky top-0 z-10 -mx-4 bg-gradient-to-b from-white via-white/95 to-transparent px-4 pb-2 pt-1 md:-mx-6 md:px-6">
