@@ -18,6 +18,7 @@ import {
   StickyNote,
   ShieldCheck,
   ClipboardList,
+  TrendingUp,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
@@ -48,6 +49,7 @@ type NavKey =
   | "gardes"
   | "utilisateurs"
   | "creneaux"
+  | "pilotage"
   | "parametres";
 type NavItem = {
   key: NavKey;
@@ -70,6 +72,7 @@ const NAV: NavItem[] = [
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
+  { key: "pilotage", href: "/pilotage", label: "Pilotage RH", icon: TrendingUp, adminOnly: true },
   { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
   { key: "gardes", href: "/gardes", label: "Gardes", icon: ShieldCheck, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
