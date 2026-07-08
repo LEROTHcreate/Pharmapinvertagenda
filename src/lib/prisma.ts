@@ -19,7 +19,36 @@ function makeClient(): PrismaClient {
     // Mock minimal — l'app n'utilise qu'un sous-ensemble de l'API Prisma
     return createMockPrisma() as unknown as PrismaClient;
   }
+
+  // Même problème de saturation que prismaDirect, côté client PRINCIPAL
+  // (DATABASE_URL, pooler en mode transaction, port 6543) : sans plafond,
+  // Prisma ouvre ~5 connexions par instance de lambda → une poignée de lambdas
+  // concurrentes suffit à atteindre la limite de connexions clientes du pooler
+  // Supabase (Supavisor : `EMAXCONN: max client connections reached, limit: 200`),
+  // ce qui fait planter les pages en 500 par intermittence. On borne à 1
+  // connexion par instance ; `pool_timeout` laisse le temps de l'obtenir sous
+  // charge. On ne surcharge que si l'URL ne fixe pas déjà ces paramètres.
+  const raw = process.env.DATABASE_URL;
+  let url: string | undefined = raw;
+  if (raw) {
+    try {
+      const parsed = new URL(raw);
+      if (!parsed.searchParams.has("connection_limit")) {
+        parsed.searchParams.set("connection_limit", "1");
+      }
+      if (!parsed.searchParams.has("pool_timeout")) {
+        parsed.searchParams.set("pool_timeout", "15");
+      }
+      url = parsed.toString();
+    } catch {
+      // URL non parsable (caractères spéciaux non encodés) : on garde l'URL
+      // d'origine plutôt que de risquer une régression de connexion.
+      url = raw;
+    }
+  }
+
   return new PrismaClient({
+    ...(url ? { datasources: { db: { url } } } : {}),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 }
