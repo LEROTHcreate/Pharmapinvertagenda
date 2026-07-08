@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/types";
+import { HiringSimulator } from "@/components/payroll/HiringSimulator";
 import type { EmployeeStatus } from "@prisma/client";
 import { computeBenchmark, type Benchmark } from "@/lib/payroll-benchmark";
 import { computeInsights, type Insight } from "@/lib/payroll-insights";
@@ -170,6 +171,10 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
   const [loading, setLoading] = useState(true);
   const [lines, setLines] = useState<Line[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
+  // Budget annuel de masse salariale (réglé dans Paramètres) → prévisionnel.
+  const [annualBudget, setAnnualBudget] = useState<number | null>(null);
+  // Taux patronal effectif (pour le simulateur d'embauche).
+  const [employerRate, setEmployerRate] = useState(0.42);
   // CA HT du mois saisi par le titulaire (pour le ratio masse salariale / CA).
   const [revenue, setRevenue] = useState<{
     revenueHT: number;
@@ -273,6 +278,12 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         setLines(data.lines);
         setTotals(data.totals);
         setRevenue(data.revenue ?? null);
+        setAnnualBudget(
+          typeof data.annualBudget === "number" ? data.annualBudget : null
+        );
+        if (typeof data.employerRate === "number") {
+          setEmployerRate(data.employerRate);
+        }
         // Région : si l'utilisateur n'a pas de préférence locale, on adopte
         // celle réglée au niveau de la pharmacie (renvoyée par l'API).
         if (
@@ -527,6 +538,43 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         </div>
       )}
 
+      {/* Prévisionnel vs budget annuel (#3) — écart + alerte de dérive */}
+      {totals && annualBudget != null && annualBudget > 0 && (() => {
+        const projection = totals.totalEmployerCost * 12;
+        const over = projection > annualBudget;
+        const pct = Math.round((projection / annualBudget) * 100);
+        const gap = Math.abs(projection - annualBudget);
+        return (
+          <div
+            className={cn(
+              "flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border px-3.5 py-2.5 text-[12.5px]",
+              over
+                ? "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-100"
+                : "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100"
+            )}
+          >
+            <span className="inline-flex items-center gap-1.5 font-semibold">
+              {over ? (
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+              ) : (
+                <Check className="h-4 w-4 shrink-0" />
+              )}
+              Budget annuel : {fmt(annualBudget)}
+            </span>
+            <span className="tabular-nums">
+              {over ? "Dérive projetée" : "Marge"} :{" "}
+              <strong>
+                {over ? "+" : "−"}
+                {fmt(gap)}
+              </strong>{" "}
+              <span className="opacity-75">
+                (projection à {pct} % du budget)
+              </span>
+            </span>
+          </div>
+        );
+      })()}
+
       {/* Ratio masse salariale / CA */}
       {totals && (
         <SalaryRatioCard
@@ -539,6 +587,16 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
             0
           )}
           onSaved={() => fetchPayroll(month)}
+        />
+      )}
+
+      {/* Simulateur d'embauche (#4) */}
+      {totals && (
+        <HiringSimulator
+          month={month}
+          employerRate={employerRate}
+          currentAnnualProjection={totals.totalEmployerCost * 12}
+          annualBudget={annualBudget}
         />
       )}
 

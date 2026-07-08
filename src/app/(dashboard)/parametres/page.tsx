@@ -40,6 +40,7 @@ export default async function ParametresPage() {
         payrollRegion: true,
         payrollContribEmployee: true,
         payrollContribEmployer: true,
+        payrollAnnualBudget: true,
       },
     }),
     prisma.user.findUnique({
@@ -133,6 +134,7 @@ export default async function ParametresPage() {
               pharmacy.payrollContribEmployer != null
                 ? Math.round(pharmacy.payrollContribEmployer * 1000) / 10
                 : null,
+            annualBudget: pharmacy.payrollAnnualBudget ?? null,
           }}
         />
       )}

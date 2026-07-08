@@ -126,6 +126,10 @@ export async function middleware(request: NextRequest) {
     // Écran vitrine public (salle d'attente) : protégé par un jeton HMAC dans
     // l'URL (validé par la page), doit être accessible sans connexion.
     path.startsWith("/vitrine") ||
+    // Service worker : DOIT être public (le navigateur le récupère hors
+    // contexte auth pour l'enregistrer/mettre à jour + le push). Gaté, il
+    // renvoyait un 307 vers /login → SW cassé.
+    path === "/sw.js" ||
     // Fichiers statiques publics (logo des emails, icônes + manifest PWA…) :
     // ne JAMAIS les mettre derrière l'auth, sinon le logo casse dans les
     // emails et l'installation PWA échoue. Le matcher exclut déjà /_next ;

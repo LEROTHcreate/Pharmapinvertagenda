@@ -91,6 +91,8 @@ const payrollSettingsInput = z.object({
     .nullable(),
   payrollContribEmployee: z.number().min(0).max(1).nullable(),
   payrollContribEmployer: z.number().min(0).max(1).nullable(),
+  // Budget annuel de masse salariale (coût employeur total, €).
+  payrollAnnualBudget: z.number().min(0).max(100_000_000).nullable(),
 });
 export type PayrollSettingsInput = z.infer<typeof payrollSettingsInput>;
 
@@ -136,6 +138,7 @@ export async function updatePayrollSettings(
       payrollRegion: parsed.data.payrollRegion,
       payrollContribEmployee: parsed.data.payrollContribEmployee,
       payrollContribEmployer: parsed.data.payrollContribEmployer,
+      payrollAnnualBudget: parsed.data.payrollAnnualBudget,
     },
   });
 
