@@ -212,12 +212,48 @@ async function postPlanning(req: Request) {
   return NextResponse.json({ ok: true, count: parsed.data.entries.length });
 }
 
-/** DELETE /api/planning?employeeId=X&date=YYYY-MM-DD&timeSlot=HH:MM — efface un créneau */
+/**
+ * DELETE /api/planning — efface un ou plusieurs créneaux.
+ *  - En MASSE : corps JSON `{ cells: [{ employeeId, date, timeSlot }] }` → UN seul
+ *    `deleteMany`. À privilégier : évite d'ouvrir N connexions BDD (une par case)
+ *    qui saturaient le pool Supabase (EMAXCONN) lors d'un effacement multiple.
+ *  - Unitaire (rétro-compat) : query `?employeeId=X&date=YYYY-MM-DD&timeSlot=HH:MM`.
+ */
 async function deletePlanning(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!canEditPlanning(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // ── Mode MASSE : corps JSON { cells: [...] } → un seul deleteMany ──
+  const body = await req.json().catch(() => null);
+  if (body && Array.isArray((body as { cells?: unknown }).cells)) {
+    const rawCells = (body as { cells: unknown[] }).cells;
+    const keys = rawCells
+      .filter(
+        (c): c is { employeeId: string; date: string; timeSlot: string } =>
+          !!c &&
+          typeof (c as Record<string, unknown>).employeeId === "string" &&
+          typeof (c as Record<string, unknown>).date === "string" &&
+          typeof (c as Record<string, unknown>).timeSlot === "string"
+      )
+      .map((c) => ({
+        employeeId: c.employeeId,
+        date: new Date(`${c.date}T00:00:00Z`),
+        timeSlot: c.timeSlot,
+      }));
+
+    if (keys.length === 0) return NextResponse.json({ ok: true, count: 0 });
+
+    // `pharmacyId` en tête → on ne peut effacer que des créneaux de SA pharmacie,
+    // même si un id d'un autre tenant est glissé dans la liste.
+    const res = await prisma.scheduleEntry.deleteMany({
+      where: { pharmacyId: session.user.pharmacyId, OR: keys },
+    });
+
+    revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));
+    return NextResponse.json({ ok: true, count: res.count });
   }
 
   const url = new URL(req.url);
