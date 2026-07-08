@@ -23,17 +23,17 @@ datasource db {
 enum UserRole {
   // Rôles de PERMISSION (distincts du statut métier EmployeeStatus).
   // Du plus puissant au moins puissant. Cf. src/lib/permissions.ts.
-  CREATEUR     // Créateur de l'officine — tous pouvoirs, indéracinable, transférable
-  ADMIN        // Titulaire — tous pouvoirs sauf gérer le créateur
-  MANAGEUR     // Édite le planning + gabarits + équipe (pas absences/paie/réglages)
+  CREATEUR // Créateur de l'officine — tous pouvoirs, indéracinable, transférable
+  ADMIN // Titulaire — tous pouvoirs sauf gérer le créateur
+  MANAGEUR // Édite le planning + gabarits + équipe (pas absences/paie/réglages)
   COLLABORATEUR // Personnel — lecture + ses propres demandes
-  EMPLOYEE     // (legacy) — alias historique de COLLABORATEUR, normalisé en code
+  EMPLOYEE // (legacy) — alias historique de COLLABORATEUR, normalisé en code
 }
 
 enum UserStatus {
-  PENDING   // Inscription en attente d'examen par un admin
-  APPROVED  // Compte validé — peut se connecter
-  REJECTED  // Demande refusée
+  PENDING // Inscription en attente d'examen par un admin
+  APPROVED // Compte validé — peut se connecter
+  REJECTED // Demande refusée
 }
 
 enum EmployeeStatus {
@@ -47,8 +47,8 @@ enum EmployeeStatus {
 }
 
 enum ScheduleType {
-  TASK     // Poste de travail (Comptoir, Commande, etc.)
-  ABSENCE  // Absence (Congé, Maladie, etc.)
+  TASK // Poste de travail (Comptoir, Commande, etc.)
+  ABSENCE // Absence (Congé, Maladie, etc.)
 }
 
 enum TaskCode {
@@ -61,7 +61,7 @@ enum TaskCode {
   FORMATION
   HEURES_SUP
   LIVRAISON
-  MISE_EN_RAYON       // Mise en rayon (livreur)
+  MISE_EN_RAYON // Mise en rayon (livreur)
   VERIFICATION_STOCKS // Vérification des stocks (livreur)
   ROBOT
   REMPLACEMENT
@@ -90,48 +90,48 @@ enum WeekType {
 /// Type d'événement d'équipe (vie de l'officine) — chaque type a son ambiance
 /// visuelle (couleur + animation) côté UI.
 enum TeamEventType {
-  REPAS               // Repas d'équipe (mensuel, trimestriel, resto…)
-  ANIMATION_LABO      // Animation / journée d'un laboratoire
+  REPAS // Repas d'équipe (mensuel, trimestriel, resto…)
+  ANIMATION_LABO // Animation / journée d'un laboratoire
   REUNION_FOURNISSEUR // Réunion fournisseur / représentant
-  ENTRETIEN           // Entretien individuel collaborateur
-  FORMATION           // Formation / atelier interne
-  AUTRE               // Autre événement
+  ENTRETIEN // Entretien individuel collaborateur
+  FORMATION // Formation / atelier interne
+  AUTRE // Autre événement
 }
 
 enum MessageType {
-  TEXT          // Message texte simple
-  SWAP_REQUEST  // Message structuré portant une demande d'échange
-  SYSTEM        // Notification système dans la conv (ex: "X a rejoint")
+  TEXT // Message texte simple
+  SWAP_REQUEST // Message structuré portant une demande d'échange
+  SYSTEM // Notification système dans la conv (ex: "X a rejoint")
 }
 
 enum SwapStatus {
-  PENDING_TARGET   // En attente d'accord du collègue sollicité
-  REJECTED_TARGET  // Refusé par le collègue
-  PENDING_ADMIN    // Accepté par le collègue, en attente validation admin
-  APPROVED         // Approuvé par l'admin → planning mis à jour
-  REJECTED_ADMIN   // Refusé par l'admin
-  CANCELLED        // Annulé par le demandeur
+  PENDING_TARGET // En attente d'accord du collègue sollicité
+  REJECTED_TARGET // Refusé par le collègue
+  PENDING_ADMIN // Accepté par le collègue, en attente validation admin
+  APPROVED // Approuvé par l'admin → planning mis à jour
+  REJECTED_ADMIN // Refusé par l'admin
+  CANCELLED // Annulé par le demandeur
 }
 
 enum PayrollNoteStatus {
-  PENDING       // À comptabiliser — l'admin doit encore traiter
-  ACCOUNTED     // Comptabilisé par l'admin
+  PENDING // À comptabiliser — l'admin doit encore traiter
+  ACCOUNTED // Comptabilisé par l'admin
 }
 
 // ─── MODELS ──────────────────────────────────────────────────────
 
 /// Pharmacie — entité multi-tenant racine
 model Pharmacy {
-  id        String   @id @default(cuid())
-  name      String                         // Ex: "Pharmacie du Pin Vert"
-  address   String?
-  phone     String?
-  siret     String?  @unique
-  minStaff  Int      @default(4)           // Seuil minimum d'effectif par créneau
+  id       String  @id @default(cuid())
+  name     String // Ex: "Pharmacie du Pin Vert"
+  address  String?
+  phone    String?
+  siret    String? @unique
+  minStaff Int     @default(4) // Seuil minimum d'effectif par créneau
   // Logo de l'officine — data URL base64 (uploadée depuis Paramètres,
   // max 200KB) ou chemin relatif (ex: "/logo.png" pour les pharmacies
   // seedées). Null = fallback sur le logo générique PharmaPlanning.
-  logoUrl   String?
+  logoUrl  String?
 
   // ─── Mémo du jour / consignes ──────────────────────────────────────
   // Note courte posée par un responsable, visible par toute l'équipe (bandeau
@@ -140,10 +140,14 @@ model Pharmacy {
   dailyNotice   String?
   dailyNoticeAt DateTime?
 
+  // Horaires d'ouverture (JSON : 7 jours Lun→Dim, chaque jour = créneaux
+  // {open,close}). Affichés sur l'écran vitrine public. Cf. src/lib/opening-hours.ts.
+  openingHours  String?
+
   // ─── Réglages Rémunération ─────────────────────────────────────────
   // Région de référence pour le benchmark marché (NATIONAL, IDF,
   // GRANDE_METROPOLE, PROVINCE, RURAL). Null = NATIONAL par défaut.
-  payrollRegion String?
+  payrollRegion          String?
   // Taux de cotisations paramétrables (override des défauts 0.22 / 0.42).
   // Null = on retombe sur DEFAULT_PAYROLL_RATES.
   payrollContribEmployee Float? // Cotisations salariales (ex: 0.22)
@@ -159,19 +163,20 @@ model Pharmacy {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users          User[]
-  employees      Employee[]
-  scheduleEntries ScheduleEntry[]
-  absenceRequests AbsenceRequest[]
-  weekTemplates  WeekTemplate[]
-  conversations  Conversation[]
-  swapRequests   ShiftSwapRequest[]
-  payrollNotes   PayrollNote[]
+  users              User[]
+  employees          Employee[]
+  scheduleEntries    ScheduleEntry[]
+  absenceRequests    AbsenceRequest[]
+  weekTemplates      WeekTemplate[]
+  conversations      Conversation[]
+  swapRequests       ShiftSwapRequest[]
+  payrollNotes       PayrollNote[]
   availabilityWishes AvailabilityWish[]
   monthlyRevenues    MonthlyRevenue[]
   gardes             Garde[]
   teamEvents         TeamEvent[]
   openShifts         OpenShift[]
+  polls              Poll[]
 
   @@map("pharmacies")
 }
@@ -193,20 +198,20 @@ model User {
   icalToken      String?    @unique
   name           String
   role           UserRole   @default(EMPLOYEE)
-  status         UserStatus @default(PENDING)   // Workflow d'inscription
-  isActive       Boolean    @default(true)       // Désactivation post-approbation
-  rejectionNote  String?                         // Motif optionnel en cas de refus
+  status         UserStatus @default(PENDING) // Workflow d'inscription
+  isActive       Boolean    @default(true) // Désactivation post-approbation
+  rejectionNote  String? // Motif optionnel en cas de refus
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
-  reviewedAt     DateTime?                       // Date de validation/refus
-  reviewedById   String?                         // Admin ayant validé (référence libre)
-  lastLoginAt    DateTime?                       // Mis à jour à chaque connexion réussie (audit)
+  reviewedAt     DateTime? // Date de validation/refus
+  reviewedById   String? // Admin ayant validé (référence libre)
+  lastLoginAt    DateTime? // Mis à jour à chaque connexion réussie (audit)
 
   // Avatar fun : ID stable pointant vers /public/avatars/<id>.png
   // (paracetamol, ibuprofen, probiotic…). Null = fallback sur la pastille
   // colorée avec la 1re lettre du prénom. Voir src/lib/avatars.ts pour le
   // catalogue.
-  avatarId       String?
+  avatarId String?
 
   // Reset password : on stocke le HASH SHA-256 du token (jamais le token brut).
   // Si la BDD fuite, les liens déjà émis ne sont pas exploitables.
@@ -234,13 +239,13 @@ model User {
   employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
 
   // Messagerie interne
-  conversationsCreated   Conversation[]       @relation("conversationsCreated")
+  conversationsCreated    Conversation[]       @relation("conversationsCreated")
   conversationMemberships ConversationMember[]
-  messages               Message[]
-  swapsRequested         ShiftSwapRequest[]   @relation("swapsRequested")
-  swapsTargeted          ShiftSwapRequest[]   @relation("swapsTargeted")
-  swapsReviewed          ShiftSwapRequest[]   @relation("swapsReviewed")
-  payrollNotes           PayrollNote[]
+  messages                Message[]
+  swapsRequested          ShiftSwapRequest[]   @relation("swapsRequested")
+  swapsTargeted           ShiftSwapRequest[]   @relation("swapsTargeted")
+  swapsReviewed           ShiftSwapRequest[]   @relation("swapsReviewed")
+  payrollNotes            PayrollNote[]
 
   @@index([pharmacyId])
   @@index([pharmacyId, status])
@@ -250,36 +255,36 @@ model User {
 /// Employé — profil métier (apparaît comme colonne dans le planning)
 /// Mode de rémunération d'un salarié.
 enum PayMode {
-  HOURLY  // Payé au taux horaire : heures travaillées × taux
+  HOURLY // Payé au taux horaire : heures travaillées × taux
   MONTHLY // Mensualisé : salaire brut mensuel fixe (heures sup payées en plus)
 }
 
 /// Période de référence pour le décompte des heures supplémentaires.
 enum OvertimeReference {
-  WEEKLY   // À la semaine (Art. L3121-28) — seuil = contrat/sem.
+  WEEKLY // À la semaine (Art. L3121-28) — seuil = contrat/sem.
   BIWEEKLY // Lissé sur 2 semaines (modulation) — seuil = 2× contrat / quinzaine.
 }
 
 model Employee {
-  id           String         @id @default(cuid())
-  firstName    String
-  lastName     String
-  status       EmployeeStatus
-  weeklyHours  Float                          // Heures contractuelles hebdomadaires
+  id                      String            @id @default(cuid())
+  firstName               String
+  lastName                String
+  status                  EmployeeStatus
+  weeklyHours             Float // Heures contractuelles hebdomadaires
   // Période de référence pour le décompte des heures supplémentaires :
   //  - WEEKLY   : à la semaine (défaut) — seuil = weeklyHours/sem.
   //  - BIWEEKLY : lissé sur 2 semaines (modulation contractuelle) — seuil =
   //    2×weeklyHours sur la quinzaine (ex. 40h + 30h = 0 heure sup).
-  overtimeReference OvertimeReference @default(WEEKLY)
+  overtimeReference       OvertimeReference @default(WEEKLY)
   // Pour les TITULAIRE uniquement : compter leurs heures supplémentaires dans
   // les stats ? Par défaut FALSE — un titulaire rémunéré en dividendes / salaire
   // fixe travaille « quoi qu'il arrive », ses HS ne sont donc pas
   // comptabilisées. Ignoré pour les autres statuts (leurs HS comptent toujours).
-  titulaireCountsOvertime Boolean @default(false)
-  displayColor String         @default("#6366f1") // Couleur dans le planning
-  displayOrder Int            @default(0)      // Ordre d'affichage dans la grille
-  isActive     Boolean        @default(true)
-  hireDate     DateTime?
+  titulaireCountsOvertime Boolean           @default(false)
+  displayColor            String            @default("#6366f1") // Couleur dans le planning
+  displayOrder            Int               @default(0) // Ordre d'affichage dans la grille
+  isActive                Boolean           @default(true)
+  hireDate                DateTime?
 
   // ─── Rémunération (module /remuneration) ───────────────────────────
   // Deux modes (payMode) :
@@ -290,38 +295,39 @@ model Employee {
   //    contrat sont payées EN PLUS du salaire mensuel.
   // NB : ce n'est PAS un bulletin de paie légal (cf. avertissement page).
   payMode            PayMode @default(HOURLY)
-  hourlyGrossRate    Float?  // Taux horaire brut (mode HOURLY)
-  monthlyGrossSalary Float?  // Salaire brut mensuel (mode MONTHLY)
+  hourlyGrossRate    Float? // Taux horaire brut (mode HOURLY)
+  monthlyGrossSalary Float? // Salaire brut mensuel (mode MONTHLY)
   // Coefficient conventionnel (grille pharmacie d'officine). Si renseigné,
   // sert de base au benchmark à la place de l'estimation par ancienneté.
   coefficient        Int?
 
   // ─── Échéances RH (rappels automatiques) ───────────────────────────
   contractType                  ContractType @default(CDI)
-  contractEndDate               DateTime?  // Fin de CDD / stage / apprentissage
-  trialEndDate                  DateTime?  // Fin de période d'essai (rappel seul)
+  contractEndDate               DateTime? // Fin de CDD / stage / apprentissage
+  trialEndDate                  DateTime? // Fin de période d'essai (rappel seul)
   // Date de départ prévue (démission, rupture…). Au passage de cette date, OU
   // de contractEndDate pour un contrat non-CDI, le collaborateur bascule
   // automatiquement en inactif (cf. src/lib/employee-lifecycle.ts).
   departureDate                 DateTime?
-  lastMedicalVisitDate          DateTime?  // Dernière visite médicale du travail
-  lastProfessionalInterviewDate DateTime?  // Dernier entretien professionnel
-  dpcLastDate                   DateTime?  // Dernière action DPC (pharmacien)
+  lastMedicalVisitDate          DateTime? // Dernière visite médicale du travail
+  lastProfessionalInterviewDate DateTime? // Dernier entretien professionnel
+  dpcLastDate                   DateTime? // Dernière action DPC (pharmacien)
 
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   pharmacyId String
   pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 
-  user               User?
-  scheduleEntries    ScheduleEntry[]
-  absenceRequests    AbsenceRequest[]
-  templateEntries    WeekTemplateEntry[]
-  availabilityWishes AvailabilityWish[]
-  gardes             Garde[]
-  openShiftsAssigned OpenShift[]          @relation("OpenShiftAssigned")
+  user                User?
+  scheduleEntries     ScheduleEntry[]
+  absenceRequests     AbsenceRequest[]
+  templateEntries     WeekTemplateEntry[]
+  availabilityWishes  AvailabilityWish[]
+  gardes              Garde[]
+  openShiftsAssigned  OpenShift[]          @relation("OpenShiftAssigned")
   openShiftVolunteers OpenShiftVolunteer[] @relation("OpenShiftVolunteer")
+  pollVotes           PollVote[]           @relation("PollVote")
 
   @@index([pharmacyId])
   @@index([pharmacyId, isActive])
@@ -340,7 +346,7 @@ enum ContractType {
 /// Nature d'un souhait de disponibilité posé par un salarié.
 enum WishKind {
   UNAVAILABLE // Indisponible (ne peut pas travailler)
-  PREFER_OFF  // Préfère ne pas travailler
+  PREFER_OFF // Préfère ne pas travailler
   PREFER_WORK // Souhaite travailler
 }
 
@@ -383,13 +389,13 @@ model MonthlyRevenue {
 /// Entrée de planning — UNE cellule de la grille
 /// Contrainte unique : un seul poste/absence par employé + date + créneau
 model ScheduleEntry {
-  id       String       @id @default(cuid())
-  date     DateTime     @db.Date              // Date du jour (sans heure)
-  timeSlot String                              // "HH:MM" — ex: "08:30", "14:00"
-  type     ScheduleType                        // TASK ou ABSENCE
-  taskCode    TaskCode?                        // Rempli si type = TASK
-  absenceCode AbsenceCode?                     // Rempli si type = ABSENCE
-  notes    String?                             // Note optionnelle sur le créneau
+  id          String       @id @default(cuid())
+  date        DateTime     @db.Date // Date du jour (sans heure)
+  timeSlot    String // "HH:MM" — ex: "08:30", "14:00"
+  type        ScheduleType // TASK ou ABSENCE
+  taskCode    TaskCode? // Rempli si type = TASK
+  absenceCode AbsenceCode? // Rempli si type = ABSENCE
+  notes       String? // Note optionnelle sur le créneau
 
   // Sauvegarde du poste d'origine quand cette cellule a été convertie de
   // TASK → ABSENCE par l'approbation d'une demande d'absence. Permet de
@@ -421,11 +427,11 @@ model AbsenceRequest {
   dateEnd     DateTime             @db.Date
   absenceCode AbsenceCode
   status      AbsenceRequestStatus @default(PENDING)
-  reason      String?                          // Motif (optionnel pour l'employé)
-  adminNote   String?                          // Note de l'admin (ex: raison refus)
+  reason      String? // Motif (optionnel pour l'employé)
+  adminNote   String? // Note de l'admin (ex: raison refus)
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
-  reviewedAt  DateTime?                        // Date de validation/refus
+  reviewedAt  DateTime? // Date de validation/refus
 
   employeeId String
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -449,15 +455,15 @@ model AbsenceRequest {
 /// On peut désormais avoir PLUSIEURS gabarits par type (ex: "S1 standard",
 /// "S1 vacances scolaires", "S2 été"...) — chacun avec son nom personnalisé.
 model WeekTemplate {
-  id       String   @id @default(cuid())
-  name     String                              // Ex: "Semaine type S1 standard"
-  weekType WeekType                            // S1 ou S2
-  category String?                             // Classement libre selon les besoins (ex: "Vacances scolaires", "Renfort", "Été")
-  description String?                          // Note libre décrivant l'usage du gabarit
-  isDefault Boolean @default(false)            // Gabarit "par défaut" pour son type (1 max par type/pharmacie) — pré-sélectionné à l'application
-  isActive Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String // Ex: "Semaine type S1 standard"
+  weekType    WeekType // S1 ou S2
+  category    String? // Classement libre selon les besoins (ex: "Vacances scolaires", "Renfort", "Été")
+  description String? // Note libre décrivant l'usage du gabarit
+  isDefault   Boolean  @default(false) // Gabarit "par défaut" pour son type (1 max par type/pharmacie) — pré-sélectionné à l'application
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   pharmacyId String
   pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
@@ -471,8 +477,8 @@ model WeekTemplate {
 /// Entrée d'un template de semaine — un créneau type
 model WeekTemplateEntry {
   id          String       @id @default(cuid())
-  dayOfWeek   Int                               // 0=Lundi, 1=Mardi, ..., 5=Samedi
-  timeSlot    String                             // "HH:MM"
+  dayOfWeek   Int // 0=Lundi, 1=Mardi, ..., 5=Samedi
+  timeSlot    String // "HH:MM"
   type        ScheduleType
   taskCode    TaskCode?
   absenceCode AbsenceCode?
@@ -499,8 +505,8 @@ model TeamEvent {
   /// Heure optionnelle "HH:MM" (null = journée / horaire non précisé).
   time        String?
   type        TeamEventType @default(AUTRE)
-  location    String?       // Lieu optionnel (resto, salle, labo…)
-  createdById String?       // User ayant créé (référence libre, best-effort)
+  location    String? // Lieu optionnel (resto, salle, labo…)
+  createdById String? // User ayant créé (référence libre, best-effort)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -516,17 +522,17 @@ model TeamEvent {
 /// Conversation — 1-1 (membres=2) ou groupe (membres>2). Toujours scopé par pharmacie.
 /// L'admin peut consulter toutes les conversations en lecture (modération harcèlement).
 model Conversation {
-  id          String   @id @default(cuid())
-  name        String?                              // Null pour 1-1, défini pour groupe
-  isGroup     Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt                  // Bumpé à chaque message → tri par récence
+  id        String   @id @default(cuid())
+  name      String? // Null pour 1-1, défini pour groupe
+  isGroup   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // Bumpé à chaque message → tri par récence
 
-  pharmacyId  String
-  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 
   createdById String
-  createdBy   User     @relation("conversationsCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy   User   @relation("conversationsCreated", fields: [createdById], references: [id], onDelete: Cascade)
 
   members  ConversationMember[]
   messages Message[]
@@ -537,9 +543,9 @@ model Conversation {
 
 /// Membre d'une conversation — table d'association User <-> Conversation
 model ConversationMember {
-  id             String       @id @default(cuid())
-  joinedAt       DateTime     @default(now())
-  lastReadAt     DateTime?                         // Pour calculer les unread
+  id         String    @id @default(cuid())
+  joinedAt   DateTime  @default(now())
+  lastReadAt DateTime? // Pour calculer les unread
 
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -555,16 +561,16 @@ model ConversationMember {
 /// Message dans une conversation
 model Message {
   id        String      @id @default(cuid())
-  body      String                                  // Texte du message (vide pour SWAP_REQUEST/SYSTEM)
+  body      String // Texte du message (vide pour SWAP_REQUEST/SYSTEM)
   type      MessageType @default(TEXT)
   createdAt DateTime    @default(now())
 
   // Pièce jointe optionnelle — image (PNG/JPG/WebP) stockée en base64
   // data URL. Limite 500KB max après compression côté client. Pour des
   // pièces lourdes (PDF, vidéo), on switchera vers Supabase Storage.
-  attachmentUrl  String?  @db.Text       // data:image/jpeg;base64,...
-  attachmentName String?                  // nom original (display only)
-  attachmentMime String?                  // image/png, image/jpeg, image/webp
+  attachmentUrl  String? @db.Text // data:image/jpeg;base64,...
+  attachmentName String? // nom original (display only)
+  attachmentMime String? // image/png, image/jpeg, image/webp
 
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -585,18 +591,18 @@ model Message {
 /// 2. La cible accepte (PENDING_ADMIN) ou refuse (REJECTED_TARGET)
 /// 3. L'admin valide (APPROVED → planning maj) ou refuse (REJECTED_ADMIN)
 model ShiftSwapRequest {
-  id        String     @id @default(cuid())
+  id        String   @id @default(cuid())
   // Plage concernée
-  date      DateTime   @db.Date                    // Jour de l'échange
-  startTime String?                                 // "HH:MM" (null si journée entière)
-  endTime   String?                                 // "HH:MM" (null si journée entière)
-  fullDay   Boolean    @default(false)
-  reason    String?                                 // Motif optionnel
+  date      DateTime @db.Date // Jour de l'échange
+  startTime String? // "HH:MM" (null si journée entière)
+  endTime   String? // "HH:MM" (null si journée entière)
+  fullDay   Boolean  @default(false)
+  reason    String? // Motif optionnel
 
   status        SwapStatus @default(PENDING_TARGET)
-  acceptedAt    DateTime?                          // Quand la cible accepte
-  reviewedAt    DateTime?                          // Quand l'admin tranche
-  rejectionNote String?                             // Motif de refus (cible ou admin)
+  acceptedAt    DateTime? // Quand la cible accepte
+  reviewedAt    DateTime? // Quand l'admin tranche
+  rejectionNote String? // Motif de refus (cible ou admin)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -631,14 +637,14 @@ model ShiftSwapRequest {
 /// (statut ACCOUNTED) et peut renseigner une `accountingNote` (ex: "OK déduit
 /// sur 12/24"). Visible par toute l'équipe.
 model PayrollNote {
-  id        String   @id @default(cuid())
+  id             String   @id @default(cuid())
   /// Date de l'événement concerné (pas la date de saisie — la date à laquelle
   /// le retard / absence / heure sup s'est produit).
-  date      DateTime @db.Date
+  date           DateTime @db.Date
   /// Texte principal saisi par l'auteur. Ex: "melanie 1h de retard".
-  infos     String
+  infos          String
   /// Motif optionnel. Ex: "problème garde son fils".
-  motif     String?
+  motif          String?
   /// Note ajoutée par l'admin lors de la comptabilisation. Ex: "OK déduit
   /// sur 12/24". Null tant que la note n'est pas comptabilisée.
   accountingNote String?
@@ -650,7 +656,7 @@ model PayrollNote {
   // Pièce jointe optionnelle — image en base64 data URL (max 500KB après
   // compression). Sert à joindre une preuve : capture d'écran de SMS
   // d'absence, scan d'arrêt maladie, etc.
-  attachmentUrl  String?  @db.Text
+  attachmentUrl  String? @db.Text
   attachmentName String?
   attachmentMime String?
 
@@ -694,19 +700,19 @@ enum GardeType {
 /// indemnités (cf. src/lib/gardes.ts). Seuls les employés PHARMACIEN sont
 /// affectables (contrôle applicatif).
 model Garde {
-  id           String      @id @default(cuid())
-  date         DateTime    @db.Date
-  type         GardeType
+  id               String      @id @default(cuid())
+  date             DateTime    @db.Date
+  type             GardeType
   // Majorations cumulées EN PLUS du type principal (ex. une NUIT un DIMANCHE).
   extraMajorations GardeType[]
-  note         String?
-  createdAt    DateTime    @default(now())
+  note             String?
+  createdAt        DateTime    @default(now())
 
   pharmacistId String
-  pharmacist   Employee    @relation(fields: [pharmacistId], references: [id], onDelete: Cascade)
+  pharmacist   Employee @relation(fields: [pharmacistId], references: [id], onDelete: Cascade)
 
-  pharmacyId   String
-  pharmacy     Pharmacy    @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 
   @@index([pharmacyId, date])
   @@index([pharmacistId])
@@ -718,25 +724,25 @@ model Garde {
 // horaire + poste optionnel). Les collaborateurs se positionnent (volunteers) ;
 // le responsable en assigne un → statut FILLED (et peut écrire le planning).
 enum OpenShiftStatus {
-  OPEN      // à pourvoir
-  FILLED    // pourvu (assigné à un collaborateur)
+  OPEN // à pourvoir
+  FILLED // pourvu (assigné à un collaborateur)
   CANCELLED // annulé
 }
 
 model OpenShift {
-  id         String          @id @default(cuid())
-  date       DateTime        @db.Date
-  startSlot  String          // "HH:MM" (inclus)
-  endSlot    String          // "HH:MM" (exclu)
-  taskCode   TaskCode?       // poste souhaité (optionnel)
-  note       String?
-  status     OpenShiftStatus @default(OPEN)
-  createdById String?        // User qui a créé le créneau (info)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id          String          @id @default(cuid())
+  date        DateTime        @db.Date
+  startSlot   String // "HH:MM" (inclus)
+  endSlot     String // "HH:MM" (exclu)
+  taskCode    TaskCode? // poste souhaité (optionnel)
+  note        String?
+  status      OpenShiftStatus @default(OPEN)
+  createdById String? // User qui a créé le créneau (info)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   pharmacyId String
-  pharmacy   Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 
   assignedEmployeeId String?
   assignedEmployee   Employee? @relation("OpenShiftAssigned", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
@@ -749,16 +755,58 @@ model OpenShift {
 }
 
 model OpenShiftVolunteer {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   openShiftId String
   openShift   OpenShift @relation(fields: [openShiftId], references: [id], onDelete: Cascade)
 
-  employeeId  String
-  employee    Employee  @relation("OpenShiftVolunteer", fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation("OpenShiftVolunteer", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([openShiftId, employeeId])
   @@index([employeeId])
   @@map("open_shift_volunteers")
+}
+
+// ─── Sondage express ───────────────────────────────────────────────
+// Un responsable pose une question à l'équipe (« Qui peut venir samedi ? »)
+// avec des choix ; chacun répond en un tap. Résultats visibles par l'admin.
+enum PollStatus {
+  OPEN
+  CLOSED
+}
+
+model Poll {
+  id          String     @id @default(cuid())
+  question    String
+  options     String[] // choix possibles (one-tap), ex. ["Oui","Non","Peut-être"]
+  status      PollStatus @default(OPEN)
+  createdById String?
+  createdAt   DateTime   @default(now())
+  closesAt    DateTime?
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  votes PollVote[]
+
+  @@index([pharmacyId, status])
+  @@map("polls")
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  choice    String
+  createdAt DateTime @default(now())
+
+  pollId String
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  employeeId String
+  employee   Employee @relation("PollVote", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, employeeId])
+  @@index([employeeId])
+  @@map("poll_votes")
 }

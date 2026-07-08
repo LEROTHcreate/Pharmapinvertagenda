@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   ClipboardList,
   TrendingUp,
+  Vote,
   ChevronRight,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
@@ -45,6 +46,7 @@ type NavKey =
   | "gardes"
   | "utilisateurs"
   | "creneaux"
+  | "sondages"
   | "pilotage"
   | "parametres";
 type NavItem = {
@@ -69,6 +71,7 @@ const NAV: NavItem[] = [
   // Créneaux à couvrir : visible par TOUS (les collaborateurs se positionnent) ;
   // création/assignation gatées manageur+ dans la page + serveur.
   { key: "creneaux", href: "/creneaux", label: "Créneaux à couvrir", icon: ClipboardList },
+  { key: "sondages", href: "/sondages", label: "Sondages", icon: Vote },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },

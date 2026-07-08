@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   ClipboardList,
   TrendingUp,
+  Vote,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
@@ -49,6 +50,7 @@ type NavKey =
   | "gardes"
   | "utilisateurs"
   | "creneaux"
+  | "sondages"
   | "pilotage"
   | "parametres";
 type NavItem = {
@@ -69,6 +71,7 @@ const NAV: NavItem[] = [
   { key: "employes", href: "/employes", label: "Équipe", icon: Users },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
   { key: "creneaux", href: "/creneaux", label: "Créneaux à couvrir", icon: ClipboardList },
+  { key: "sondages", href: "/sondages", label: "Sondages", icon: Vote },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
