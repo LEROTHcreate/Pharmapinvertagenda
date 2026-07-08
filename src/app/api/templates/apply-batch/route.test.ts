@@ -38,8 +38,8 @@ import { POST } from "./route";
 // ─── Helpers ──────────────────────────────────────────────────────────────
 const ADMIN_SESSION = { user: { role: "ADMIN", pharmacyId: "pharm-1", id: "u1" } };
 
-// 2026-06-29 = lundi, semaine ISO 27 (IMPAIRE → S1). On applique un seul
-// gabarit S1 sur 1 semaine : déterministe, pas de dépendance à Date.now.
+// 2026-06-29 = lundi, semaine ISO 27. On applique un seul gabarit S1 sur
+// 1 semaine (weeks=1 → la semaine affichée, quelle que soit sa parité) : déterministe, pas de dépendance à Date.now.
 const WEEK_START = "2026-06-29";
 
 function postRequest(body: unknown): Request {

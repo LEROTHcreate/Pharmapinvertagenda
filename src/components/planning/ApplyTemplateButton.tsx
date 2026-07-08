@@ -219,8 +219,11 @@ export function ApplyTemplateButton({
           <DialogHeader>
             <DialogTitle>Appliquer un ou deux gabarits</DialogTitle>
             <DialogDescription>
-              Choisis un gabarit S1, un S2, ou les deux. Les semaines impaires
-              recevront S1, les paires recevront S2 (selon le numéro ISO).
+              Choisis un gabarit S1, un S2, ou les deux. Sur plusieurs semaines,
+              les semaines paires reçoivent S1 et les impaires S2 (numéro ISO).
+              Avec « Cette semaine » et un seul gabarit, il s'applique à la
+              semaine affichée quelle que soit sa parité (S1 sur une semaine S2
+              possible, et inversement).
             </DialogDescription>
           </DialogHeader>
 

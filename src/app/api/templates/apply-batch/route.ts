@@ -103,26 +103,35 @@ async function applyBatch(req: Request) {
   const onlyS2 = !s1Tpl && !!s2Tpl;
   const both = !!s1Tpl && !!s2Tpl;
 
-  // On parcourt assez de semaines calendaires pour couvrir N semaines de
-  // chaque type — ou N consécutives si les deux gabarits sont fournis.
-  // Cap maximum (filet de sécurité) : 104 semaines calendaires (≈ 2 ans).
-  const maxScan = both ? weeks : weeks * 2 + 4;
-  let collected = 0;
-  for (let i = 0; i < maxScan && collected < weeks; i++) {
-    const monday = new Date(baseMonday);
-    monday.setUTCDate(monday.getUTCDate() + i * 7);
-    const isOdd = isoWeekNumber(monday) % 2 === 1; // S1 = impaire
+  if (weeks === 1) {
+    // « Cette semaine » : on applique sur la semaine AFFICHÉE, quelle que soit
+    // sa parité → permet d'appliquer un S1 sur une semaine S2 et inversement.
+    // Deux gabarits → on prend celui de la convention (paire = S1) ; un seul →
+    // on l'applique tel quel sur cette semaine.
+    const isS1Week = isoWeekNumber(baseMonday) % 2 === 0;
+    const tpl = both ? (isS1Week ? s1Tpl! : s2Tpl!) : (s1Tpl ?? s2Tpl)!;
+    targetMondays.push({ monday: baseMonday, tpl });
+  } else {
+    // Multi-semaines : alternance par parité ISO. Convention officine —
+    // semaine PAIRE = S1, IMPAIRE = S2 (cf. weekTypeFor, pilote l'en-tête).
+    // Cap maximum (filet de sécurité) : 104 semaines calendaires (≈ 2 ans).
+    const maxScan = both ? weeks : weeks * 2 + 4;
+    let collected = 0;
+    for (let i = 0; i < maxScan && collected < weeks; i++) {
+      const monday = new Date(baseMonday);
+      monday.setUTCDate(monday.getUTCDate() + i * 7);
+      const isS1Week = isoWeekNumber(monday) % 2 === 0; // PAIRE = S1
 
-    if (both) {
-      const tpl = isOdd ? s1Tpl! : s2Tpl!;
-      targetMondays.push({ monday, tpl });
-      collected++;
-    } else if (onlyS1 && isOdd) {
-      targetMondays.push({ monday, tpl: s1Tpl! });
-      collected++;
-    } else if (onlyS2 && !isOdd) {
-      targetMondays.push({ monday, tpl: s2Tpl! });
-      collected++;
+      if (both) {
+        targetMondays.push({ monday, tpl: isS1Week ? s1Tpl! : s2Tpl! });
+        collected++;
+      } else if (onlyS1 && isS1Week) {
+        targetMondays.push({ monday, tpl: s1Tpl! });
+        collected++;
+      } else if (onlyS2 && !isS1Week) {
+        targetMondays.push({ monday, tpl: s2Tpl! });
+        collected++;
+      }
     }
   }
 
