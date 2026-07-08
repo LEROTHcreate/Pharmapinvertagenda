@@ -3,7 +3,11 @@ import { z } from "zod";
 import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { isAdminLevel } from "@/lib/permissions";
-import { buildSystemPrompt, GROQ_MODEL } from "@/lib/assistant/knowledge";
+import {
+  buildSystemPrompt,
+  GROQ_MODEL,
+  ASSISTANT_MAINTENANCE_MESSAGE,
+} from "@/lib/assistant/knowledge";
 import {
   getToolsForUser,
   executeTool,
@@ -39,23 +43,43 @@ const input = z.object({
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
+/**
+ * Résultat d'un appel Groq :
+ *  - ok         : réponse exploitable.
+ *  - rate_limit : quota / capacité max atteint (HTTP 429 ou 503) → on affichera
+ *                 le message de maintenance préparé.
+ *  - error      : autre échec (réseau, 5xx, parse) → message générique.
+ */
+type GroqResult =
+  | {
+      status: "ok";
+      content: string | null;
+      toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+    }
+  | { status: "rate_limit" }
+  | { status: "error" };
+
 async function callGroq(
   apiKey: string,
   body: Record<string, unknown>
-): Promise<{
-  content: string | null;
-  toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }>;
-} | null> {
-  const res = await fetch(GROQ_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20000),
-  });
+): Promise<GroqResult> {
+  let res: Response;
+  try {
+    res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch {
+    return { status: "error" };
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     console.error("[assistant] Groq", res.status, detail.slice(0, 300));
-    return null;
+    // 429 = quota/rate limit dépassé ; 503 = service surchargé → maintenance.
+    if (res.status === 429 || res.status === 503) return { status: "rate_limit" };
+    return { status: "error" };
   }
   const data = (await res.json()) as {
     choices?: Array<{
@@ -75,7 +99,7 @@ async function callGroq(
     }
     return { id: tc.id, name: tc.function.name, args };
   });
-  return { content: m?.content ?? null, toolCalls };
+  return { status: "ok", content: m?.content ?? null, toolCalls };
 }
 
 async function POST__impl(req: Request) {
@@ -145,7 +169,11 @@ async function POST__impl(req: Request) {
       ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
     });
 
-    if (!first) {
+    // Groq saturé (quota/capacité max) → message de maintenance préparé.
+    if (first.status === "rate_limit") {
+      return NextResponse.json({ reply: ASSISTANT_MAINTENANCE_MESSAGE, maintenance: true });
+    }
+    if (first.status === "error") {
       return NextResponse.json({
         reply: "Désolé, je n'ai pas pu répondre à l'instant. Réessaie dans quelques secondes.",
       });
@@ -181,8 +209,10 @@ async function POST__impl(req: Request) {
         { role: "tool", tool_call_id: call.id, content: result.message },
       ],
     });
+    // Si Groq sature à la 2e passe, on a déjà le résultat de l'outil : on le
+    // renvoie tel quel (plus utile qu'un message de maintenance ici).
     return NextResponse.json({
-      reply: second?.content?.trim() || result.message,
+      reply: (second.status === "ok" && second.content?.trim()) || result.message,
     });
   } catch {
     return NextResponse.json({
