@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { toIsoDate } from "@/lib/planning-utils";
 import { TEAM_EVENT_LABEL } from "@/lib/team-event-style";
 import { sendEventReminderEmail } from "@/lib/email";
+import { sendPushToPharmacy } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,19 +61,31 @@ export async function GET(req: Request) {
     const emails = recipients.map((r) => r.email).filter(Boolean);
     if (emails.length === 0) continue;
 
+    const summary =
+      events.length === 1
+        ? events[0].title
+        : `${events.length} événements d'équipe`;
     try {
-      await sendEventReminderEmail({
-        to: emails,
-        pharmacyName: ph.name,
-        dateLabel,
-        url,
-        events: events.map((e) => ({
-          title: e.title,
-          timeLabel: e.time ? `${e.time}` : null,
-          location: e.location,
-          typeLabel: TEAM_EVENT_LABEL[e.type],
-        })),
-      });
+      await Promise.allSettled([
+        sendEventReminderEmail({
+          to: emails,
+          pharmacyName: ph.name,
+          dateLabel,
+          url,
+          events: events.map((e) => ({
+            title: e.title,
+            timeLabel: e.time ? `${e.time}` : null,
+            location: e.location,
+            typeLabel: TEAM_EVENT_LABEL[e.type],
+          })),
+        }),
+        sendPushToPharmacy(ph.id, {
+          title: "🗓️ Demain à l'officine",
+          body: summary,
+          url: "/accueil",
+          tag: "event-reminder",
+        }),
+      ]);
       sent++;
     } catch {
       /* best-effort */

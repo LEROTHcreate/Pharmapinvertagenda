@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ChangePasswordForm } from "@/components/profil/ChangePasswordForm";
 import { AvatarPicker } from "@/components/profil/AvatarPicker";
 import { CalendarSyncCard } from "@/components/profil/CalendarSyncCard";
+import { NotificationsCard } from "@/components/profil/NotificationsCard";
 import { TitulairePayModeCard } from "@/components/profil/TitulairePayModeCard";
 import { roleLabel, isAdminLevel } from "@/lib/permissions";
 import { startOfWeek, toIsoDate, weekDays } from "@/lib/planning-utils";
@@ -372,6 +373,9 @@ export default async function ProfilPage() {
       {employee && (
         <CalendarSyncCard initialToken={sessionUser?.icalToken ?? null} />
       )}
+
+      {/* ─── Notifications push (cet appareil) ──────────────────────── */}
+      <NotificationsCard />
 
       {/* ─── Avatar (perso médicament façon mascotte) ───────────────── */}
       <section className="rounded-2xl border border-border bg-card p-4">
