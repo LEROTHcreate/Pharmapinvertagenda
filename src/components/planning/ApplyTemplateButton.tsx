@@ -177,7 +177,31 @@ export function ApplyTemplateButton({
       if (data.s1Name) parts.push(`S1 « ${data.s1Name} »`);
       if (data.s2Name) parts.push(`S2 « ${data.s2Name} »`);
 
+      // Créneaux réellement NOUVEAUX vs préservés (compat : retombe sur `applied`).
+      const inserted: number = data.inserted ?? data.applied ?? 0;
+      const preserved: number = data.preserved ?? 0;
+
+      // Cas « rien de nouveau » : la semaine était déjà remplie et on n'a pas
+      // écrasé → on le dit clairement + on invite à cocher « Écraser ».
+      if (inserted === 0 && !overwrite) {
+        toast({
+          tone: "warning",
+          title: "Rien de nouveau à appliquer",
+          description:
+            preserved > 0
+              ? `La semaine est déjà remplie (${preserved} créneau${preserved > 1 ? "x" : ""} préservé${preserved > 1 ? "s" : ""}). Coche « Écraser les modifications existantes » pour la remplacer.`
+              : "Aucun créneau à poser (gabarit vide, collaborateurs inactifs ou absences).",
+          duration: 8000,
+        });
+        setOpen(false);
+        onApplied();
+        return;
+      }
+
       const detailsParts: string[] = [];
+      if (preserved > 0) {
+        detailsParts.push(`${preserved} préservé${preserved > 1 ? "s" : ""}`);
+      }
       if (data.skippedIncompatible > 0) {
         detailsParts.push(`${data.skippedIncompatible} ignoré(s) (rôle incompatible)`);
       }
@@ -195,8 +219,8 @@ export function ApplyTemplateButton({
             ? "warning"
             : "success",
         title: `Gabarit${parts.length > 1 ? "s" : ""} appliqué${parts.length > 1 ? "s" : ""}`,
-        description: `${parts.join(" + ")} sur ${data.weeksApplied} semaine${data.weeksApplied > 1 ? "s" : ""} · ${data.applied} créneaux${detailsParts.length > 0 ? " · " + detailsParts.join(" · ") : ""}`,
-        duration: data.skippedAbsence > 0 ? 8000 : 4000,
+        description: `${parts.join(" + ")} sur ${data.weeksApplied} semaine${data.weeksApplied > 1 ? "s" : ""} · ${inserted} nouveau${inserted > 1 ? "x" : ""} créneau${inserted > 1 ? "x" : ""}${detailsParts.length > 0 ? " · " + detailsParts.join(" · ") : ""}`,
+        duration: data.skippedAbsence > 0 || preserved > 0 ? 8000 : 4000,
       });
       setOpen(false);
       onApplied();
