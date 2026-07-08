@@ -26,6 +26,7 @@ import { WeatherChip } from "@/components/accueil/WeatherChip";
 import { AccueilDesktop } from "@/components/accueil/AccueilDesktop";
 import { canEditPlanning } from "@/lib/permissions";
 import type { AccueilData } from "@/components/accueil/types";
+import { TodayEventCelebration } from "@/components/team/EventCelebration";
 
 /**
  * Page Accueil — tableau de bord.
@@ -58,6 +59,7 @@ export function AccueilView(data: AccueilData) {
     pendingUsers,
     pendingSwaps,
     unreadMessages,
+    todayEvents,
   } = data;
 
   const isManager = canEditPlanning(role);
@@ -115,6 +117,9 @@ export function AccueilView(data: AccueilData) {
           </div>
           <WeatherChip className="mt-1 shrink-0" />
         </header>
+
+        {/* Fête « jour d'événement » — confettis + bandeau si un moment d'équipe aujourd'hui */}
+        {todayEvents.length > 0 && <TodayEventCelebration events={todayEvents} />}
 
         {/* Checklist de démarrage (manageur+, tant que non configuré) */}
         {isManager && <OnboardingChecklist state={onboarding} />}

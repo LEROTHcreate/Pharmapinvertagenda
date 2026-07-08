@@ -3,6 +3,7 @@
 import type { UserRole } from "@prisma/client";
 import type { NewsItem } from "@/lib/pharmacy-news";
 import type { OnboardingState } from "@/components/accueil/OnboardingChecklist";
+import type { TeamEventType } from "@/validators/team-event";
 
 export type PersonRef = { id: string; name: string; color: string };
 export type AbsentRef = PersonRef & { label: string };
@@ -49,4 +50,6 @@ export type AccueilData = {
   pendingUsers: number;
   pendingSwaps: number;
   unreadMessages: number;
+  /** Événements d'équipe qui ont lieu AUJOURD'HUI (fête + confettis). */
+  todayEvents: { title: string; type: TeamEventType }[];
 };

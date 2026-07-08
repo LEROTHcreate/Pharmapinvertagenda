@@ -35,6 +35,8 @@ import { holidaysIndexForDates } from "@/lib/holidays-fr";
 import type { AbsenceConflict } from "@/components/planning/AbsenceConflictDialog";
 import { usePlanningStore } from "@/store/planning-store";
 import { entryKey, parseCellKey } from "@/lib/cell-keys";
+import { TodayEventCelebration } from "@/components/team/EventCelebration";
+import type { TeamEventType } from "@/validators/team-event";
 
 // Modals lourds chargés à la demande (ouverture seulement) → allègent le
 // bundle initial de /planning + accélèrent l'hydratation de la page.
@@ -178,6 +180,7 @@ export function PlanningView({
   role,
   minStaff,
   currentEmployeeId,
+  todayEvents = [],
 }: {
   initialWeekStart: string;
   /** Jour pré-sélectionné (0 = lundi … 5 = samedi). Si null, "aujourd'hui". */
@@ -188,6 +191,8 @@ export function PlanningView({
   minStaff: number;
   /** ID de l'Employee lié au compte connecté (null si admin sans liaison) */
   currentEmployeeId?: string | null;
+  /** Événements d'équipe du JOUR → petite fête en bas du planning. */
+  todayEvents?: { title: string; type: TeamEventType }[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -1955,6 +1960,11 @@ export function PlanningView({
             fitRowHeight={fit?.rowHeight}
           />
         </div>
+      )}
+
+      {/* Fête « jour d'événement » — confettis + bandeau en bas du planning */}
+      {todayEvents.length > 0 && (
+        <TodayEventCelebration events={todayEvents} className="mt-2" />
       )}
 
       {/* (Le FAB "+" de création rapide d'absence a été retiré sur mobile :
