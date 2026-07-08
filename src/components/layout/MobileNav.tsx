@@ -61,7 +61,8 @@ const NAV: NavItem[] = [
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true, manager: true },
-  { key: "employes", href: "/employes", label: "Équipe", icon: Users, adminOnly: true, manager: true },
+  // Équipe : visible par TOUS (lecture) ; édition réservée aux titulaires.
+  { key: "employes", href: "/employes", label: "Équipe", icon: Users },
   { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },

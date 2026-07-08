@@ -96,12 +96,15 @@ export function EmployeesTable({
   employees,
   roleByEmployeeId,
   currentUserRole,
+  canEdit = true,
 }: {
   employees: EmployeeRowData[];
   /** Rôle du compte relié à chaque employé (clé = employeeId). */
   roleByEmployeeId?: Record<string, RoleInfo>;
   /** Rôle de l'utilisateur courant — détermine ce qu'il peut attribuer. */
   currentUserRole?: UserRole;
+  /** Titulaire : peut ajouter/modifier/supprimer + voir le RH. Sinon lecture seule. */
+  canEdit?: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = React.useState<DialogState>(null);
@@ -184,12 +187,14 @@ export function EmployeesTable({
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
-        <Button onClick={() => setDialog({ mode: "create" })}>
-          <Plus />
-          Nouveau collaborateur
-        </Button>
-      </div>
+      {canEdit && (
+        <div className="mb-4 flex justify-end">
+          <Button onClick={() => setDialog({ mode: "create" })}>
+            <Plus />
+            Nouveau collaborateur
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
@@ -208,14 +213,14 @@ export function EmployeesTable({
               <th className="px-3 py-2 text-right font-medium">Hebdo</th>
               <th className="px-3 py-2 text-right font-medium">Ordre</th>
               <th className="px-3 py-2 text-left font-medium">État</th>
-              <th className="w-1 px-3 py-2"></th>
+              {canEdit && <th className="w-1 px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody className="divide-y">
             {employees.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={canEdit ? 8 : 7}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   Aucun collaborateur. Cliquez sur « Nouveau collaborateur » pour commencer.
@@ -244,7 +249,7 @@ export function EmployeesTable({
                     <div className="font-medium">
                       {e.lastName.toUpperCase()} {e.firstName}
                     </div>
-                    {(e.contractType !== "CDI" || e.departureDate) && (
+                    {canEdit && (e.contractType !== "CDI" || e.departureDate) && (
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                         {e.contractType !== "CDI" && (
                           <span>
@@ -288,40 +293,42 @@ export function EmployeesTable({
                       <Badge variant="secondary">Inactif</Badge>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Actions"
-                          disabled={isRowPending}
-                        >
-                          <MoreHorizontal />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() => setDialog({ mode: "edit", employee: e })}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Modifier
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => handleToggle(e)}>
-                          <Power className="h-4 w-4" />
-                          {e.isActive ? "Désactiver" : "Réactiver"}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onSelect={() => handleDelete(e)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Supprimer
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
+                  {canEdit && (
+                    <td className="px-3 py-2 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Actions"
+                            disabled={isRowPending}
+                          >
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onSelect={() => setDialog({ mode: "edit", employee: e })}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Modifier
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleToggle(e)}>
+                            <Power className="h-4 w-4" />
+                            {e.isActive ? "Désactiver" : "Réactiver"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => handleDelete(e)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Supprimer
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  )}
                 </tr>
               );
             })}

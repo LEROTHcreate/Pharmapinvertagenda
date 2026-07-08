@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { canManageTeam } from "@/lib/permissions";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { teamEventInput } from "@/validators/team-event";
 
@@ -13,9 +13,10 @@ async function requireManager() {
   if (!session?.user) {
     return { ok: false as const, error: "Non authentifié" };
   }
-  // Titulaires (ADMIN) + Manageurs peuvent gérer les événements d'équipe.
-  if (!canManageTeam(session.user.role)) {
-    return { ok: false as const, error: "Réservé aux titulaires et manageurs" };
+  // Édition des événements = TITULAIRES uniquement (page Équipe = lecture seule
+  // pour les manageurs et collaborateurs).
+  if (!isAdminLevel(session.user.role)) {
+    return { ok: false as const, error: "Réservé aux titulaires" };
   }
   return {
     ok: true as const,
