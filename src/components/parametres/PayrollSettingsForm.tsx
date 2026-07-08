@@ -16,6 +16,8 @@ type Initial = {
   contribEmployeePct: number | null;
   /** Taux patronal en POURCENTAGE (ex: 42), null = défaut moteur. */
   contribEmployerPct: number | null;
+  /** Budget annuel de masse salariale (coût employeur total, €), null = non défini. */
+  annualBudget: number | null;
 };
 
 const REGIONS: Region[] = [
@@ -48,6 +50,9 @@ export function PayrollSettingsForm({ initial }: { initial: Initial }) {
   const [empr, setEmpr] = useState<string>(
     initial.contribEmployerPct != null ? String(initial.contribEmployerPct) : ""
   );
+  const [budget, setBudget] = useState<string>(
+    initial.annualBudget != null ? String(initial.annualBudget) : ""
+  );
   const [error, setError] = useState<string | null>(null);
 
   function parsePct(raw: string): number | null | "invalid" {
@@ -67,12 +72,24 @@ export function PayrollSettingsForm({ initial }: { initial: Initial }) {
       setError("Les taux doivent être des pourcentages entre 0 et 100.");
       return;
     }
+    // Budget : nombre ≥ 0 (on retire espaces / séparateurs de milliers), ou null.
+    const budgetRaw = budget.replace(/[\s ]/g, "").replace(",", ".");
+    let budgetVal: number | null = null;
+    if (budgetRaw !== "") {
+      const n = Number(budgetRaw);
+      if (Number.isNaN(n) || n < 0) {
+        setError("Le budget annuel doit être un montant positif.");
+        return;
+      }
+      budgetVal = n;
+    }
     startTransition(async () => {
       const res = await updatePayrollSettings({
         payrollRegion: region,
         // Pourcentage → fraction (22 → 0.22). Null = défaut moteur.
         payrollContribEmployee: empVal === null ? null : empVal / 100,
         payrollContribEmployer: emprVal === null ? null : emprVal / 100,
+        payrollAnnualBudget: budgetVal,
       });
       if (!res.ok) {
         setError(res.error);
@@ -152,6 +169,26 @@ export function PayrollSettingsForm({ initial }: { initial: Initial }) {
             ({DEFAULT_EMPLOYEE_PCT} % / {DEFAULT_EMPLOYER_PCT} %). Ce sont des
             estimations — les taux exacts dépendent du statut et de la convention.
           </p>
+
+          <div className="space-y-1.5 border-t border-border/60 pt-3.5">
+            <Label htmlFor="annualBudget">
+              Budget annuel de masse salariale (€)
+            </Label>
+            <Input
+              id="annualBudget"
+              inputMode="numeric"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              disabled={isPending}
+              placeholder="Ex : 720000"
+              className="max-w-[200px]"
+            />
+            <p className="text-[11.5px] text-zinc-500 leading-relaxed">
+              Coût employeur total visé sur l&apos;année. Sert au prévisionnel de
+              la page Rémunération (projection au rythme du mois vs budget +
+              alerte de dérive). Laisser vide si pas de budget.
+            </p>
+          </div>
         </div>
       </div>
 

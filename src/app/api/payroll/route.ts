@@ -108,6 +108,7 @@ async function GET__impl(req: Request) {
         payrollRegion: true,
         payrollContribEmployee: true,
         payrollContribEmployer: true,
+        payrollAnnualBudget: true,
       },
     }),
     prisma.monthlyRevenue.findUnique({
@@ -191,6 +192,7 @@ async function GET__impl(req: Request) {
   return NextResponse.json({
     month: parsed.data.month,
     region: pharmacy?.payrollRegion ?? "NATIONAL",
+    annualBudget: pharmacy?.payrollAnnualBudget ?? null,
     revenue: revenue ?? null,
     lines,
     totals: {
