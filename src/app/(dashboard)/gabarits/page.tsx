@@ -32,19 +32,43 @@ function buildPreview(
   return grid;
 }
 
+/** "08:30" → "8h30" (affichage FR). */
+function frTime(slot: string): string {
+  const [h, m] = slot.split(":");
+  return `${Number(h)}h${m}`;
+}
+
+/** Ajoute 30 min à un créneau "HH:MM" → "HH:MM" (heure de fin du créneau). */
+function slotEnd(slot: string): string {
+  const [h, m] = slot.split(":").map(Number);
+  const t = h * 60 + m + 30;
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
 /**
- * Compte les créneaux OCCUPÉS mais sous l'effectif minimum (0 < effectif <
- * minStaff). On ignore les créneaux à 0 (hors ouverture, normaux) pour ne pas
- * générer de fausses alertes sur les heures non travaillées.
+ * Amplitude horaire du gabarit : du PREMIER au DERNIER créneau réellement
+ * travaillé (tous jours confondus). C'est une info neutre et fiable — elle ne
+ * dépend d'aucun horaire d'ouverture (contrairement à un « sous-effectif » qui
+ * comptait à tort les créneaux de préparation avant ouverture).
  */
-function countUnderstaffed(preview: number[][], minStaff: number): number {
-  let n = 0;
+function amplitude(preview: number[][]): { start: string; end: string } | null {
+  let min = Infinity;
+  let max = -1;
   for (const row of preview) {
-    for (const v of row) {
-      if (v > 0 && v < minStaff) n++;
+    for (let i = 0; i < row.length; i++) {
+      if (row[i] > 0) {
+        if (i < min) min = i;
+        if (i > max) max = i;
+      }
     }
   }
-  return n;
+  if (max < 0) return null;
+  return { start: frTime(TIME_SLOTS[min]), end: frTime(slotEnd(TIME_SLOTS[max])) };
+}
+
+/** Nombre de jours (0-6) où au moins un collaborateur travaille. */
+function daysCovered(preview: number[][]): number {
+  return preview.filter((row) => row.some((v) => v > 0)).length;
 }
 
 export default async function GabaritsPage() {
@@ -52,34 +76,27 @@ export default async function GabaritsPage() {
   if (!session?.user) redirect("/login");
   if (!canApplyTemplates(session.user.role)) redirect("/planning");
 
-  const [pharmacy, templates] = await Promise.all([
-    prisma.pharmacy.findUnique({
-      where: { id: session.user.pharmacyId },
-      select: { minStaff: true },
-    }),
-    prisma.weekTemplate.findMany({
-      where: { pharmacyId: session.user.pharmacyId },
-      orderBy: [
-        { isDefault: "desc" },
-        { category: "asc" },
-        { weekType: "asc" },
-        { name: "asc" },
-      ],
-      select: {
-        id: true,
-        name: true,
-        weekType: true,
-        category: true,
-        description: true,
-        isDefault: true,
-        updatedAt: true,
-        entries: {
-          select: { employeeId: true, dayOfWeek: true, timeSlot: true, type: true },
-        },
+  const templates = await prisma.weekTemplate.findMany({
+    where: { pharmacyId: session.user.pharmacyId },
+    orderBy: [
+      { isDefault: "desc" },
+      { category: "asc" },
+      { weekType: "asc" },
+      { name: "asc" },
+    ],
+    select: {
+      id: true,
+      name: true,
+      weekType: true,
+      category: true,
+      description: true,
+      isDefault: true,
+      updatedAt: true,
+      entries: {
+        select: { employeeId: true, dayOfWeek: true, timeSlot: true, type: true },
       },
-    }),
-  ]);
-  const minStaff = pharmacy?.minStaff ?? 4;
+    },
+  });
 
   const rows: GabaritRow[] = templates.map((t) => {
     const preview = buildPreview(t.entries);
@@ -97,7 +114,8 @@ export default async function GabaritsPage() {
       // 1 créneau = 30 min = 0,5 h ; on ne compte que les TÂCHES (pas les absences).
       weeklyHours: taskEntries.length * 0.5,
       peopleCount: new Set(taskEntries.map((e) => e.employeeId)).size,
-      understaffedSlots: countUnderstaffed(preview, minStaff),
+      amplitude: amplitude(preview),
+      daysCovered: daysCovered(preview),
     };
   });
 

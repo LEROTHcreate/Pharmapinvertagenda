@@ -29,8 +29,10 @@ export type AccueilData = {
   role: UserRole;
   /** Accès au module Rémunération (titulaire autorisé / super-admin). */
   canViewPayroll: boolean;
-  /** Actu pharmacie (barre latérale « Actus »). */
+  /** Actu pharmacie généraliste (colonne « Actus pharmacie »). */
   news: NewsItem[];
+  /** Ruptures de stock & rappels de lots (colonne « Ruptures & rappels »). */
+  alerts: NewsItem[];
   /** État de configuration de l'officine (checklist de démarrage). */
   onboarding: OnboardingState;
   myDay: { hours: number; blocks: DayBlock[] } | null;

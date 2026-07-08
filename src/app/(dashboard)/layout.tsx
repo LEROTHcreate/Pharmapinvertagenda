@@ -18,6 +18,7 @@ import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { AssistantBubble } from "@/components/assistant/AssistantBubble";
 import { CommandPalette } from "@/components/command/CommandPalette";
+import { DailyNoticeBanner } from "@/components/notice/DailyNoticeBanner";
 
 /**
  * Surcharge dynamique du favicon : sur les pages connectées, on affiche le
@@ -142,6 +143,10 @@ export default async function DashboardLayout({
           "pb-[calc(60px+env(safe-area-inset-bottom,0px))] md:pb-0"
         )}
       >
+        {/* Mémo du jour / consigne d'officine — bandeau app-wide (vide → caché). */}
+        <div className="px-3 md:px-4 lg:px-6 pt-3 empty:hidden">
+          <DailyNoticeBanner userRole={session.user.role} />
+        </div>
         {/* Fade-up subtil à chaque navigation entre routes */}
         <PageTransition>{children}</PageTransition>
       </main>

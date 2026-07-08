@@ -8,8 +8,10 @@ import {
   CalendarHeart,
   CalendarOff,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock,
+  RotateCcw,
   ExternalLink,
   Flame,
   Lightbulb,
@@ -82,6 +84,8 @@ export type OvertimeItem = {
 export type InfosData = {
   isAdmin: boolean;
   weekLabel: string;
+  /** Décalage de la semaine consultée vs la semaine courante (0 = cette semaine). */
+  weekOffset: number;
   coverageWarnings: CoverageWarning[];
   ccnViolations: CcnViolation[];
   absentsByDay: AbsentsDay[];
@@ -115,6 +119,66 @@ function daysUntilLabel(days: number): string {
   return days <= 0 ? "aujourd'hui" : days === 1 ? "demain" : `dans ${days} j`;
 }
 
+// Bornes de navigation (doivent rester alignées avec la page serveur).
+const WEEK_MIN = -4;
+const WEEK_MAX = 26;
+
+/** Libellé relatif de la semaine consultée (« cette semaine », « dans 3 sem. »). */
+function weekOffsetLabel(offset: number): string {
+  if (offset === 0) return "cette semaine";
+  if (offset === 1) return "semaine prochaine";
+  if (offset === -1) return "semaine dernière";
+  if (offset > 1) return `dans ${offset} sem.`;
+  return `il y a ${-offset} sem.`;
+}
+
+/**
+ * Navigateur de semaine — permet d'anticiper : voir en amont les conseils,
+ * absents, souhaits et alertes de la semaine (ou du mois) suivante. Simple
+ * jeu de liens `?w=` re-rendus côté serveur (la page est `force-dynamic`).
+ */
+function WeekNav({ offset }: { offset: number }) {
+  const href = (o: number) => (o === 0 ? "/infos" : `/infos?w=${o}`);
+  const canPrev = offset > WEEK_MIN;
+  const canNext = offset < WEEK_MAX;
+  const arrow =
+    "flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+  const disabled = "pointer-events-none opacity-40";
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      {offset !== 0 && (
+        <Link
+          href="/infos"
+          className="mr-0.5 inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Aujourd&apos;hui
+        </Link>
+      )}
+      <Link
+        href={href(offset - 1)}
+        aria-label="Semaine précédente"
+        className={cn(arrow, !canPrev && disabled)}
+        aria-disabled={!canPrev}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </Link>
+      <span className="min-w-[8.5rem] text-center text-[12.5px] font-medium capitalize text-foreground">
+        {weekOffsetLabel(offset)}
+      </span>
+      <Link
+        href={href(offset + 1)}
+        aria-label="Semaine suivante"
+        className={cn(arrow, !canNext && disabled)}
+        aria-disabled={!canNext}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </Link>
+    </div>
+  );
+}
+
 /**
  * Centre « Infos & conseils » : regroupe en une seule page tout ce qui était
  * auparavant éparpillé (ampoule du planning, panneau statut équipe, badges).
@@ -129,6 +193,7 @@ export function InfosView(data: InfosData) {
   const {
     isAdmin,
     weekLabel,
+    weekOffset,
     coverageWarnings,
     ccnViolations,
     absentsByDay,
@@ -143,6 +208,10 @@ export function InfosView(data: InfosData) {
     alerts,
   } = data;
 
+  // Libellé relatif de la semaine consultée, réutilisé dans les titres/sous-
+  // titres pour ne pas dire « cette semaine » quand on consulte une semaine future.
+  const wk = weekOffsetLabel(weekOffset);
+
   const totalAbsents = absentsByDay.reduce((n, d) => n + d.people.length, 0);
   const urgentCount = isAdmin
     ? pending.absences +
@@ -154,7 +223,7 @@ export function InfosView(data: InfosData) {
   return (
     <div className="p-3 md:p-4 lg:p-6 pb-16">
       {/* En-tête (pleine largeur) */}
-      <header className="mb-5 flex items-start gap-3">
+      <header className="mb-5 flex flex-wrap items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
           <Lightbulb className="h-5 w-5" />
         </span>
@@ -163,8 +232,13 @@ export function InfosView(data: InfosData) {
             Infos &amp; conseils
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Tout ce qu&apos;il faut anticiper, réuni ici · {weekLabel}
+            Tout ce qu&apos;il faut anticiper, réuni ici ·{" "}
+            <span className="capitalize">{weekLabel}</span>
           </p>
+        </div>
+        {/* Navigation semaine — anticiper les semaines/mois suivants. */}
+        <div className="ml-auto mt-0.5">
+          <WeekNav offset={weekOffset} />
         </div>
       </header>
 
@@ -187,7 +261,7 @@ export function InfosView(data: InfosData) {
             <EmptyRow
               icon={<CheckCircle2 className="h-5 w-5" />}
               title="Tout est sous contrôle"
-              subtitle="Aucune validation en attente ni manquement de couverture cette semaine."
+              subtitle={`Aucune validation en attente ni manquement de couverture ${wk}.`}
             />
           ) : (
             <div className="space-y-2">
@@ -223,9 +297,9 @@ export function InfosView(data: InfosData) {
         </Section>
       )}
 
-      {/* ─── 2. Absents cette semaine ─────────────────────────────── */}
+      {/* ─── 2. Absents (semaine consultée) ───────────────────────── */}
       <Section
-        title="Absents cette semaine"
+        title={`Absents ${wk}`}
         icon={<Users className="h-4 w-4" />}
         count={totalAbsents}
         tone="slate"
@@ -234,7 +308,7 @@ export function InfosView(data: InfosData) {
           <EmptyRow
             icon={<CheckCircle2 className="h-5 w-5" />}
             title="Équipe au complet"
-            subtitle="Personne d'absent sur la semaine en cours."
+            subtitle={`Personne d'absent ${wk}.`}
           />
         ) : (
           <ul className="space-y-2">
@@ -483,7 +557,7 @@ export function InfosView(data: InfosData) {
       {/* ─── Heures sup de la semaine (admin) ──────────────────────── */}
       {isAdmin && (
         <Section
-          title="Heures sup cette semaine"
+          title={`Heures sup ${wk}`}
           icon={<Clock className="h-4 w-4" />}
           count={overtime.length}
           tone="amber"
@@ -492,7 +566,7 @@ export function InfosView(data: InfosData) {
             <EmptyRow
               icon={<CheckCircle2 className="h-5 w-5" />}
               title="Rien à signaler"
-              subtitle="Aucun salarié ne dépasse son contrat sur la semaine en cours."
+              subtitle={`Aucun salarié ne dépasse son contrat ${wk}.`}
             />
           ) : (
             <ul className="space-y-2">

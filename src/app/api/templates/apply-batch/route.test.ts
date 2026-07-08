@@ -15,7 +15,7 @@ const { mockAuth, prismaMock, prismaDirectMock, revalidateTagMock } = vi.hoisted
       absenceRequest: { findMany: vi.fn() },
     },
     prismaDirectMock: {
-      scheduleEntry: { deleteMany: vi.fn(), createMany: vi.fn() },
+      scheduleEntry: { deleteMany: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
       absenceRequest: { deleteMany: vi.fn() },
     },
     revalidateTagMock: vi.fn(),
@@ -98,6 +98,8 @@ beforeEach(() => {
   prismaMock.absenceRequest.findMany.mockResolvedValue([]);
   prismaDirectMock.scheduleEntry.deleteMany.mockResolvedValue({ count: 0 });
   prismaDirectMock.scheduleEntry.createMany.mockResolvedValue({ count: 0 });
+  // Comptage nouveaux/préservés : par défaut aucune collision (semaine vide).
+  prismaDirectMock.scheduleEntry.findMany.mockResolvedValue([]);
   prismaDirectMock.absenceRequest.deleteMany.mockResolvedValue({ count: 0 });
 });
 
@@ -200,6 +202,25 @@ describe("POST /api/templates/apply-batch", () => {
       });
       // dayOfWeek 0 = lundi = WEEK_START
       expect(createArg.data[0].date.toISOString().slice(0, 10)).toBe(WEEK_START);
+    });
+
+    it("compte les créneaux PRÉSERVÉS (déjà présents, sans écraser)", async () => {
+      prismaMock.weekTemplate.findFirst.mockResolvedValue(
+        s1Template([tplEntry({ taskCode: "COMPTOIR" })])
+      );
+      // La case cible est DÉJÀ occupée → préservée (skipDuplicates), pas remplacée.
+      prismaDirectMock.scheduleEntry.findMany.mockResolvedValue([
+        {
+          employeeId: "emp-1",
+          date: new Date(`${WEEK_START}T00:00:00Z`),
+          timeSlot: "08:30",
+        },
+      ]);
+      const res = await POST(postRequest(batchBody()));
+      const json = await res.json();
+      expect(json.applied).toBe(1); // tenté
+      expect(json.preserved).toBe(1); // déjà présent
+      expect(json.inserted).toBe(0); // rien de nouveau
     });
 
     it("skippedAbsence : un congé approuvé prime sur le gabarit + remonte dans absenceConflicts", async () => {

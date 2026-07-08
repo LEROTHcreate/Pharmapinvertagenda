@@ -67,24 +67,43 @@ function labelDayMonth(iso: string): string {
  * fériés à venir). Les calculs lourds (analyse de couverture) vivent ICI et
  * ne tournent donc plus à chaque modification du planning.
  */
-export default async function InfosPage() {
+export default async function InfosPage({
+  searchParams,
+}: {
+  searchParams?: { w?: string };
+}) {
   const session = await auth();
   if (!session?.user) return null;
 
   const isAdmin = session.user.role === "ADMIN";
   const pharmacyId = session.user.pharmacyId;
 
-  const monday = startOfWeek(new Date());
+  // Navigation par semaine : `?w` = décalage en semaines vs la semaine courante
+  // (0 = cette semaine, 1 = semaine prochaine, négatif = passé récent). Borné
+  // pour rester pertinent et éviter d'aller trop loin.
+  const WEEK_MIN = -4;
+  const WEEK_MAX = 26;
+  const rawW = Number.parseInt(searchParams?.w ?? "0", 10);
+  const weekOffset = Number.isFinite(rawW)
+    ? Math.min(WEEK_MAX, Math.max(WEEK_MIN, rawW))
+    : 0;
+
+  const monday = addDays(startOfWeek(new Date()), weekOffset * 7);
   const weekStartIso = toIsoDate(monday);
   // Lundi → samedi (l'officine est fermée le dimanche).
   const weekDates = Array.from({ length: 6 }, (_, i) =>
     toIsoDate(addDays(monday, i))
   );
-  const todayIso = toIsoDate(new Date());
-  // Fenêtre « à venir » : de ce matin (minuit UTC) à J+14, pour les souhaits de
-  // dispo et les gardes. Les colonnes sont en @db.Date → on compare en UTC.
-  const todayStart = new Date(`${todayIso}T00:00:00.000Z`);
-  const horizon = new Date(todayStart);
+
+  // Date d'ancrage des fenêtres « à venir » (conseils saisonniers, ponts &
+  // fériés, souhaits, gardes, anniversaires) : aujourd'hui pour la semaine
+  // courante, sinon le lundi de la semaine consultée → on anticipe « comme si
+  // on y était » (voir les conseils de la semaine/du mois d'après en amont).
+  const anchorIso = weekOffset === 0 ? toIsoDate(new Date()) : weekStartIso;
+  // Fenêtre « à venir » : de l'ancrage (minuit UTC) à J+14, pour les souhaits
+  // de dispo et les gardes. Les colonnes sont en @db.Date → on compare en UTC.
+  const anchorStart = new Date(`${anchorIso}T00:00:00.000Z`);
+  const horizon = new Date(anchorStart);
   horizon.setUTCDate(horizon.getUTCDate() + 14);
 
   // Actu pharmacie (flux externes, cachés 1 h) — lancés en parallèle des
@@ -127,7 +146,7 @@ export default async function InfosPage() {
       // Souhaits de dispo à venir — utiles à l'admin qui bâtit le planning.
       isAdmin
         ? prisma.availabilityWish.findMany({
-            where: { pharmacyId, date: { gte: todayStart, lte: horizon } },
+            where: { pharmacyId, date: { gte: anchorStart, lte: horizon } },
             orderBy: { date: "asc" },
             take: 12,
             select: {
@@ -141,7 +160,7 @@ export default async function InfosPage() {
         : Promise.resolve([]),
       // Prochaines gardes (visible par tous : savoir qui est de garde).
       prisma.garde.findMany({
-        where: { pharmacyId, date: { gte: todayStart } },
+        where: { pharmacyId, date: { gte: anchorStart } },
         orderBy: { date: "asc" },
         take: 4,
         select: {
@@ -211,17 +230,17 @@ export default async function InfosPage() {
 
   // ─── Conseils : ponts / veilles de fériés + prévisions saisonnières ──
   const tips = [
-    ...upcomingTips(todayIso, 7),
-    ...seasonalTips(todayIso, 21).slice(0, 5),
+    ...upcomingTips(anchorIso, 7),
+    ...seasonalTips(anchorIso, 21).slice(0, 5),
   ];
 
   // ─── Prochains jours fériés (officine fermée) ────────────────────
-  const year = Number(todayIso.slice(0, 4));
+  const year = Number(anchorIso.slice(0, 4));
   const holidays: UpcomingHoliday[] = [
     ...getHolidaysFR(year),
     ...getHolidaysFR(year + 1),
   ]
-    .filter((h) => h.date >= todayIso)
+    .filter((h) => h.date >= anchorIso)
     .slice(0, 6)
     .map((h) => ({
       date: h.date,
@@ -233,7 +252,7 @@ export default async function InfosPage() {
       }),
       daysUntil: Math.round(
         (new Date(`${h.date}T00:00:00Z`).getTime() -
-          new Date(`${todayIso}T00:00:00Z`).getTime()) /
+          new Date(`${anchorIso}T00:00:00Z`).getTime()) /
           86400000
       ),
     }));
@@ -245,7 +264,7 @@ export default async function InfosPage() {
       id: w.id,
       employeeName: `${w.employee.firstName} ${w.employee.lastName.charAt(0)}.`,
       dateLabel: labelDayMonth(iso),
-      daysUntil: daysBetweenIso(todayIso, iso),
+      daysUntil: daysBetweenIso(anchorIso, iso),
       kind: w.kind,
       note: w.note,
     };
@@ -258,7 +277,7 @@ export default async function InfosPage() {
       id: g.id,
       pharmacistName: `${g.pharmacist.firstName} ${g.pharmacist.lastName.charAt(0)}.`,
       dateLabel: labelDayMonth(iso),
-      daysUntil: daysBetweenIso(todayIso, iso),
+      daysUntil: daysBetweenIso(anchorIso, iso),
       typeLabel: GARDE_TYPE_LABELS[g.type],
     };
   });
@@ -269,16 +288,16 @@ export default async function InfosPage() {
       if (!emp.hireDate) return [];
       const hireIso = toIsoDate(emp.hireDate);
       const [hy, hm, hd] = hireIso.split("-").map(Number);
-      const todayYear = Number(todayIso.slice(0, 4));
+      const todayYear = Number(anchorIso.slice(0, 4));
       // Anniversaire de cette année ; si déjà passé, celui de l'an prochain.
       let year = todayYear;
       let annivIso = `${year}-${pad2(hm)}-${pad2(hd)}`;
-      if (annivIso < todayIso) {
+      if (annivIso < anchorIso) {
         year = todayYear + 1;
         annivIso = `${year}-${pad2(hm)}-${pad2(hd)}`;
       }
       const years = year - hy;
-      const daysUntil = daysBetweenIso(todayIso, annivIso);
+      const daysUntil = daysBetweenIso(anchorIso, annivIso);
       if (daysUntil > 30 || years < 1) return [];
       return [
         {
@@ -322,6 +341,7 @@ export default async function InfosPage() {
     <InfosView
       isAdmin={isAdmin}
       weekLabel={weekLabel}
+      weekOffset={weekOffset}
       coverageWarnings={coverageWarnings}
       ccnViolations={ccnViolations}
       absentsByDay={absentsByDay}

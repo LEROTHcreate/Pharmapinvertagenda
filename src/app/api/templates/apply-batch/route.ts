@@ -296,6 +296,40 @@ async function applyBatch(req: Request) {
     }
   }
 
+  // ─── Compte les créneaux réellement NOUVEAUX vs PRÉSERVÉS ────────────
+  // Sans écrasement, `skipDuplicates` préserve silencieusement les cases déjà
+  // occupées → on interroge les positions ciblées AVANT insertion pour un
+  // message honnête (« X nouveaux, Y préservés »). Avec écrasement, le
+  // deleteMany a déjà vidé la plage → tout est nouveau.
+  let inserted = data.length;
+  let preserved = 0;
+  if (!overwrite && data.length > 0) {
+    const firstMonday = targetMondays[0].monday;
+    const lastMonday = targetMondays[targetMondays.length - 1].monday;
+    const lastSat = new Date(lastMonday);
+    lastSat.setUTCDate(lastMonday.getUTCDate() + 5);
+    const empIds = Array.from(new Set(data.map((d) => d.employeeId)));
+    const existing = await prismaDirect.scheduleEntry.findMany({
+      where: {
+        pharmacyId: session.user.pharmacyId,
+        employeeId: { in: empIds },
+        date: { gte: firstMonday, lte: lastSat },
+      },
+      select: { employeeId: true, date: true, timeSlot: true },
+    });
+    const existKeys = new Set(
+      existing.map(
+        (e) => `${e.employeeId}|${e.date.toISOString().slice(0, 10)}|${e.timeSlot}`
+      )
+    );
+    preserved = data.filter((d) =>
+      existKeys.has(
+        `${d.employeeId}|${d.date.toISOString().slice(0, 10)}|${d.timeSlot}`
+      )
+    ).length;
+    inserted = data.length - preserved;
+  }
+
   // ─── Insertion en chunks via la connexion DIRECTE (pas pgbouncer) ────
   // pgbouncer en mode transaction (port 6543) ajoute ~12-20s par INSERT
   // chunk pour des raisons obscures (overhead prepared statements + pool
@@ -342,6 +376,8 @@ async function applyBatch(req: Request) {
     ok: true,
     weeksApplied: targetMondays.length,
     applied: data.length,
+    inserted, // créneaux réellement nouveaux
+    preserved, // créneaux déjà présents, non remplacés (sans « écraser »)
     skippedInactive,
     skippedIncompatible,
     skippedAbsence,

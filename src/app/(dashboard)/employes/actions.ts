@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { canManageTeam } from "@/lib/permissions";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { employeeInput, type EmployeeInput } from "@/validators/employee";
@@ -65,8 +65,10 @@ type AdminCtx =
 async function requireAdmin(): Promise<AdminCtx> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Non authentifié" };
-  if (!canManageTeam(session.user.role))
-    return { ok: false, error: "Réservé aux administrateurs" };
+  // Gestion des fiches collaborateurs = TITULAIRES uniquement (manageurs et
+  // collaborateurs sont en lecture seule sur la page Équipe).
+  if (!isAdminLevel(session.user.role))
+    return { ok: false, error: "Réservé aux titulaires" };
   return { ok: true, pharmacyId: session.user.pharmacyId };
 }
 

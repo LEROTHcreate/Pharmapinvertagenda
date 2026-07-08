@@ -85,16 +85,31 @@ export function AssistantBubble({
       return;
     }
     const tips = buildNudges(role);
+    if (tips.length === 0) return;
     let hideTimer: ReturnType<typeof setTimeout>;
     let nextTimer: ReturnType<typeof setTimeout>;
+    let lastIdx = -1;
+    // Tire un conseil : ~1 fois sur 4 un message lié au MOMENT de la journée
+    // (calculé à l'affichage), sinon le répertoire — jamais deux fois le même
+    // d'affilée.
+    function pick(): string {
+      if (Math.random() < 0.28) {
+        const t = timeOfDayNudge();
+        if (t) return t;
+      }
+      let i = Math.floor(Math.random() * tips.length);
+      if (tips.length > 1 && i === lastIdx) i = (i + 1) % tips.length;
+      lastIdx = i;
+      return tips[i];
+    }
     function schedule(first: boolean) {
-      // 1er conseil ~25-45 s après l'arrivée sur la page, puis toutes les ~2-4 min.
+      // 1er conseil ~20-40 s après l'arrivée, puis toutes les ~1,5-3 min.
       const delay = first
-        ? 25000 + Math.random() * 20000
-        : 120000 + Math.random() * 120000;
+        ? 20000 + Math.random() * 20000
+        : 90000 + Math.random() * 90000;
       nextTimer = setTimeout(() => {
-        setNudge(tips[Math.floor(Math.random() * tips.length)] ?? null);
-        hideTimer = setTimeout(() => setNudge(null), 8000);
+        setNudge(pick());
+        hideTimer = setTimeout(() => setNudge(null), 9000);
         schedule(false);
       }, delay);
     }
@@ -366,26 +381,105 @@ export function AssistantBubble({
   );
 }
 
-/** Petits conseils surgissants d'Hygie (aléatoires), adaptés au rôle. */
+function pickOne(arr: string[]): string {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/**
+ * Message lié au MOMENT de la journée (calculé à l'affichage, heure locale).
+ * Rend Hygie « présente » : bonjour le matin, pause le midi, bonne fin de
+ * journée le soir… Volontairement générique (pas de dépendance au rôle).
+ */
+function timeOfDayNudge(): string | null {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 11)
+    return pickOne([
+      "Bonne journée à l'équipe ☀️",
+      "Prêt·e pour la journée ? Je reste dans le coin 🙂",
+      "Un café et c'est parti ☕ — pose-moi une question quand tu veux.",
+    ]);
+  if (h >= 11 && h < 14)
+    return pickOne([
+      "Pense à souffler un peu à la pause 🥪",
+      "C'est l'heure de pointe du midi — garde un œil sur le comptoir.",
+    ]);
+  if (h >= 14 && h < 18)
+    return pickOne([
+      "Bel après-midi 👋 Une question ? Je suis là.",
+      "L'après-midi peut charger — un œil sur l'effectif du jour ?",
+    ]);
+  if (h >= 18 && h < 22)
+    return pickOne([
+      "Bientôt la fermeture — bonne fin de journée 🌆",
+      "Fin de journée : pense à jeter un œil au planning de demain 📋",
+    ]);
+  // Nuit / très tôt
+  return pickOne([
+    "Encore là à cette heure ? Ne te couche pas trop tard 🌙",
+    "Nuit calme ? Je veille aussi 🌙",
+  ]);
+}
+
+/**
+ * Répertoire des petits conseils surgissants d'Hygie (tirés au hasard), adaptés
+ * au rôle. Trois familles : astuces sur l'appli (fonctions réelles), repères
+ * pharma (formulés comme des invitations à me poser la question — pas de conseil
+ * médical asséné) et quelques touches « perso » pour rendre Hygie vivante.
+ */
 function buildNudges(role?: string): string[] {
   const isAdmin = role === "ADMIN" || role === "CREATEUR" || role === "MANAGEUR";
-  const common = [
-    "Un doute sur un médicament ou une classe ? Demande-moi 💊",
-    "Besoin d'un coup de main sur l'appli ? Clique-moi, je suis là 🙂",
-    "Tu peux me parler normalement, je comprends les questions du quotidien.",
+
+  // Repères pharma — invitations à demander (Hygie répond quand on l'interroge).
+  const pharma = [
+    "Un patient sous AINS + anticoagulant ? Demande-moi les points de vigilance 💊",
+    "Envie de réviser une classe (IPP, IEC, ARA2, statines, β-bloquants…) ? Je te fais un topo.",
+    "Un doute sur une interaction médicamenteuse ? Pose-la-moi, je regarde.",
+    "Une idée de conseil associé pour accompagner une ordonnance ? Demande-moi.",
+    "Posologie ou précaution chez la femme enceinte / l'enfant ? Je te donne les repères.",
+    "Quels signaux d'alerte orienter vers le médecin ? Demande-moi la liste.",
+    "Antibio et alcool, soleil et certains médicaments… tu veux les grands pièges ? Demande.",
   ];
+
+  // Touches perso / encouragement — léger, humain.
+  const vibe = [
+    "Je reste dans le coin si tu as une question 🙂",
+    "Parle-moi normalement : je comprends les questions du quotidien.",
+    "Je peux te faire gagner du temps — teste-moi sur une vraie question !",
+    "Belle journée à l'équipe 👋",
+    "Perdu dans un menu ? Demande-moi « où je trouve… » et je t'y emmène.",
+  ];
+
+  const common = [
+    "Tu peux me poser une question sur l'appli ET sur la pharma, au même endroit.",
+    ...vibe,
+    ...pharma,
+  ];
+
   if (isAdmin) {
     return [
-      "Astuce : applique un gabarit pour remplir une semaine en un clic ✨",
-      "Pense à jeter un œil à l'effectif du jour sur l'accueil.",
+      "Astuce : applique un gabarit pour remplir une semaine entière en un clic ✨",
       "Sur le planning, copie-colle des postes d'un jour à l'autre (Ctrl+C / Ctrl+V).",
-      "Besoin d'un nouveau gabarit ? Importe une semaine déjà planifiée.",
+      "Ctrl+Z / Ctrl+Y annulent et rétablissent tes modifs de planning.",
+      "Marque un gabarit « par défaut » (⭐) : il sera pré-sélectionné à l'application.",
+      "Besoin d'un gabarit vite fait ? Importe une semaine déjà planifiée.",
+      "Surveille la colonne EFF : elle t'alerte quand un créneau est en sous-effectif.",
+      "Glisse-dépose une case du planning pour déplacer un poste en un geste.",
+      "Ajoute un repas d'équipe ou une animation dans « Équipe » — ça soude le groupe 🎉",
+      "Tu peux changer le rôle de chacun directement depuis la page « Équipe ».",
+      "L'accueil te montre l'effectif du jour et l'affluence par créneau d'un coup d'œil.",
+      "Pense à traiter les demandes en attente (le badge du menu te les signale).",
+      "Je peux préparer une action pour toi (ex. poser une absence) — je te la fais confirmer d'abord.",
       ...common,
     ];
   }
+
   return [
     "Pense à poser tes congés à l'avance dans « Absences & dispos ».",
-    "Retrouve tes heures de la semaine sur l'accueil.",
+    "Retrouve tes heures de la semaine et ta journée sur l'accueil.",
+    "Indique tes disponibilités : ça aide à faire un planning qui t'arrange.",
+    "Un message pour un collègue ou le titulaire ? C'est dans « Messages ».",
+    "Qui est de garde bientôt ? La prochaine garde s'affiche sur ton accueil.",
+    "Besoin de noter un truc à ne pas oublier ? Il y a « Notes ».",
     ...common,
   ];
 }

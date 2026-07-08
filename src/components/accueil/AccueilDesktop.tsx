@@ -24,6 +24,7 @@ import { ActionsCard } from "@/components/accueil/ActionsCard";
 import { AccueilNews } from "@/components/accueil/AccueilNews";
 import { OnboardingChecklist } from "@/components/accueil/OnboardingChecklist";
 import { Greeting } from "@/components/accueil/Greeting";
+import { WeatherChip } from "@/components/accueil/WeatherChip";
 import { canEditPlanning } from "@/lib/permissions";
 import type { AccueilData } from "@/components/accueil/types";
 import { TodayEventCelebration } from "@/components/team/EventCelebration";
@@ -108,6 +109,7 @@ export function AccueilDesktop(data: AccueilData) {
     role,
     canViewPayroll,
     news,
+    alerts,
     onboarding,
     teamPresent,
     teamSize,
@@ -162,11 +164,14 @@ export function AccueilDesktop(data: AccueilData) {
   return (
     <div className="hidden lg:block w-full px-6 xl:px-8 py-7 space-y-6">
       {/* En-tête */}
-      <header>
-        <h1 className="text-[28px] font-semibold tracking-tight text-foreground">
-          <Greeting firstName={firstName} />
-        </h1>
-        <p className="mt-0.5 text-[14px] capitalize text-muted-foreground">{dateLabel}</p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[28px] font-semibold tracking-tight text-foreground">
+            <Greeting firstName={firstName} />
+          </h1>
+          <p className="mt-0.5 text-[14px] capitalize text-muted-foreground">{dateLabel}</p>
+        </div>
+        <WeatherChip className="mt-1 shrink-0" />
       </header>
 
       {/* Fête « jour d'événement » — confettis + bandeau si un moment d'équipe aujourd'hui */}
@@ -208,8 +213,8 @@ export function AccueilDesktop(data: AccueilData) {
         />
       </div>
 
-      {/* Actus — pleine largeur (dernières infos de l'officine qui défilent) */}
-      <AccueilNews items={news} />
+      {/* Actus + ruptures — 2 colonnes qui défilent */}
+      <AccueilNews news={news} alerts={alerts} />
 
       {/* Actions admin à traiter — pleine largeur */}
       {isAdmin && (

@@ -13,7 +13,7 @@ import {
 import type { TaskCode, AbsenceCode } from "@prisma/client";
 import { toIsoDate, startOfWeek, weekDays } from "@/lib/planning-utils";
 import { GARDE_TYPE_LABELS } from "@/lib/gardes";
-import { getPharmacyNews } from "@/lib/pharmacy-news";
+import { getPharmacyNews, getMedicineAlerts } from "@/lib/pharmacy-news";
 import {
   getMessagesUnreadCounts,
   getPendingUsersCount,
@@ -80,6 +80,7 @@ export default async function AccueilPage() {
     nextGardeRaw,
     unread,
     news,
+    alerts,
     payrollCtx,
     templateExists,
     planningExists,
@@ -150,8 +151,9 @@ export default async function AccueilPage() {
     }),
     // Messages non lus (swap + texte).
     getMessagesUnreadCounts(session.user.id),
-    // Actu pharmacie (flux externe, cache 1 h) — barre latérale « Actus ».
+    // Actu pharmacie + ruptures/rappels (flux externe, cache 1 h) — colonnes « Actus ».
     getPharmacyNews(),
+    getMedicineAlerts(),
     // Contexte paie (flag + statut) pour décider l'accès Rémunération (admin).
     isAdmin ? getPayrollUserContext(session.user.id) : Promise.resolve(null),
     // Onboarding (manageur+) : l'officine a-t-elle un gabarit / un planning ?
@@ -356,6 +358,7 @@ export default async function AccueilPage() {
       role={session.user.role}
       canViewPayroll={canSeePayroll}
       news={news}
+      alerts={alerts}
       onboarding={{
         hasTeam: employees.length > 0,
         hasTemplate: !!templateExists,

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle,
+  CalendarDays,
   CalendarPlus,
   Check,
   Clock,
@@ -48,8 +48,10 @@ export type GabaritRow = {
   weeklyHours: number;
   /** Nombre de personnes distinctes affectées à une tâche dans le gabarit. */
   peopleCount: number;
-  /** Créneaux occupés mais sous l'effectif minimum de l'officine. */
-  understaffedSlots: number;
+  /** Amplitude horaire (1er → dernier créneau travaillé), déjà formatée « 7h30 ». */
+  amplitude: { start: string; end: string } | null;
+  /** Nombre de jours de la semaine réellement travaillés (0-6). */
+  daysCovered: number;
 };
 
 const TYPES: WeekType[] = ["S1", "S2"];
@@ -467,7 +469,7 @@ function GabaritCard({
                   {row.description}
                 </p>
               )}
-              {/* Stats : heures/semaine + nb de personnes + alerte sous-effectif */}
+              {/* Stats : heures/semaine · personnes · amplitude horaire · jours travaillés */}
               <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="h-3 w-3" />
@@ -477,13 +479,22 @@ function GabaritCard({
                   <Users className="h-3 w-3" />
                   {row.peopleCount} pers.
                 </span>
-                {row.understaffedSlots > 0 && (
+                {row.amplitude && (
                   <span
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                    title="Créneaux occupés mais sous l'effectif minimum de l'officine"
+                    className="inline-flex items-center gap-1"
+                    title="Amplitude horaire : du 1er au dernier créneau travaillé"
                   >
-                    <AlertTriangle className="h-3 w-3" />
-                    {row.understaffedSlots} sous l&apos;effectif
+                    <Clock className="h-3 w-3" />
+                    {row.amplitude.start}–{row.amplitude.end}
+                  </span>
+                )}
+                {row.daysCovered > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1"
+                    title="Jours de la semaine travaillés dans ce gabarit"
+                  >
+                    <CalendarDays className="h-3 w-3" />
+                    {row.daysCovered} j
                   </span>
                 )}
               </div>

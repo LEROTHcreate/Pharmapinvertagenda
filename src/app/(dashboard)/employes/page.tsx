@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { canManageTeam } from "@/lib/permissions";
+import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { EmployeesTable } from "@/components/employees/EmployeesTable";
 import type { EmployeeRowData } from "@/components/employees/EmployeesTable";
@@ -22,12 +22,18 @@ const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 export default async function EmployesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canManageTeam(session.user.role)) redirect("/planning");
+  // Page visible par TOUS en lecture. Seuls les TITULAIRES (isAdminLevel) peuvent
+  // éditer : rôles, fiches collaborateurs, événements. Les manageurs et
+  // collaborateurs sont en lecture seule ET ne voient pas le RH sensible
+  // (échéances, contrats) — ni à l'écran ni dans les données envoyées.
+  const canEdit = isAdminLevel(session.user.role);
 
   // Désactivation automatique des collaborateurs dont la date de départ ou la
-  // fin de contrat (non-CDI) est passée, AVANT de charger la liste.
+  // fin de contrat est passée — réservé aux titulaires (écriture BDD).
   const todayIso = new Date().toISOString().slice(0, 10);
-  await sweepInactiveEmployees(session.user.pharmacyId, todayIso);
+  if (canEdit) {
+    await sweepInactiveEmployees(session.user.pharmacyId, todayIso);
+  }
 
   const employees = await prisma.employee.findMany({
     where: { pharmacyId: session.user.pharmacyId },
@@ -63,14 +69,18 @@ export default async function EmployesPage() {
     displayColor: e.displayColor,
     displayOrder: e.displayOrder,
     isActive: e.isActive,
-    hireDate: iso(e.hireDate),
-    contractType: e.contractType,
-    contractEndDate: iso(e.contractEndDate),
-    trialEndDate: iso(e.trialEndDate),
-    departureDate: iso(e.departureDate),
-    lastMedicalVisitDate: iso(e.lastMedicalVisitDate),
-    lastProfessionalInterviewDate: iso(e.lastProfessionalInterviewDate),
-    dpcLastDate: iso(e.dpcLastDate),
+    // ─── RH sensible : uniquement pour les titulaires (sinon neutralisé, pas
+    // même envoyé au navigateur des non-titulaires) ───
+    hireDate: canEdit ? iso(e.hireDate) : null,
+    contractType: canEdit ? e.contractType : "CDI",
+    contractEndDate: canEdit ? iso(e.contractEndDate) : null,
+    trialEndDate: canEdit ? iso(e.trialEndDate) : null,
+    departureDate: canEdit ? iso(e.departureDate) : null,
+    lastMedicalVisitDate: canEdit ? iso(e.lastMedicalVisitDate) : null,
+    lastProfessionalInterviewDate: canEdit
+      ? iso(e.lastProfessionalInterviewDate)
+      : null,
+    dpcLastDate: canEdit ? iso(e.dpcLastDate) : null,
   }));
 
   // Comptes utilisateurs reliés aux fiches → permet de choisir le RÔLE
@@ -93,11 +103,10 @@ export default async function EmployesPage() {
     }
   }
 
-  // Échéances RH à venir (sur les collaborateurs actifs uniquement).
-  const deadlines = upcomingDeadlines(
-    employees.filter((e) => e.isActive),
-    todayIso
-  );
+  // Échéances RH à venir — calculées uniquement pour les titulaires (sensible).
+  const deadlines = canEdit
+    ? upcomingDeadlines(employees.filter((e) => e.isActive), todayIso)
+    : [];
 
   // Événements d'équipe à venir (repas, animations labo, entretiens…).
   const startOfToday = new Date();
@@ -126,7 +135,8 @@ export default async function EmployesPage() {
     location: e.location,
   }));
 
-  const canManageEvents = canManageTeam(session.user.role);
+  // Édition des événements = titulaires uniquement (comme le reste de la page).
+  const canManageEvents = canEdit;
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 space-y-4">
@@ -134,25 +144,26 @@ export default async function EmployesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Équipe</h1>
           <p className="text-sm text-muted-foreground">
-            Gérer l&apos;équipe de la pharmacie · {rows.length} collaborateur
-            {rows.length > 1 ? "s" : ""}
+            {canEdit ? "Gérer l'équipe de la pharmacie" : "L'équipe de la pharmacie"} ·{" "}
+            {rows.length} collaborateur{rows.length > 1 ? "s" : ""}
           </p>
         </div>
       </header>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        {/* Colonne gauche : échéances RH + tableau de l'équipe */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        {/* Colonne gauche : échéances RH (titulaires) + tableau de l'équipe */}
         <div className="min-w-0 flex-1 space-y-4">
-          <HrDeadlinesCard deadlines={deadlines} />
+          {canEdit && <HrDeadlinesCard deadlines={deadlines} />}
           <EmployeesTable
             employees={rows}
             roleByEmployeeId={roleByEmployeeId}
             currentUserRole={session.user.role}
+            canEdit={canEdit}
           />
         </div>
 
         {/* Colonne droite : la vie de l'équipe (événements animés) */}
-        <div className="xl:w-[420px] xl:shrink-0">
+        <div className="lg:w-[420px] lg:shrink-0">
           <TeamEventsPanel events={eventRows} canManage={canManageEvents} />
         </div>
       </div>

@@ -22,6 +22,7 @@ import {
   ClipboardCopy,
   ClipboardPaste,
   HelpCircle,
+  Printer,
 } from "lucide-react";
 import type { AbsenceCode, ScheduleType, TaskCode } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -683,38 +684,94 @@ export function TemplateView({
                 {templateId ? "Édition" : "Nouveau gabarit"}
               </span>
             </div>
-            {/* Nom + classement + note sur UNE même ligne (qui s'enroule
-                seulement si l'écran est vraiment trop étroit) : l'en-tête reste
-                bas → un maximum de place pour le planning sur petit écran. */}
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+            {/* Nom à gauche, puis Catégorie + Note CÔTE À CÔTE (paire 50/50) :
+                l'en-tête tient sur une ligne → un maximum de hauteur pour la
+                grille. Sur mobile, le nom passe au-dessus de la paire. */}
+            <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <Input
                 type="text"
                 placeholder={`Nom du gabarit (ex : ${weekType} standard)`}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={80}
-                className="h-8 w-auto min-w-[150px] max-w-[240px] border-0 border-b border-zinc-200 bg-transparent px-0 text-lg font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-xl"
+                className="h-8 w-auto min-w-[120px] shrink-0 sm:max-w-[200px] border-0 border-b border-zinc-200 bg-transparent px-0 text-lg font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-xl"
               />
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                maxLength={40}
-                placeholder="Catégorie (ex : Vacances scolaires)"
-                className="h-8 w-[45%] min-w-[130px] max-w-[190px] rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-              />
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={280}
-                placeholder="Note (à quoi sert ce gabarit ?)"
-                className="h-8 w-[45%] min-w-[150px] max-w-xs rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-              />
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <input
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  maxLength={40}
+                  placeholder="Catégorie (ex : Vacances scolaires)"
+                  className="h-8 w-1/2 min-w-0 rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  maxLength={280}
+                  placeholder="Note (à quoi sert ce gabarit ?)"
+                  className="h-8 w-1/2 min-w-0 rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+              </div>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Imprimer le gabarit (A4, nouvel onglet) : la semaine entière OU le
+              seul jour affiché. Uniquement pour un gabarit ENREGISTRÉ (on
+              imprime l'état en base). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                disabled={!templateId}
+                title={
+                  templateId
+                    ? "Imprimer le gabarit"
+                    : "Enregistre le gabarit avant de l'imprimer"
+                }
+                aria-label="Imprimer le gabarit"
+              >
+                <Printer className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {dirty && (
+                <DropdownMenuLabel className="text-[11px] font-normal text-amber-600">
+                  On imprime la version enregistrée — pense à enregistrer.
+                </DropdownMenuLabel>
+              )}
+              <DropdownMenuItem
+                onSelect={() =>
+                  templateId &&
+                  window.open(
+                    `/gabarits/${templateId}/imprimer`,
+                    "_blank",
+                    "noopener"
+                  )
+                }
+              >
+                <Printer className="h-4 w-4" />
+                Imprimer la semaine
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  templateId &&
+                  window.open(
+                    `/gabarits/${templateId}/imprimer?jour=${dayIndex}`,
+                    "_blank",
+                    "noopener"
+                  )
+                }
+              >
+                <Printer className="h-4 w-4" />
+                Imprimer ce jour ({WEEK_DAYS[dayIndex]})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {/* Aide des raccourcis clavier (aussi via la touche « ? ») */}
           <Button
             variant="outline"
