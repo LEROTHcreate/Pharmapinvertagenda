@@ -7,6 +7,7 @@ import {
   weeklyTaskHours,
 } from "@/lib/planning-utils";
 import { GARDE_TYPE_LABELS } from "@/lib/gardes";
+import { isAdminLevel } from "@/lib/permissions";
 import {
   getCachedWeekEntries,
   getPendingAbsencesCount,
@@ -75,7 +76,9 @@ export default async function InfosPage({
   const session = await auth();
   if (!session?.user) return null;
 
-  const isAdmin = session.user.role === "ADMIN";
+  // Titulaires + Créateur (isAdminLevel) — le créateur doit voir le contenu
+  // admin d'Infos (dépassement d'heures, sous-effectif, CCN…) au même titre.
+  const isAdmin = isAdminLevel(session.user.role);
   const pharmacyId = session.user.pharmacyId;
 
   // Navigation par semaine : `?w` = décalage en semaines vs la semaine courante

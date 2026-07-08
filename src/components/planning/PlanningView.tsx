@@ -3,21 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Trash2, ClipboardCopy, ClipboardPaste, PartyPopper, AlertTriangle } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Trash2, ClipboardCopy, ClipboardPaste, PartyPopper } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import {
   computeOvertimeCells,
-  dailyTaskHours,
   indexEntriesByEmployee,
   isoWeekNumber,
   toIsoDate,
   weekDays,
   weekTypeFor,
 } from "@/lib/planning-utils";
-import { SLOT_HOURS, TIME_SLOTS } from "@/types";
+import { TIME_SLOTS } from "@/types";
 import type { CellKey, ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
 import { MyDayView } from "@/components/planning/MyDayView";
 import { MobileTeamGantt } from "@/components/planning/MobileTeamGantt";
@@ -689,40 +688,6 @@ export function PlanningView({
     [employees, dayDates, index]
   );
 
-  // Alerte « dépassement d'heures » EN DIRECT : liste des collaborateurs dont le
-  // cumul de la semaine affichée passe au-dessus du contrat. Dérivé de
-  // `overtimeCells` (qui respecte déjà la période de référence semaine/quinzaine)
-  // → se recalcule à chaque édition (optimiste) de la grille.
-  const overContract = useMemo(() => {
-    const otByEmp = new Map<string, number>();
-    for (const key of overtimeCells) {
-      const empId = key.slice(0, key.indexOf("|"));
-      otByEmp.set(empId, (otByEmp.get(empId) ?? 0) + SLOT_HOURS);
-    }
-    const list: {
-      id: string;
-      name: string;
-      color: string;
-      worked: number;
-      contract: number;
-      over: number;
-    }[] = [];
-    for (const emp of employees) {
-      const over = otByEmp.get(emp.id) ?? 0;
-      if (over <= 0) continue;
-      let worked = 0;
-      for (const d of dayDates) worked += dailyTaskHours(emp.id, d, index);
-      list.push({
-        id: emp.id,
-        name: `${emp.firstName} ${emp.lastName.charAt(0)}.`,
-        color: emp.displayColor,
-        worked,
-        contract: emp.weeklyHours,
-        over,
-      });
-    }
-    return list.sort((a, b) => b.over - a.over);
-  }, [overtimeCells, employees, dayDates, index]);
 
   const absencesPerDay = useMemo(() => {
     return dayDates.map((iso) => {
@@ -1982,36 +1947,8 @@ export function PlanningView({
         </div>
       )}
 
-      {/* ─── Alerte dépassement d'heures EN DIRECT (éditeurs du planning) ───
-          Se met à jour à chaque édition : liste qui dépasse son contrat cette
-          semaine, et de combien. */}
-      {canEditPlanning(role) && overContract.length > 0 && (
-        <div className="no-print flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-rose-200/70 bg-rose-50/70 px-3.5 py-2 text-[12.5px] text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-100">
-          <span className="inline-flex items-center gap-1.5 font-semibold">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            Dépassement d&apos;heures cette semaine
-          </span>
-          {overContract.map((e) => (
-            <span
-              key={e.id}
-              className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 dark:bg-black/25"
-            >
-              <span
-                aria-hidden
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: e.color }}
-              />
-              <span className="font-medium">{e.name}</span>
-              <span className="tabular-nums text-rose-800/80 dark:text-rose-200/80">
-                {e.worked}h/{e.contract}h
-              </span>
-              <span className="font-semibold tabular-nums text-rose-600 dark:text-rose-300">
-                +{e.over}h
-              </span>
-            </span>
-          ))}
-        </div>
-      )}
+      {/* L'alerte « dépassement d'heures » a été déplacée dans Infos & conseils
+          (visible titulaires uniquement) — retirée du planning. */}
 
       {/* ─── Toggle d'affichage mobile ──────────────────────────────
           Trois vues pensées pour le téléphone (geste pouce, zéro scroll
