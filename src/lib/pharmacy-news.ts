@@ -183,10 +183,18 @@ async function fetchMerged(
   const directItems = directResults
     .flat()
     .filter((it) => !directFilter || directFilter(it.title));
-  const results = [...googleResults.flat(), ...directItems];
+  return finalizeItems([...googleResults.flat(), ...directItems], limit);
+}
+
+/**
+ * Dédoublonne (par titre normalisé) → trie par date décroissante → garde les
+ * `limit` plus récentes → retire le `ts` interne (DTO public = titre/lien/
+ * source/date). Partagé par toutes les sources.
+ */
+function finalizeItems(items: ParsedItem[], limit: number): NewsItem[] {
   const seen = new Set<string>();
   const merged: ParsedItem[] = [];
-  for (const it of results) {
+  for (const it of items) {
     if (isNoise(it.title)) continue;
     const key = dedupKey(it.title);
     if (!key || seen.has(key)) continue;
@@ -194,8 +202,57 @@ async function fetchMerged(
     merged.push(it);
   }
   merged.sort((a, b) => b.ts - a.ts); // plus récent en tête
-  // On retire le `ts` interne (le DTO public reste titre/lien/source/date).
   return merged.slice(0, limit).map(({ ts: _ts, ...rest }) => rest);
+}
+
+/**
+ * Rappels de produits OFFICIELS via RappelConso (DGCCRF, open data). NB : les
+ * médicaments relèvent de l'ANSM et ne sont PAS dans RappelConso — mais la
+ * catégorie « hygiène-beauté » couvre la PARAPHARMACIE (cosmétiques, soins),
+ * pertinente pour l'officine, avec une fiche officielle rappel.conso.gouv.fr.
+ */
+async function fetchRappelConso(
+  category: string,
+  limit: number
+): Promise<ParsedItem[]> {
+  try {
+    const url =
+      "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/" +
+      "rappelconso-v2-gtin-espaces/records?where=" +
+      encodeURIComponent(`categorie_produit="${category}"`) +
+      "&order_by=" +
+      encodeURIComponent("date_publication desc") +
+      `&limit=${limit}`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as {
+      results?: Array<Record<string, string | null>>;
+    };
+    const seen = new Set<string>();
+    const items: ParsedItem[] = [];
+    for (const r of json.results ?? []) {
+      const link = r.lien_vers_la_fiche_rappel;
+      const fiche = r.numero_fiche || link;
+      if (!link || !fiche || seen.has(fiche)) continue; // dédoublonne les GTIN
+      seen.add(fiche);
+      const marque = (r.marque_produit || r.modeles_ou_references || "Produit").trim();
+      const motif = (r.motif_rappel || "").trim();
+      const raw = motif ? `Rappel ${marque} — ${motif}` : `Rappel ${marque}`;
+      const title = raw.charAt(0).toUpperCase() + raw.slice(1);
+      const pub = r.date_publication ? new Date(r.date_publication) : null;
+      const ts = pub && !Number.isNaN(pub.getTime()) ? pub.getTime() : 0;
+      const dateLabel = ts
+        ? new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+        : "";
+      items.push({ title, link, source: "RappelConso", ts, dateLabel });
+    }
+    return items;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -237,13 +294,32 @@ export const getPharmacyNews = () =>
     { revalidate: 3600, tags: ["pharmacy-news"] }
   )();
 
-/** Ruptures de stock & rappels de lots de médicaments (très actionnable). */
+/**
+ * Ruptures & rappels — fusionne :
+ *  - RappelConso « hygiène-beauté » : rappels OFFICIELS de produits de
+ *    parapharmacie (fiche rappel.conso.gouv.fr), toujours à jour et exacts ;
+ *  - la presse pharma (Google + Le Quotidien filtré) pour les ruptures/rappels
+ *    de MÉDICAMENTS (domaine ANSM, sans API simple → presse).
+ */
+async function alertsMerged(limit: number): Promise<NewsItem[]> {
+  const [google, direct, rappel] = await Promise.all([
+    Promise.all(ALERT_QUERIES.map(fetchQuery)),
+    Promise.all(DIRECT_NEWS_FEEDS.map(fetchDirect)),
+    fetchRappelConso("hygiène-beauté", 10),
+  ]);
+  const press = [
+    ...google.flat(),
+    ...direct.flat().filter((it) => ALERT_KEYWORDS.test(it.title)),
+  ];
+  return finalizeItems([...rappel, ...press], limit);
+}
+
+/** Ruptures de stock & rappels (parapharmacie officielle + médicaments presse). */
 export const getMedicineAlerts = () =>
-  unstable_cache(
-    () => fetchMerged(ALERT_QUERIES, 6, DIRECT_NEWS_FEEDS, (t) => ALERT_KEYWORDS.test(t)),
-    ["pharmacy-news-alerts-v3"],
-    { revalidate: 3600, tags: ["pharmacy-news"] }
-  )();
+  unstable_cache(() => alertsMerged(6), ["pharmacy-news-alerts-v4"], {
+    revalidate: 3600,
+    tags: ["pharmacy-news"],
+  })();
 
 /* ─── Versions « longues » pour la page Actualités plein écran ────────── */
 
@@ -257,11 +333,10 @@ export const getPharmacyNewsFull = () =>
 
 /** Ruptures & rappels — liste étendue. */
 export const getMedicineAlertsFull = () =>
-  unstable_cache(
-    () => fetchMerged(ALERT_QUERIES, 24, DIRECT_NEWS_FEEDS, (t) => ALERT_KEYWORDS.test(t)),
-    ["pharmacy-news-alerts-full-v3"],
-    { revalidate: 3600, tags: ["pharmacy-news"] }
-  )();
+  unstable_cache(() => alertsMerged(24), ["pharmacy-news-alerts-full-v4"], {
+    revalidate: 3600,
+    tags: ["pharmacy-news"],
+  })();
 
 /**
  * Recherche libre dans l'actu pharmacie (barre de recherche de /actualites).
