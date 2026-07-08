@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { UserPlus } from "lucide-react";
 import { auth } from "@/auth";
 import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -91,11 +92,20 @@ export default async function UtilisateursPage() {
 
   return (
     <div className="max-w-5xl p-3 sm:p-4 lg:p-6">
-      <header className="mb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Utilisateurs</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Approuvez les nouvelles demandes et gérez les accès au planning.
-        </p>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Utilisateurs</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Approuvez les nouvelles demandes et gérez les accès au planning.
+          </p>
+        </div>
+        <a
+          href="/inviter"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-violet-600 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-violet-700"
+        >
+          <UserPlus className="h-4 w-4" />
+          Inviter l&apos;équipe
+        </a>
       </header>
 
       <UsersAdmin

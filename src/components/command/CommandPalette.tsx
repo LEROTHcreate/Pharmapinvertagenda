@@ -16,6 +16,7 @@ import {
   Banknote,
   ShieldCheck,
   UserCog,
+  UserPlus,
   Settings,
   User,
   Search,
@@ -74,6 +75,7 @@ export function CommandPalette({
       { label: "Rémunération", href: "/remuneration", icon: Banknote, show: canViewPayroll, keywords: "paie salaire" },
       { label: "Gardes", href: "/gardes", icon: ShieldCheck, show: isAdmin, keywords: "garde nuit dimanche" },
       { label: "Utilisateurs", href: "/utilisateurs", icon: UserCog, show: isAdmin, keywords: "comptes roles acces" },
+      { label: "Inviter des collaborateurs", href: "/inviter", icon: UserPlus, show: isAdmin, keywords: "invitation qr lien recruter equipe embarquer" },
       { label: "Paramètres", href: "/parametres", icon: Settings, show: true, keywords: "reglages officine logo" },
     ];
     return all.filter((c) => c.show);
