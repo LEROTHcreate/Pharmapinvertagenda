@@ -39,6 +39,19 @@ export function AssistantBubble({
   // Petit conseil qui surgit tout seul de temps en temps (quand la bulle est
   // fermée) puis disparaît après quelques secondes.
   const [nudge, setNudge] = useState<string | null>(null);
+  // Animation de clic sur la croix (tournoie + rebondit) avant d'ouvrir le chat.
+  const [popping, setPopping] = useState(false);
+
+  // Clic sur la croix : joue le petit "pop" puis ouvre la bulle.
+  function openWithPop() {
+    if (popping) return;
+    setNudge(null);
+    setPopping(true);
+    window.setTimeout(() => {
+      setOpen(true);
+      setPopping(false);
+    }, 300);
+  }
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -211,7 +224,7 @@ export function AssistantBubble({
       {!open && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={openWithPop}
           aria-label="Ouvrir l'assistante Hygie"
           title="Hygie — ton assistante"
           className={cn(
@@ -219,7 +232,8 @@ export function AssistantBubble({
             "bottom-[calc(72px+env(safe-area-inset-bottom,0px))] md:bottom-6",
             "bg-gradient-to-br from-emerald-500 to-teal-600 text-white",
             "transition-transform hover:scale-105 active:scale-95",
-            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
+            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500",
+            popping && "hygie-pop"
           )}
           style={{
             clipPath: CROSS_CLIP,

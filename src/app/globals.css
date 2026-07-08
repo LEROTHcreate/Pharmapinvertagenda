@@ -866,6 +866,20 @@ body[data-focus="true"] .md\:hidden header {
   .tev-confetti { display: none; }
 }
 
+/* ─── Clic sur la croix d'Hygie : petit "pop" (tournoie + rebondit) ───────── */
+@keyframes hygie-pop {
+  0%   { transform: scale(1) rotate(0deg); }
+  35%  { transform: scale(1.22) rotate(150deg); }
+  70%  { transform: scale(0.9) rotate(300deg); }
+  100% { transform: scale(1) rotate(360deg); }
+}
+.hygie-pop {
+  animation: hygie-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hygie-pop { animation: none; }
+}
+
 /* ─── Animation flash sur cellule planning fraîchement enregistrée ─── */
 @keyframes cell-flash {
   0% {
