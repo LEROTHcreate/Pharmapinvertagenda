@@ -20,7 +20,7 @@ export default async function InviterPage() {
 
   const pharmacy = await prisma.pharmacy.findUnique({
     where: { id: session.user.pharmacyId },
-    select: { name: true, siret: true },
+    select: { name: true, siret: true, logoUrl: true },
   });
 
   const h = headers();
@@ -38,6 +38,7 @@ export default async function InviterPage() {
     <InviteView
       link={link}
       pharmacyName={pharmacy?.name ?? "votre officine"}
+      logoUrl={pharmacy?.logoUrl ?? null}
       hasSiret={!!siret}
     />
   );
