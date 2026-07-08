@@ -1536,25 +1536,41 @@ export function PlanningView({
       const el = gridWrapRef.current;
       if (!el || typeof window === "undefined") return;
       const top = el.getBoundingClientRect().top; // haut de la grille → haut viewport
-      const bottomMargin = 12; // petite marge sous la grille
+      const bottomMargin = 10; // petite marge sous la grille
       const maxHeight = Math.max(
-        320,
+        200,
         Math.round(window.innerHeight - top - bottomMargin)
       );
       const numSlots = TIME_SLOTS.length;
-      const headerH = 64; // hauteur approx. de l'en-tête (noms + heures)
-      // Plancher abaissé à 16 px (au lieu de 20) : sur les écrans un peu courts,
-      // les lignes se compriment davantage pour faire tenir TOUTE la journée
-      // sans défilement interne. Reste lisible (grille dense type tableur).
+      // Hauteur RÉELLE de l'en-tête (noms + heures) si déjà rendu, sinon estimation.
+      const thead = el.querySelector("thead");
+      const headerH = thead
+        ? Math.round(thead.getBoundingClientRect().height)
+        : 64;
+      // Objectif : voir TOUTE la journée (7h30-20h) sans défilement, quelle que
+      // soit la taille de l'écran → on comprime les lignes autant que nécessaire.
+      // Plancher très bas (11 px) pour garantir que ça tient même sur petit
+      // écran ; au-delà l'en-tête reste figé et la grille défile en interne.
       const rowHeight = Math.min(
         44,
-        Math.max(16, Math.floor((maxHeight - headerH) / numSlots))
+        Math.max(11, Math.floor((maxHeight - headerH) / numSlots))
       );
       setFit({ maxHeight, rowHeight });
     }
     recompute();
     window.addEventListener("resize", recompute);
-    return () => window.removeEventListener("resize", recompute);
+    // Recalcule aussi quand le contenu AU-DESSUS de la grille change de hauteur
+    // (consigne du jour affichée/masquée, phrase du jour qui s'enroule…) : le
+    // haut de la grille bouge alors sans redimensionnement de fenêtre.
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => recompute());
+      ro.observe(document.body);
+    }
+    return () => {
+      window.removeEventListener("resize", recompute);
+      ro?.disconnect();
+    };
   }, [isDesktopWidth]);
 
   const toggleAdminLock = useCallback(() => {

@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Lightbulb } from "lucide-react";
+import type { UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "@/components/layout/AvatarImage";
 import { pickRandomGreeting } from "@/lib/daily-greeting";
+import { DailyNoticeBanner } from "@/components/notice/DailyNoticeBanner";
 import type { PlanningTip } from "@/lib/planning-tips";
 
 /** Clé localStorage : signature des conseils déjà consultés (stoppe le pulse). */
@@ -44,6 +46,7 @@ export function WelcomeBanner({
   color,
   avatarId,
   tips = [],
+  role,
 }: {
   firstName: string;
   hello: string;
@@ -52,6 +55,8 @@ export function WelcomeBanner({
   avatarId?: string | null;
   /** Tips contextuels (pont, veille de férié…) sur les 7 prochains jours. */
   tips?: PlanningTip[];
+  /** Rôle de l'utilisateur — pour la consigne du jour inline (édition admin). */
+  role?: UserRole;
 }) {
   const [phrase, setPhrase] = useState(initialPhrase);
   // Compteur d'animation : sert de `key` pour re-trigger les sparkles + bounce
@@ -132,7 +137,7 @@ export function WelcomeBanner({
       // droit, indépendamment du flux flex — comme ça le contenu (avatar +
       // texte) peut grandir/rétrécir sans jamais décaler l'ampoule.
       // `pr-14` réserve 56px à droite pour que le texte ne passe pas dessous.
-      className="no-print relative rounded-2xl border border-border bg-card px-4 py-2.5 pr-14 sm:px-5 sm:py-3 sm:pr-16 flex items-center gap-3 sm:gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
+      className="no-print relative rounded-2xl border border-border bg-card px-4 py-2.5 pr-14 sm:px-5 sm:py-3 sm:pr-16 flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4 shadow-[0_1px_2px_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.06)]"
     >
       {/* Avatar cliquable — wrapper button pour le focus + accessibilité,
           relative pour positionner les sparkles autour.
@@ -211,6 +216,16 @@ export function WelcomeBanner({
           {phrase}
         </p>
       </div>
+
+      {/* Consigne du jour — pastille compacte, ENTRE le message d'accueil et
+          l'ampoule (gagne de la hauteur). Sur mobile elle s'enroule sur sa
+          propre ligne (order-last + w-full). Le composant gère l'ajout/édition
+          admin et se masque tout seul s'il n'y a rien. */}
+      {role && (
+        <div className="order-last w-full min-w-0 shrink-0 sm:order-none sm:w-auto sm:max-w-[46%]">
+          <DailyNoticeBanner userRole={role} compact />
+        </div>
+      )}
 
       {/* Ampoule "conseils" pinnée au coin droit → raccourci vers /infos.
           Pulse tant que les conseils du moment n'ont pas été consultés. */}

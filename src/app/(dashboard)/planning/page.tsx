@@ -150,6 +150,7 @@ export default async function PlanningPage({
         color={sessionEmployee?.displayColor}
         avatarId={sessionUser?.avatarId ?? null}
         tips={tips}
+        role={session.user.role}
       />
       {employeesDTO.length === 0 ? (
         // Officine sans aucun collaborateur (juste après création) → onboarding
