@@ -167,18 +167,35 @@ export function computeOvertimeCells(
   return out;
 }
 
-/** Effectif présent (TASK) sur un créneau donné (un jour, un timeSlot) */
+/**
+ * Effectif présent (TASK) sur un créneau donné (un jour, un timeSlot).
+ *
+ * - `counterIds` : collaborateurs "comptoir" (pharmaciens + préparateurs +
+ *   étudiants) → toute vraie tâche compte.
+ * - `allIds` (optionnel) : tous les collaborateurs. Si fourni, un
+ *   REMPLACEMENT compte quel que soit le rôle du remplaçant — il couvre
+ *   physiquement le comptoir à la place de l'absent (cf. ECHANGE en face,
+ *   texturé et hors effectif). Sans `allIds` : comportement historique
+ *   (seuls les `counterIds` sont comptés).
+ *
+ * ECHANGE (texturé) = personne pas présente → toujours hors effectif.
+ */
 export function staffingForSlot(
   isoDate: string,
   timeSlot: string,
-  employeeIds: string[],
-  index: Map<string, EmployeeDayMap>
+  counterIds: string[],
+  index: Map<string, EmployeeDayMap>,
+  allIds?: string[]
 ): number {
+  const counter = new Set(counterIds);
+  const ids = allIds ?? counterIds;
   let count = 0;
-  for (const id of employeeIds) {
+  for (const id of ids) {
     const e = index.get(id)?.get(isoDate)?.get(timeSlot);
-    // ECHANGE (texturé) = personne pas présente → hors effectif.
-    if (e?.type === ScheduleType.TASK && !isNonWorkedTask(e.taskCode)) count++;
+    if (e?.type !== ScheduleType.TASK || isNonWorkedTask(e.taskCode)) continue;
+    // Rôle comptoir sur une vraie tâche → compte.
+    // OU n'importe qui en REMPLACEMENT (il couvre le comptoir) → compte.
+    if (counter.has(id) || e.taskCode === "REMPLACEMENT") count++;
   }
   return count;
 }

@@ -1,11 +1,32 @@
 import { describe, expect, it } from "vitest";
+import { ScheduleType } from "@prisma/client";
+import type { ScheduleEntryDTO } from "@/types";
 import {
+  indexEntriesByEmployee,
   isoWeekNumber,
+  staffingForSlot,
   startOfWeek,
   toIsoDate,
   weekDays,
   weekTypeFor,
 } from "./planning-utils";
+
+/** Fabrique une entry TASK minimale pour les tests d'effectif. */
+function task(
+  employeeId: string,
+  taskCode: string
+): ScheduleEntryDTO {
+  return {
+    id: `${employeeId}-${taskCode}`,
+    employeeId,
+    date: "2026-07-08",
+    timeSlot: "09:00",
+    type: ScheduleType.TASK,
+    taskCode: taskCode as ScheduleEntryDTO["taskCode"],
+    absenceCode: null,
+    notes: null,
+  };
+}
 
 describe("planning-utils", () => {
   describe("toIsoDate", () => {
@@ -73,6 +94,58 @@ describe("planning-utils", () => {
       expect(weekTypeFor(new Date(2026, 0, 1))).toBe("S2");
       // Semaine 18 (paire) → S1 — 27 avril 2026 = semaine 18
       expect(weekTypeFor(new Date(2026, 3, 27))).toBe("S1");
+    });
+  });
+
+  describe("staffingForSlot", () => {
+    const DATE = "2026-07-08";
+    const SLOT = "09:00";
+    // ph1/ph2 = comptoir (pharmaciens), sec1 = secrétaire (hors comptoir),
+    // liv1 = livreur (hors comptoir).
+    const counterIds = ["ph1", "ph2"];
+    const allIds = ["ph1", "ph2", "sec1", "liv1"];
+
+    it("compte les rôles comptoir sur une vraie tâche", () => {
+      const index = indexEntriesByEmployee([
+        task("ph1", "COMPTOIR"),
+        task("ph2", "COMPTOIR"),
+      ]);
+      expect(staffingForSlot(DATE, SLOT, counterIds, index)).toBe(2);
+    });
+
+    it("ignore ECHANGE (texturé, personne pas présente)", () => {
+      const index = indexEntriesByEmployee([
+        task("ph1", "COMPTOIR"),
+        task("ph2", "ECHANGE"),
+      ]);
+      expect(staffingForSlot(DATE, SLOT, counterIds, index)).toBe(1);
+    });
+
+    it("compte un REMPLACEMENT fait par un rôle NON comptoir quand allIds est fourni", () => {
+      const index = indexEntriesByEmployee([
+        task("ph1", "COMPTOIR"),
+        task("sec1", "REMPLACEMENT"), // secrétaire qui dépanne au comptoir
+      ]);
+      // Sans allIds : le remplaçant hors comptoir n'est pas compté.
+      expect(staffingForSlot(DATE, SLOT, counterIds, index)).toBe(1);
+      // Avec allIds : le remplaçant compte → il couvre le comptoir.
+      expect(staffingForSlot(DATE, SLOT, counterIds, index, allIds)).toBe(2);
+    });
+
+    it("ne double-compte pas un rôle comptoir en REMPLACEMENT", () => {
+      const index = indexEntriesByEmployee([
+        task("ph1", "REMPLACEMENT"),
+        task("ph2", "COMPTOIR"),
+      ]);
+      expect(staffingForSlot(DATE, SLOT, counterIds, index, allIds)).toBe(2);
+    });
+
+    it("ne compte pas les tâches hors comptoir des rôles hors comptoir (ex. LIVRAISON)", () => {
+      const index = indexEntriesByEmployee([
+        task("ph1", "COMPTOIR"),
+        task("liv1", "LIVRAISON"), // livreur en tournée → hors effectif comptoir
+      ]);
+      expect(staffingForSlot(DATE, SLOT, counterIds, index, allIds)).toBe(1);
     });
   });
 });

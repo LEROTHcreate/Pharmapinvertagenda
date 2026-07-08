@@ -143,6 +143,8 @@ export function MobileTeamGantt({
     () => employees.filter((e) => COUNTER.has(e.status)).map((e) => e.id),
     [employees]
   );
+  // Tous les ids → les REMPLACEMENT comptent quel que soit le rôle.
+  const allIds = useMemo(() => employees.map((e) => e.id), [employees]);
   const effSegments = useMemo(() => {
     const slots = TIME_SLOTS.filter((s) => {
       const m = toMin(s);
@@ -151,7 +153,7 @@ export function MobileTeamGantt({
     const segs: Array<{ fromMin: number; toMin: number; level: string; n: number }> = [];
     let cur: { fromMin: number; level: string; n: number } | null = null;
     for (const s of slots) {
-      const n = staffingForSlot(date, s, counterIds, index);
+      const n = staffingForSlot(date, s, counterIds, index, allIds);
       const level = staffingLevel(n, minStaff);
       if (cur && cur.level === level) continue;
       if (cur) segs.push({ ...cur, toMin: toMin(s) });

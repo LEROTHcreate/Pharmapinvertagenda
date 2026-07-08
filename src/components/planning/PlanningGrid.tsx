@@ -394,6 +394,9 @@ export const PlanningGrid = memo(function PlanningGrid({
     () => counterStaff.map((e) => e.id),
     [counterStaff]
   );
+  // Tous les collaborateurs → sert à compter les REMPLACEMENT quel que soit le
+  // rôle du remplaçant (il couvre le comptoir de l'absent).
+  const allStaffIds = useMemo(() => employees.map((e) => e.id), [employees]);
 
   // Pré-calcule heures jour + heures semaine par collaborateur (utilisées dans le
   // <thead>) — sinon recalculées inline pour chaque cellule d'en-tête à chaque
@@ -415,11 +418,11 @@ export const PlanningGrid = memo(function PlanningGrid({
   const slotStaffing = useMemo(() => {
     const map = new Map<string, { staff: number; level: "ok" | "warning" | "critical" }>();
     for (const slot of TIME_SLOTS) {
-      const staff = staffingForSlot(date, slot, counterStaffIds, index);
+      const staff = staffingForSlot(date, slot, counterStaffIds, index, allStaffIds);
       map.set(slot, { staff, level: staffingLevel(staff, minStaff) });
     }
     return map;
-  }, [date, counterStaffIds, index, minStaff]);
+  }, [date, counterStaffIds, allStaffIds, index, minStaff]);
 
   const isTodayDisplayed = useMemo(() => {
     const today = new Date();
@@ -896,6 +899,15 @@ const ROW_SEP =
 // vides, décalait les lignes en mode ajusté (hauteurs pilotées par le contenu).
 const BLOCK_END_LINE = "inset 0 -1px 0 0 rgb(255 255 255)";
 
+// Contour de sélection — DUPLIQUÉ ici en box-shadow (et non via la classe
+// Tailwind `ring-*`) car les cellules TASK/ABSENCE posent déjà un `boxShadow`
+// inline (filet de fin de bloc, heures sup, ligne « maintenant »). Or un
+// `style.boxShadow` inline ÉCRASE totalement le box-shadow des classes `ring`
+// → sinon la sélection devient invisible sur les cases en fin de bloc / en HS /
+// sur la ligne courante. On compose donc le ring DANS le box-shadow inline.
+const SELECT_RING = "inset 0 0 0 2px rgb(139 92 246 / 0.85)"; // violet-500
+const ACTIVE_RING = "inset 0 0 0 2px rgb(139 92 246)"; // bloc en cours de drag
+
 /** Props communs à toutes les variantes de cellule (présentation + sélection). */
 type CellProps = {
   cellKey: CellKey;
@@ -1064,7 +1076,22 @@ function CellView({
           isMyColumn && "bg-amber-50/50",
           dropTargetRing
         )}
-        style={isCurrentRow ? { boxShadow: CURRENT_TIME_LINE } : undefined}
+        // Sur la ligne courante, l'inline box-shadow écraserait le ring de
+        // sélection Tailwind → on compose le contour ici aussi. Hors ligne
+        // courante, la classe `ring-*` de baseClasses suffit (elle se combine
+        // avec ROW_SEP).
+        style={
+          isCurrentRow
+            ? {
+                boxShadow: [
+                  isInActiveBlock ? ACTIVE_RING : isSelected ? SELECT_RING : null,
+                  CURRENT_TIME_LINE,
+                ]
+                  .filter(Boolean)
+                  .join(", "),
+              }
+            : undefined
+        }
         aria-label="Vide"
       />
     );
@@ -1127,10 +1154,13 @@ function CellView({
         style={{
           background,
           color: c.text,
-          // Cadre HS + filet de fin de bloc + trait "heure actuelle", tous en
-          // box-shadow (aucune bordure réelle → pas de décalage de hauteur).
+          // Contour de sélection + cadre HS + filet de fin de bloc + trait
+          // "heure actuelle", tous en box-shadow (aucune bordure réelle → pas de
+          // décalage de hauteur). Le ring de sélection est placé EN PREMIER
+          // (peint au-dessus) et intégré ici car l'inline écrase les classes ring.
           boxShadow:
             [
+              isInActiveBlock ? ACTIVE_RING : isSelected ? SELECT_RING : null,
               overtimeBorders,
               isLastOfBlock && BLOCK_END_LINE,
               isCurrentRow && CURRENT_TIME_LINE,
@@ -1177,7 +1207,11 @@ function CellView({
           backgroundImage: layers.join(", "),
           color: s.text,
           boxShadow:
-            [isLastOfBlock && BLOCK_END_LINE, isCurrentRow && CURRENT_TIME_LINE]
+            [
+              isInActiveBlock ? ACTIVE_RING : isSelected ? SELECT_RING : null,
+              isLastOfBlock && BLOCK_END_LINE,
+              isCurrentRow && CURRENT_TIME_LINE,
+            ]
               .filter(Boolean)
               .join(", ") || undefined,
         }}

@@ -82,17 +82,19 @@ export function MobileWeekView({
         .map((e) => e.id),
     [employees]
   );
+  // Tous les ids → un REMPLACEMENT compte quel que soit le rôle du remplaçant.
+  const allStaffIds = useMemo(() => employees.map((e) => e.id), [employees]);
   const dailyMinEff = useMemo(
     () =>
       weekDates.map((iso) => {
         let min = Infinity;
         for (const slot of OPEN_SLOTS) {
-          const n = staffingForSlot(iso, slot, counterStaffIds, index);
+          const n = staffingForSlot(iso, slot, counterStaffIds, index, allStaffIds);
           if (n < min) min = n;
         }
         return min === Infinity ? 0 : min;
       }),
-    [weekDates, counterStaffIds, index]
+    [weekDates, counterStaffIds, allStaffIds, index]
   );
   // Trie : "moi" en premier, puis ordre d'affichage habituel.
   const rows = useMemo(
