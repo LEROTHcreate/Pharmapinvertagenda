@@ -141,16 +141,27 @@ export default async function PlanningPage({
     ...seasonalTips(todayIso, 14).slice(0, 3),
   ];
 
-  // Événements d'équipe du JOUR → petite fête (confettis + bandeau) en bas du planning.
+  // Événements d'équipe sur une FENÊTRE autour d'aujourd'hui (semaine passée →
+  // ~4 mois) → on décore le jour concerné dans l'agenda (onglets), y compris
+  // quand l'utilisateur navigue de semaine, sans re-fetch.
   const todayStart = new Date(`${todayIso}T00:00:00Z`);
-  const todayEventRows = await prisma.teamEvent.findMany({
+  const eventRows = await prisma.teamEvent.findMany({
     where: {
       pharmacyId: session.user.pharmacyId,
-      date: { gte: todayStart, lt: new Date(todayStart.getTime() + 86400000) },
+      date: {
+        gte: new Date(todayStart.getTime() - 7 * 86400000),
+        lte: new Date(todayStart.getTime() + 120 * 86400000),
+      },
     },
-    orderBy: { time: "asc" },
-    select: { title: true, type: true },
+    orderBy: [{ date: "asc" }, { time: "asc" }],
+    take: 80,
+    select: { date: true, title: true, type: true },
   });
+  const eventsDTO = eventRows.map((e) => ({
+    date: e.date.toISOString().slice(0, 10),
+    title: e.title,
+    type: e.type,
+  }));
 
   return (
     <div className="space-y-2 sm:space-y-2.5">
@@ -177,7 +188,7 @@ export default async function PlanningPage({
             role={session.user.role}
             minStaff={pharmacy?.minStaff ?? 4}
             currentEmployeeId={session.user.employeeId ?? null}
-            todayEvents={todayEventRows}
+            events={eventsDTO}
           />
         </>
       )}
