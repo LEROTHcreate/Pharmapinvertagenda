@@ -1595,11 +1595,18 @@ export function PlanningView({
         : 64;
       // Objectif : voir TOUTE la journée (7h30-20h) sans défilement, quelle que
       // soit la taille de l'écran → on comprime les lignes autant que nécessaire.
-      // Plancher très bas (11 px) pour garantir que ça tient même sur petit
-      // écran ; au-delà l'en-tête reste figé et la grille défile en interne.
+      // On déduit la ligne de fermeture « 20:00 » (~16 px, hauteur fixe) + une
+      // petite marge de sécurité (bordures, arrondis sub-pixel) pour que la
+      // grille tienne VRAIMENT dans l'espace dispo → aucun scroll quand il y a
+      // la place. Plancher bas (11 px) : sur très petit écran ça défile encore.
+      const CLOSING_ROW_H = 16;
+      const SAFETY = 6;
       const rowHeight = Math.min(
         52,
-        Math.max(11, Math.floor((maxHeight - headerH) / numSlots))
+        Math.max(
+          11,
+          Math.floor((maxHeight - headerH - CLOSING_ROW_H - SAFETY) / numSlots)
+        )
       );
       // Guard ANTI-BOUCLE : on ne met à jour QUE si la valeur change vraiment.
       // Sinon setFit → re-render → la grille change de hauteur → le body change

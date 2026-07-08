@@ -773,9 +773,12 @@
   /* Lignes compressées à la hauteur calculée (bornée à un minimum lisible).
      IMPORTANT : on force AUSSI la hauteur sur les <td> — le `h-9` (36px) de
      Tailwind sur les cellules imposait sinon un plancher de 36px qui empêchait
-     toute compression (la journée débordait → scroll). */
-  table[data-fit="true"] tbody tr,
-  table[data-fit="true"] tbody td {
+     toute compression (la journée débordait → scroll).
+     `:not([aria-hidden])` EXCLUT la ligne de fermeture « 20:00 » : sinon elle
+     serait elle aussi étirée à --row-h → une ligne pleine hauteur non comptée
+     dans le calcul → la grille dépassait d'une ligne et scrollait à tort. */
+  table[data-fit="true"] tbody tr:not([aria-hidden]),
+  table[data-fit="true"] tbody tr:not([aria-hidden]) > td {
     height: var(--row-h, 28px);
   }
   table[data-fit="true"] tbody td {
