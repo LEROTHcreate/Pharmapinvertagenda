@@ -695,3 +695,66 @@ export async function sendWeeklyDigestEmail(params: {
     tag: "weekly-digest",
   });
 }
+
+/** ✉️ Nouvelle CONSIGNE du jour — notifie l'équipe (un seul envoi, `to` = liste). */
+export async function sendDailyNoticeEmail(params: {
+  to: string[];
+  pharmacyName: string;
+  text: string;
+  planningUrl: string;
+}): Promise<void> {
+  if (params.to.length === 0) return;
+  const html = layout({
+    title: "Nouvelle consigne du jour",
+    bodyHtml: [
+      h1("📌 Consigne du jour"),
+      p(`Une nouvelle consigne vient d'être posée à la ${params.pharmacyName} :`),
+      `<div style="background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:14px 16px; margin:16px 0;">
+        <p style="margin:0; font-size:15px; line-height:1.5; color:#78350f; white-space:pre-wrap;">${escapeHtml(params.text)}</p>
+      </div>`,
+      cta(params.planningUrl, "Ouvrir PharmaPlanning"),
+    ].join(""),
+  });
+  await safeSend({
+    to: params.to,
+    subject: "📌 Consigne du jour — " + params.pharmacyName,
+    html,
+    tag: "daily-notice",
+  });
+}
+
+/** ✉️ Rappel : ÉVÉNEMENT(S) d'équipe DEMAIN — notifie l'équipe (un seul envoi). */
+export async function sendEventReminderEmail(params: {
+  to: string[];
+  pharmacyName: string;
+  dateLabel: string; // "demain, vendredi 12 juillet"
+  events: { title: string; timeLabel: string | null; location: string | null; typeLabel: string }[];
+  url: string;
+}): Promise<void> {
+  if (params.to.length === 0 || params.events.length === 0) return;
+  const items = params.events
+    .map(
+      (e) => `<div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:12px; padding:12px 16px; margin:10px 0;">
+        <p style="margin:0 0 3px; font-size:15px; font-weight:600; color:#5b21b6;">${escapeHtml(e.title)}</p>
+        <p style="margin:0; font-size:13px; color:#6d28d9;">${escapeHtml(
+          [e.typeLabel, e.timeLabel, e.location].filter(Boolean).join(" · ")
+        )}</p>
+      </div>`
+    )
+    .join("");
+  const html = layout({
+    title: "Rappel d'événement d'équipe",
+    bodyHtml: [
+      h1("🗓️ C'est pour demain"),
+      p(`Petit rappel : ${params.dateLabel} à la ${params.pharmacyName}.`),
+      items,
+      cta(params.url, "Voir les détails"),
+    ].join(""),
+  });
+  await safeSend({
+    to: params.to,
+    subject: `🗓️ Rappel — événement demain (${params.pharmacyName})`,
+    html,
+    tag: "event-reminder",
+  });
+}
