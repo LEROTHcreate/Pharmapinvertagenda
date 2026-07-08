@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Send, Sparkles, X } from "lucide-react";
+import { ExternalLink, RotateCcw, Send, Sparkles, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HygieLogo } from "@/components/assistant/HygieLogo";
 
@@ -12,6 +12,18 @@ type PendingAction = { tool: string; args: Record<string, unknown>; summary: str
 /** Découpe en forme de croix (croix de pharmacie) — branches ~32% d'épaisseur. */
 const CROSS_CLIP =
   "polygon(34% 0%, 66% 0%, 66% 34%, 100% 34%, 100% 66%, 66% 66%, 66% 100%, 34% 100%, 34% 66%, 0% 66%, 0% 34%, 34% 34%)";
+
+// Persistance locale de la conversation. On garde l'échange du JOUR (clé unique,
+// réinitialisée chaque jour) pour ne pas perdre l'historique en rechargeant la
+// page ou en fermant/rouvrant l'onglet — sans traîner une conversation périmée.
+const STORAGE_KEY = "hygie_chat_v1";
+const MAX_STORED = 40;
+
+/** Clé de jour (locale) pour dater la conversation sauvegardée. */
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
 
 /**
  * Bulle d'assistante IA « Hygie » — flotte en bas à droite sur toutes les pages
@@ -41,6 +53,13 @@ export function AssistantBubble({
   const [nudge, setNudge] = useState<string | null>(null);
   // Animation de clic sur la croix (tournoie + rebondit) avant d'ouvrir le chat.
   const [popping, setPopping] = useState(false);
+  // Erreur réseau de la dernière requête (bannière + réessai), null sinon.
+  const [error, setError] = useState<string | null>(null);
+  // Contrôleur d'annulation de la requête en cours (bouton Stop).
+  const abortRef = useRef<AbortController | null>(null);
+  // Passe à true une fois l'historique restauré → évite d'écraser le storage
+  // avec un tableau vide au tout premier rendu (avant chargement).
+  const restored = useRef(false);
 
   // Clic sur la croix : joue le petit "pop" puis ouvre la bulle.
   function openWithPop() {
@@ -75,6 +94,64 @@ export function AssistantBubble({
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
+
+  // Restaure la conversation du jour au montage (client uniquement). Une
+  // conversation d'un autre jour est écartée (repart propre chaque matin).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { day?: string; messages?: Msg[] };
+        if (saved.day === todayKey() && Array.isArray(saved.messages)) {
+          setMessages(saved.messages.slice(-MAX_STORED));
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    } catch {
+      /* storage indisponible / JSON corrompu → on démarre à vide */
+    }
+    restored.current = true;
+  }, []);
+
+  // Sauvegarde à chaque évolution de la conversation (après restauration).
+  useEffect(() => {
+    if (!restored.current) return;
+    try {
+      if (messages.length === 0) {
+        localStorage.removeItem(STORAGE_KEY);
+      } else {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ day: todayKey(), messages: messages.slice(-MAX_STORED) })
+        );
+      }
+    } catch {
+      /* quota dépassé → on ignore, la conversation reste en mémoire */
+    }
+  }, [messages]);
+
+  // Coupe la requête en cours (bouton Stop).
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  // Repart d'une conversation vierge : coupe l'éventuelle requête, vide l'écran
+  // et le stockage local.
+  function newConversation() {
+    abortRef.current?.abort();
+    setMessages([]);
+    setPending(null);
+    setError(null);
+    setInput("");
+    setLoading(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }
 
   // Interactions aléatoires : quand la bulle est fermée, Hygie glisse parfois un
   // petit conseil/coup de pouce qui reste quelques secondes puis s'efface, à des
@@ -124,15 +201,19 @@ export function AssistantBubble({
     const text = (textArg ?? input).trim();
     if (!text || loading) return;
     setPending(null); // nouvelle question → on abandonne toute action en attente
+    setError(null);
     const next: Msg[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
     setLoading(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ messages: next }),
+        signal: controller.signal,
       });
       const data = (await res.json().catch(() => null)) as
         | { reply?: string; pendingAction?: PendingAction }
@@ -141,12 +222,14 @@ export function AssistantBubble({
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
       if (data?.pendingAction) setPending(data.pendingAction);
     } catch {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "Connexion échouée. Réessaie." },
-      ]);
+      // Interruption volontaire OU erreur réseau : on retire la question restée
+      // sans réponse et on la remet dans le champ pour un renvoi immédiat.
+      setMessages((m) => m.slice(0, -1));
+      setInput(text);
+      if (!controller.signal.aborted) setError("Connexion échouée. Réessaie.");
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
   }
 
@@ -154,6 +237,7 @@ export function AssistantBubble({
     if (!pending || loading) return;
     const p = pending;
     setPending(null);
+    setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/assistant", {
@@ -281,6 +365,17 @@ export function AssistantBubble({
                 Aide appli + repères pharma
               </p>
             </div>
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={newConversation}
+                aria-label="Nouvelle conversation"
+                title="Nouvelle conversation"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/90 hover:bg-white/15"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -349,6 +444,20 @@ export function AssistantBubble({
 
           {/* Saisie */}
           <div className="border-t border-border p-2.5">
+            {/* Bannière d'erreur réseau avec réessai en un clic */}
+            {error && (
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+                <span className="min-w-0 flex-1">{error}</span>
+                <button
+                  type="button"
+                  onClick={() => void send()}
+                  disabled={!input.trim() || loading}
+                  className="shrink-0 rounded-md bg-rose-600 px-2 py-0.5 text-[11.5px] font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+                >
+                  Réessayer
+                </button>
+              </div>
+            )}
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
@@ -359,15 +468,27 @@ export function AssistantBubble({
                 placeholder="Écris ta question…"
                 className="max-h-28 min-h-[40px] flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:ring-2 focus:ring-emerald-400"
               />
-              <button
-                type="button"
-                onClick={() => void send()}
-                disabled={!input.trim() || loading}
-                aria-label="Envoyer"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-              </button>
+              {loading ? (
+                <button
+                  type="button"
+                  onClick={stop}
+                  aria-label="Arrêter la réponse"
+                  title="Arrêter la réponse"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-700"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void send()}
+                  disabled={!input.trim()}
+                  aria-label="Envoyer"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              )}
             </div>
             <p className="mt-1.5 px-1 text-[10px] text-muted-foreground/70">
               Hygie donne des repères et peut se tromper : pour une dispensation,
