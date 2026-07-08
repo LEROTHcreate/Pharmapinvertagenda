@@ -118,6 +118,15 @@ enum PayrollNoteStatus {
   ACCOUNTED // Comptabilisé par l'admin
 }
 
+/// Type de formation suivie par un collaborateur (catalogue + suivi DPC).
+enum TrainingType {
+  DPC // Développement Professionnel Continu (pharmacien, cycle triennal)
+  OBLIGATOIRE // Formation obligatoire (hygiène, sécurité, gestes d'urgence…)
+  INTERNE // Formation interne à l'officine
+  EXTERNE // Formation externe / labo / organisme
+  AUTRE // Autre
+}
+
 // ─── MODELS ──────────────────────────────────────────────────────
 
 /// Pharmacie — entité multi-tenant racine
@@ -181,6 +190,7 @@ model Pharmacy {
   teamEvents         TeamEvent[]
   openShifts         OpenShift[]
   polls              Poll[]
+  trainings          Training[]
 
   @@map("pharmacies")
 }
@@ -350,10 +360,34 @@ model Employee {
   openShiftsAssigned  OpenShift[]          @relation("OpenShiftAssigned")
   openShiftVolunteers OpenShiftVolunteer[] @relation("OpenShiftVolunteer")
   pollVotes           PollVote[]           @relation("PollVote")
+  trainings           Training[]
 
   @@index([pharmacyId])
   @@index([pharmacyId, isActive])
   @@map("employees")
+}
+
+/// Formation suivie par un collaborateur — catalogue + suivi DPC (rappel
+/// triennal pour les pharmaciens). Chaque entrée = une formation datée,
+/// rattachée à une officine et à un collaborateur.
+model Training {
+  id             String       @id @default(cuid())
+  title          String // Intitulé de la formation
+  type           TrainingType @default(EXTERNE)
+  date           DateTime // Date de la formation (jour)
+  provider       String? // Organisme / labo dispensateur
+  notes          String? // Notes libres
+  attestationUrl String? // Lien vers l'attestation (PDF hébergé ailleurs)
+  createdAt      DateTime     @default(now())
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId])
+  @@index([employeeId])
+  @@map("trainings")
 }
 
 /// Type de contrat — sert aux rappels d'échéances (fin de CDD, etc.).

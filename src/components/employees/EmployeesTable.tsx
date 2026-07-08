@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   Crown,
+  GraduationCap,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -53,6 +54,7 @@ function frDate(iso: string | null): string | null {
   return `${d}/${m}/${y}`;
 }
 import { EmployeeFormDialog } from "@/components/employees/EmployeeFormDialog";
+import { TrainingsDialog } from "@/components/employees/TrainingsDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   deleteEmployee,
@@ -112,6 +114,9 @@ export function EmployeesTable({
   const [error, setError] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
   const [deleteTarget, setDeleteTarget] =
+    React.useState<EmployeeRowData | null>(null);
+  // Collaborateur dont on consulte les formations / DPC (null = dialog fermé).
+  const [trainingsFor, setTrainingsFor] =
     React.useState<EmployeeRowData | null>(null);
   // Rôles que l'utilisateur courant a le droit d'attribuer (jamais CREATEUR).
   const assignable = React.useMemo(
@@ -319,6 +324,10 @@ export function EmployeesTable({
                             <Power className="h-4 w-4" />
                             {e.isActive ? "Désactiver" : "Réactiver"}
                           </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setTrainingsFor(e)}>
+                            <GraduationCap className="h-4 w-4" />
+                            Formations & DPC
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
@@ -358,6 +367,18 @@ export function EmployeesTable({
         onConfirm={confirmDelete}
         onClose={() => setDeleteTarget(null)}
       />
+
+      {trainingsFor && (
+        <TrainingsDialog
+          employeeId={trainingsFor.id}
+          employeeName={`${trainingsFor.firstName} ${trainingsFor.lastName}`}
+          open={trainingsFor !== null}
+          onOpenChange={(o) => {
+            if (!o) setTrainingsFor(null);
+          }}
+          onChanged={() => startTransition(() => router.refresh())}
+        />
+      )}
     </>
   );
 }
