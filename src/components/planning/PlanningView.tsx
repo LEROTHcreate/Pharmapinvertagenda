@@ -1560,20 +1560,35 @@ export function PlanningView({
         44,
         Math.max(11, Math.floor((maxHeight - headerH) / numSlots))
       );
-      setFit({ maxHeight, rowHeight });
+      // Guard ANTI-BOUCLE : on ne met à jour QUE si la valeur change vraiment.
+      // Sinon setFit → re-render → la grille change de hauteur → le body change
+      // de hauteur → ResizeObserver → recompute → … boucle infinie qui FIGE la
+      // page. Retourner `prev` à l'identique coupe la boucle net.
+      setFit((prev) =>
+        prev && prev.maxHeight === maxHeight && prev.rowHeight === rowHeight
+          ? prev
+          : { maxHeight, rowHeight }
+      );
     }
     recompute();
     window.addEventListener("resize", recompute);
     // Recalcule aussi quand le contenu AU-DESSUS de la grille change de hauteur
     // (consigne du jour affichée/masquée, phrase du jour qui s'enroule…) : le
-    // haut de la grille bouge alors sans redimensionnement de fenêtre.
+    // haut de la grille bouge alors sans redimensionnement de fenêtre. On passe
+    // par requestAnimationFrame pour coalescer les rafales et éviter l'erreur
+    // « ResizeObserver loop limit exceeded ».
     let ro: ResizeObserver | null = null;
+    let raf = 0;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(() => recompute());
+      ro = new ResizeObserver(() => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(recompute);
+      });
       ro.observe(document.body);
     }
     return () => {
       window.removeEventListener("resize", recompute);
+      cancelAnimationFrame(raf);
       ro?.disconnect();
     };
   }, [isDesktopWidth]);
