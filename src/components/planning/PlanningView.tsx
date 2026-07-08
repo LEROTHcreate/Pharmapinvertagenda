@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Trash2, ClipboardCopy, ClipboardPaste } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Trash2, ClipboardCopy, ClipboardPaste, PartyPopper } from "lucide-react";
 import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
@@ -35,7 +35,6 @@ import { holidaysIndexForDates } from "@/lib/holidays-fr";
 import type { AbsenceConflict } from "@/components/planning/AbsenceConflictDialog";
 import { usePlanningStore } from "@/store/planning-store";
 import { entryKey, parseCellKey } from "@/lib/cell-keys";
-import { TodayEventCelebration } from "@/components/team/EventCelebration";
 import type { TeamEventType } from "@/validators/team-event";
 
 // Modals lourds chargés à la demande (ouverture seulement) → allègent le
@@ -180,7 +179,7 @@ export function PlanningView({
   role,
   minStaff,
   currentEmployeeId,
-  todayEvents = [],
+  events = [],
 }: {
   initialWeekStart: string;
   /** Jour pré-sélectionné (0 = lundi … 5 = samedi). Si null, "aujourd'hui". */
@@ -191,8 +190,8 @@ export function PlanningView({
   minStaff: number;
   /** ID de l'Employee lié au compte connecté (null si admin sans liaison) */
   currentEmployeeId?: string | null;
-  /** Événements d'équipe du JOUR → petite fête en bas du planning. */
-  todayEvents?: { title: string; type: TeamEventType }[];
+  /** Événements d'équipe proches (date ISO) → animation sur le jour concerné. */
+  events?: { date: string; title: string; type: TeamEventType }[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -611,6 +610,20 @@ export function PlanningView({
     dayDatesRef.current = dayDates;
   }, [dayDates]);
   const selectedDay = dayDates[dayIndex];
+
+  // Événements d'équipe indexés par date (ISO) → on décore le jour concerné
+  // dans l'agenda (onglets + pastille en tête du jour sélectionné).
+  const eventsByDate = useMemo(() => {
+    const m = new Map<string, { title: string; type: TeamEventType }[]>();
+    for (const e of events) {
+      const arr = m.get(e.date);
+      if (arr) arr.push({ title: e.title, type: e.type });
+      else m.set(e.date, [{ title: e.title, type: e.type }]);
+    }
+    return m;
+  }, [events]);
+  const selectedDayEvents = eventsByDate.get(selectedDay) ?? [];
+
   const weekNumber = isoWeekNumber(monday);
   const weekKind = weekTypeFor(monday);
 
@@ -1560,20 +1573,35 @@ export function PlanningView({
         52,
         Math.max(11, Math.floor((maxHeight - headerH) / numSlots))
       );
-      setFit({ maxHeight, rowHeight });
+      // Guard ANTI-BOUCLE : on ne met à jour QUE si la valeur change vraiment.
+      // Sinon setFit → re-render → la grille change de hauteur → le body change
+      // de hauteur → ResizeObserver → recompute → … boucle infinie qui FIGE la
+      // page. Retourner `prev` à l'identique coupe la boucle net.
+      setFit((prev) =>
+        prev && prev.maxHeight === maxHeight && prev.rowHeight === rowHeight
+          ? prev
+          : { maxHeight, rowHeight }
+      );
     }
     recompute();
     window.addEventListener("resize", recompute);
     // Recalcule aussi quand le contenu AU-DESSUS de la grille change de hauteur
     // (consigne du jour affichée/masquée, phrase du jour qui s'enroule…) : le
-    // haut de la grille bouge alors sans redimensionnement de fenêtre.
+    // haut de la grille bouge alors sans redimensionnement de fenêtre. On passe
+    // par requestAnimationFrame pour coalescer les rafales et éviter l'erreur
+    // « ResizeObserver loop limit exceeded ».
     let ro: ResizeObserver | null = null;
+    let raf = 0;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(() => recompute());
+      ro = new ResizeObserver(() => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(recompute);
+      });
       ro.observe(document.body);
     }
     return () => {
       window.removeEventListener("resize", recompute);
+      cancelAnimationFrame(raf);
       ro?.disconnect();
     };
   }, [isDesktopWidth]);
@@ -1767,18 +1795,29 @@ export function PlanningView({
             const absCount = absencesPerDay[i];
             const active = i === dayIndex;
             const holiday = holidaysIndex.get(dayDates[i]) ?? null;
+            const dayEvents = eventsByDate.get(dayDates[i]) ?? [];
+            const hasEvent = dayEvents.length > 0;
             return (
               <button
                 key={i}
                 onClick={() => setDayIndex(i)}
-                title={holiday ? `${holiday.name} (jour férié)` : undefined}
+                title={
+                  hasEvent
+                    ? `🎉 ${dayEvents.map((e) => e.title).join(" · ")}`
+                    : holiday
+                      ? `${holiday.name} (jour férié)`
+                      : undefined
+                }
                 className={cn(
                   "relative flex-1 sm:flex-none flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 transition-all min-w-[64px]",
                   active
                     ? "bg-card shadow-[0_1px_2px_rgba(0,0,0,0.06)] text-foreground dark:shadow-none dark:ring-1 dark:ring-zinc-700"
                     : "text-muted-foreground hover:text-foreground",
                   // Jour férié : couleur rouge subtile pour signaler visuellement
-                  holiday && (active ? "text-rose-700 dark:text-rose-300" : "text-rose-500 dark:text-rose-400")
+                  holiday && (active ? "text-rose-700 dark:text-rose-300" : "text-rose-500 dark:text-rose-400"),
+                  // Jour d'événement d'équipe : liseré festif (le popper animé
+                  // en coin apporte le mouvement).
+                  hasEvent && "ring-1 ring-violet-300/80 dark:ring-violet-700/70"
                 )}
               >
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium">
@@ -1808,11 +1847,36 @@ export function PlanningView({
                     {absCount}
                   </span>
                 )}
+                {/* Jour d'événement d'équipe → petit popper animé (coin bas-droit,
+                    libre des pastilles férié/absences). */}
+                {hasEvent && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute -bottom-1.5 -right-1.5 tev-bob text-violet-500 drop-shadow-sm dark:text-violet-300"
+                  >
+                    <PartyPopper className="h-3.5 w-3.5" />
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Pastille festive « jour d'événement » — en TÊTE du jour sélectionné
+          (visible, contrairement à un bandeau en bas). Animation discrète. */}
+      {selectedDayEvents.length > 0 && (
+        <div className="no-print flex items-center gap-2 rounded-2xl border border-violet-200/70 bg-gradient-to-r from-violet-50 to-fuchsia-50/70 px-3.5 py-2 text-[13px] text-violet-900 shadow-sm dark:border-violet-900/40 dark:from-violet-950/30 dark:to-fuchsia-950/20 dark:text-violet-100">
+          <span className="tev-bob shrink-0 text-violet-500 dark:text-violet-300">
+            <PartyPopper className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1 font-medium">
+            {selectedDayEvents.length === 1
+              ? selectedDayEvents[0].title
+              : `${selectedDayEvents.length} événements ce jour`}
+          </span>
+        </div>
+      )}
 
       {/* Bandeau "jour férié" — badge "FR" stylé (pas d'emoji drapeau qui
           rend mal sur Windows), alignement centré, design Apple-épuré. */}
@@ -1962,10 +2026,6 @@ export function PlanningView({
         </div>
       )}
 
-      {/* Fête « jour d'événement » — confettis + bandeau en bas du planning */}
-      {todayEvents.length > 0 && (
-        <TodayEventCelebration events={todayEvents} className="mt-2" />
-      )}
 
       {/* (Le FAB "+" de création rapide d'absence a été retiré sur mobile :
           la barre d'onglets + la page Accueil couvrent déjà l'accès aux

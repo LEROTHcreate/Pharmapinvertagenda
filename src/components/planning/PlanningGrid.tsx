@@ -890,6 +890,12 @@ const CURRENT_TIME_LINE = "inset 0 3px 0 0 rgb(244 63 94)"; // rose-500
 const ROW_SEP =
   "shadow-[inset_0_-1px_0_0_rgb(228_228_231)] dark:shadow-[inset_0_-1px_0_0_rgb(63_63_70)]";
 
+// Filet blanc de fin de bloc (sépare deux blocs empilés du même type). En
+// box-shadow inset (et NON en `border-b`) pour NE PAS ajouter 1px de hauteur à
+// la cellule : une vraie bordure, mêlée aux séparateurs box-shadow des cases
+// vides, décalait les lignes en mode ajusté (hauteurs pilotées par le contenu).
+const BLOCK_END_LINE = "inset 0 -1px 0 0 rgb(255 255 255)";
+
 /** Props communs à toutes les variantes de cellule (présentation + sélection). */
 type CellProps = {
   cellKey: CellKey;
@@ -1114,7 +1120,6 @@ function CellView({
         className={cn(
           baseClasses,
           "has-content",
-          isLastOfBlock && "border-b border-b-white",
           dropTargetRing,
           isDragging && "opacity-40",
           taskCellUsesDnd && "touch-none"
@@ -1122,9 +1127,14 @@ function CellView({
         style={{
           background,
           color: c.text,
-          // Trait "heure actuelle" combiné au cadre heures-sup s'il y en a un.
+          // Cadre HS + filet de fin de bloc + trait "heure actuelle", tous en
+          // box-shadow (aucune bordure réelle → pas de décalage de hauteur).
           boxShadow:
-            [overtimeBorders, isCurrentRow && CURRENT_TIME_LINE]
+            [
+              overtimeBorders,
+              isLastOfBlock && BLOCK_END_LINE,
+              isCurrentRow && CURRENT_TIME_LINE,
+            ]
               .filter(Boolean)
               .join(", ") || undefined,
         }}
@@ -1161,12 +1171,15 @@ function CellView({
       <td
         ref={setNodeRef}
         {...handlers}
-        className={cn(baseClasses, "has-content", isLastOfBlock && "border-b border-b-white")}
+        className={cn(baseClasses, "has-content")}
         style={{
           backgroundColor: s.bg,
           backgroundImage: layers.join(", "),
           color: s.text,
-          boxShadow: isCurrentRow ? CURRENT_TIME_LINE : undefined,
+          boxShadow:
+            [isLastOfBlock && BLOCK_END_LINE, isCurrentRow && CURRENT_TIME_LINE]
+              .filter(Boolean)
+              .join(", ") || undefined,
         }}
         title={`Absence ${entry.absenceCode}`}
       >

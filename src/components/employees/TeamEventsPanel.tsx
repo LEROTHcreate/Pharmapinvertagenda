@@ -364,10 +364,19 @@ function EventCard({
               <span className="font-mono tabular-nums">{ev.time}</span>
             )}
             {ev.location && (
-              <span className="inline-flex items-center gap-0.5">
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  ev.location
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="Voir sur Google Maps"
+                className="inline-flex items-center gap-0.5 underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+              >
                 <MapPin className="h-3 w-3" />
                 {ev.location}
-              </span>
+              </a>
             )}
           </div>
         </div>
@@ -640,10 +649,11 @@ function EventFormDialog({
             </div>
           </div>
 
-          {/* Lieu */}
+          {/* Lieu — texte libre. Saisir une ADRESSE (ou nom + ville) rend le
+              lieu cliquable vers Google Maps sur la carte de l'événement. */}
           <div>
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Lieu <span className="normal-case text-muted-foreground/60">(optionnel)</span>
+              Lieu / adresse <span className="normal-case text-muted-foreground/60">(optionnel)</span>
             </label>
             <input
               type="text"
@@ -651,9 +661,13 @@ function EventFormDialog({
               onChange={(e) => setLocation(e.target.value)}
               disabled={busy}
               maxLength={120}
-              placeholder="Ex : Restaurant Le Comptoir"
+              placeholder="Ex : Le Comptoir, 12 rue de la Paix, Lyon"
               className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[13px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
             />
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground/70">
+              <MapPin className="h-3 w-3 shrink-0" />
+              Indique l&apos;adresse : le lieu deviendra cliquable vers Google Maps.
+            </p>
           </div>
 
           {/* Description */}
