@@ -89,8 +89,14 @@ export function AssistantBubble({
     let hideTimer: ReturnType<typeof setTimeout>;
     let nextTimer: ReturnType<typeof setTimeout>;
     let lastIdx = -1;
-    // Tire un conseil au hasard, jamais le même que le précédent d'affilée.
+    // Tire un conseil : ~1 fois sur 4 un message lié au MOMENT de la journée
+    // (calculé à l'affichage), sinon le répertoire — jamais deux fois le même
+    // d'affilée.
     function pick(): string {
+      if (Math.random() < 0.28) {
+        const t = timeOfDayNudge();
+        if (t) return t;
+      }
       let i = Math.floor(Math.random() * tips.length);
       if (tips.length > 1 && i === lastIdx) i = (i + 1) % tips.length;
       lastIdx = i;
@@ -373,6 +379,45 @@ export function AssistantBubble({
       )}
     </>
   );
+}
+
+function pickOne(arr: string[]): string {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/**
+ * Message lié au MOMENT de la journée (calculé à l'affichage, heure locale).
+ * Rend Hygie « présente » : bonjour le matin, pause le midi, bonne fin de
+ * journée le soir… Volontairement générique (pas de dépendance au rôle).
+ */
+function timeOfDayNudge(): string | null {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 11)
+    return pickOne([
+      "Bonne journée à l'équipe ☀️",
+      "Prêt·e pour la journée ? Je reste dans le coin 🙂",
+      "Un café et c'est parti ☕ — pose-moi une question quand tu veux.",
+    ]);
+  if (h >= 11 && h < 14)
+    return pickOne([
+      "Pense à souffler un peu à la pause 🥪",
+      "C'est l'heure de pointe du midi — garde un œil sur le comptoir.",
+    ]);
+  if (h >= 14 && h < 18)
+    return pickOne([
+      "Bel après-midi 👋 Une question ? Je suis là.",
+      "L'après-midi peut charger — un œil sur l'effectif du jour ?",
+    ]);
+  if (h >= 18 && h < 22)
+    return pickOne([
+      "Bientôt la fermeture — bonne fin de journée 🌆",
+      "Fin de journée : pense à jeter un œil au planning de demain 📋",
+    ]);
+  // Nuit / très tôt
+  return pickOne([
+    "Encore là à cette heure ? Ne te couche pas trop tard 🌙",
+    "Nuit calme ? Je veille aussi 🌙",
+  ]);
 }
 
 /**
