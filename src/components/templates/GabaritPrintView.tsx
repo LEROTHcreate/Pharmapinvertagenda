@@ -35,6 +35,8 @@ type Props = {
   pharmacyName: string;
   employees: GabaritPrintEmployee[];
   entries: GabaritPrintEntry[];
+  /** Si défini (0=Lundi…5=Samedi) : n'imprime QUE ce jour. Sinon : la semaine. */
+  onlyDay?: number | null;
 };
 
 /** Contenu d'une cellule (libellé + couleurs) ou null si vide. */
@@ -66,6 +68,7 @@ export function GabaritPrintView({
   pharmacyName,
   employees,
   entries,
+  onlyDay = null,
 }: Props) {
   // Ouvre la boîte d'impression automatiquement à l'arrivée (léger délai pour
   // laisser la page se peindre). L'utilisateur peut aussi cliquer « Imprimer ».
@@ -75,6 +78,11 @@ export function GabaritPrintView({
   }, []);
 
   const orderIndex = new Map(employees.map((e, i) => [e.id, i]));
+
+  // Y a-t-il quelque chose à imprimer dans le périmètre demandé ?
+  const hasContent = entries.some(
+    (e) => onlyDay == null || e.dayOfWeek === onlyDay
+  );
 
   return (
     <div className="gab-print min-h-screen bg-white p-4 text-zinc-900 sm:p-6">
@@ -119,13 +127,27 @@ export function GabaritPrintView({
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[12px] text-zinc-500">
           <span>{pharmacyName}</span>
+          {onlyDay != null && (
+            <span className="font-medium text-zinc-700">
+              · {WEEK_DAYS[onlyDay]} uniquement
+            </span>
+          )}
           {description && <span>· {description}</span>}
         </div>
       </header>
 
-      {/* Une grille par jour */}
+      {!hasContent && (
+        <p className="rounded-lg border border-dashed border-zinc-300 px-4 py-6 text-center text-[13px] text-zinc-500">
+          {onlyDay != null
+            ? `Aucun poste programmé pour ${WEEK_DAYS[onlyDay]} dans ce gabarit.`
+            : "Ce gabarit est vide pour l'instant."}
+        </p>
+      )}
+
+      {/* Une grille par jour (ou uniquement le jour demandé) */}
       <div className="space-y-4">
         {WEEK_DAYS.map((dayLabel, day) => {
+          if (onlyDay != null && day !== onlyDay) return null;
           const dayEntries = entries.filter((e) => e.dayOfWeek === day);
           if (dayEntries.length === 0) return null;
 

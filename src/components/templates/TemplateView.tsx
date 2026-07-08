@@ -718,28 +718,60 @@ export function TemplateView({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Imprimer le gabarit (version A4 de la semaine, nouvel onglet).
-              Uniquement pour un gabarit ENREGISTRÉ (on imprime l'état en base). */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9"
-            onClick={() =>
-              templateId &&
-              window.open(`/gabarits/${templateId}/imprimer`, "_blank", "noopener")
-            }
-            disabled={!templateId}
-            title={
-              templateId
-                ? dirty
-                  ? "Imprimer le gabarit (version enregistrée — pense à enregistrer d'abord)"
-                  : "Imprimer le gabarit (semaine A4)"
-                : "Enregistre le gabarit avant de l'imprimer"
-            }
-            aria-label="Imprimer le gabarit"
-          >
-            <Printer className="h-4 w-4" />
-          </Button>
+          {/* Imprimer le gabarit (A4, nouvel onglet) : la semaine entière OU le
+              seul jour affiché. Uniquement pour un gabarit ENREGISTRÉ (on
+              imprime l'état en base). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                disabled={!templateId}
+                title={
+                  templateId
+                    ? "Imprimer le gabarit"
+                    : "Enregistre le gabarit avant de l'imprimer"
+                }
+                aria-label="Imprimer le gabarit"
+              >
+                <Printer className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {dirty && (
+                <DropdownMenuLabel className="text-[11px] font-normal text-amber-600">
+                  On imprime la version enregistrée — pense à enregistrer.
+                </DropdownMenuLabel>
+              )}
+              <DropdownMenuItem
+                onSelect={() =>
+                  templateId &&
+                  window.open(
+                    `/gabarits/${templateId}/imprimer`,
+                    "_blank",
+                    "noopener"
+                  )
+                }
+              >
+                <Printer className="h-4 w-4" />
+                Imprimer la semaine
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  templateId &&
+                  window.open(
+                    `/gabarits/${templateId}/imprimer?jour=${dayIndex}`,
+                    "_blank",
+                    "noopener"
+                  )
+                }
+              >
+                <Printer className="h-4 w-4" />
+                Imprimer ce jour ({WEEK_DAYS[dayIndex]})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {/* Aide des raccourcis clavier (aussi via la touche « ? ») */}
           <Button
             variant="outline"

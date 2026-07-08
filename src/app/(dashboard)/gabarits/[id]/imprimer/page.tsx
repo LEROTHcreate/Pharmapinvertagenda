@@ -13,12 +13,19 @@ export const metadata = { title: "Impression gabarit — PharmaPlanning" };
 
 export default async function GabaritImprimerPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { jour?: string };
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canApplyTemplates(session.user.role)) redirect("/planning");
+
+  // ?jour=0..5 → n'imprimer QUE ce jour ; sinon la semaine entière.
+  const jourNum = Number(searchParams.jour);
+  const onlyDay =
+    Number.isInteger(jourNum) && jourNum >= 0 && jourNum <= 5 ? jourNum : null;
 
   const [template, pharmacy, employees] = await Promise.all([
     prisma.weekTemplate.findFirst({
@@ -66,6 +73,7 @@ export default async function GabaritImprimerPage({
       pharmacyName={pharmacy?.name ?? "Pharmacie"}
       employees={employeeDTO}
       entries={entries}
+      onlyDay={onlyDay}
     />
   );
 }
