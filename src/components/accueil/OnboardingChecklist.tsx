@@ -1,51 +1,51 @@
 import Link from "next/link";
 import {
-  Rocket,
   Check,
   Users,
+  Clock,
   LayoutTemplate,
-  CalendarRange,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HygieLogo } from "@/components/assistant/HygieLogo";
 
 export type OnboardingState = {
   hasTeam: boolean;
+  hasHours: boolean;
   hasTemplate: boolean;
-  hasPlanning: boolean;
 };
 
 /**
- * Checklist de démarrage — affichée sur l'accueil aux responsables tant que
- * l'officine n'est pas configurée (équipe → gabarit → planning). Disparaît
- * d'elle-même une fois les 3 étapes faites. Guide un titulaire qui vient de
- * créer son officine plutôt que de le laisser devant un tableau de bord vide.
+ * Assistant de première config — affiché sur l'accueil aux responsables tant que
+ * l'officine n'est pas configurée. Guidé par Hygie, en 3 étapes : équipe →
+ * horaires d'ouverture → 1er gabarit. Disparaît de lui-même une fois les 3
+ * étapes faites (le planning se remplit ensuite en 1 clic via « Remplir auto »).
  */
 export function OnboardingChecklist({ state }: { state: OnboardingState }) {
   const steps = [
     {
       done: state.hasTeam,
       icon: Users,
-      title: "Ajoutez votre équipe",
-      desc: "Créez les fiches de vos collaborateurs (nom, statut, heures).",
+      title: "Ajoute ton équipe",
+      desc: "Crée les fiches de tes collaborateurs (nom, statut, heures).",
       href: "/employes",
       cta: "Gérer l'équipe",
     },
     {
-      done: state.hasTemplate,
-      icon: LayoutTemplate,
-      title: "Créez un gabarit de semaine",
-      desc: "Un modèle S1/S2 réutilisable pour pré-remplir vos semaines.",
-      href: "/gabarits",
-      cta: "Créer un gabarit",
+      done: state.hasHours,
+      icon: Clock,
+      title: "Renseigne tes horaires d'ouverture",
+      desc: "Ils me servent à compléter le comptoir quand tu remplis une semaine.",
+      href: "/parametres",
+      cta: "Régler les horaires",
     },
     {
-      done: state.hasPlanning,
-      icon: CalendarRange,
-      title: "Bâtissez le planning de la semaine",
-      desc: "Appliquez un gabarit ou remplissez la grille, c'est parti !",
-      href: "/planning",
-      cta: "Ouvrir le planning",
+      done: state.hasTemplate,
+      icon: LayoutTemplate,
+      title: "Crée ta première semaine type",
+      desc: "Un gabarit S1/S2 (ou colle ton Excel). Ensuite, « Remplir auto » fait le reste.",
+      href: "/gabarits",
+      cta: "Créer un gabarit",
     },
   ];
 
@@ -58,12 +58,12 @@ export function OnboardingChecklist({ state }: { state: OnboardingState }) {
   return (
     <section className="rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-50/80 to-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-violet-900/50 dark:from-violet-950/20">
       <div className="mb-3 flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white">
-          <Rocket className="h-5 w-5" />
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
+          <HygieLogo className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-[14px] font-semibold tracking-tight text-foreground">
-            Bienvenue ! Configurez votre officine en 3 étapes
+            Bonjour, je suis Hygie — configurons ton officine en 3 étapes
           </h2>
           <p className="text-[12px] text-muted-foreground">
             {doneCount}/{steps.length} fait · quelques minutes suffisent

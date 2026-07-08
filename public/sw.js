@@ -15,7 +15,7 @@
 // Bump cette version dès qu'on change PRECACHE_URLS ou la stratégie de cache —
 // les anciens caches sont purgés dans `activate`. Sans bump, les navigateurs
 // continueraient à servir les vieux assets (notamment les favicons).
-const SW_VERSION = "v2";
+const SW_VERSION = "v3";
 const STATIC_CACHE = `pharma-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `pharma-runtime-${SW_VERSION}`;
 
@@ -135,3 +135,42 @@ async function networkFirst(req, cacheName) {
     });
   }
 }
+
+// ─── Web Push ──────────────────────────────────────────────────────
+// Reçoit les notifications poussées par le serveur (absence validée, consigne,
+// événement demain…) et les affiche. Le payload est un JSON
+// { title, body, url, tag }.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  const title = data.title || "PharmaPlanning";
+  const options = {
+    body: data.body || "",
+    icon: "/pharmaplanning-icon-192.png",
+    badge: "/pharmaplanning-icon-192.png",
+    tag: data.tag || undefined,
+    data: { url: data.url || "/accueil" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Clic sur la notif → focus un onglet existant sur l'URL, sinon en ouvre un.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/accueil";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsArr) => {
+      for (const client of clientsArr) {
+        if ("focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});

@@ -9,6 +9,7 @@ import {
   sendAbsenceApprovedEmail,
   sendAbsenceRejectedEmail,
 } from "@/lib/email";
+import { sendPushToUsers } from "@/lib/push";
 import { ABSENCE_LABELS } from "@/types";
 import { withErrorHandling } from "@/lib/api-handler";
 
@@ -86,7 +87,7 @@ async function reviewAbsence(
     select: {
       firstName: true,
       lastName: true,
-      user: { select: { email: true } },
+      user: { select: { id: true, email: true } },
     },
   });
 
@@ -118,6 +119,14 @@ async function reviewAbsence(
         dateStart: request.dateStart.toISOString().slice(0, 10),
         dateEnd: request.dateEnd.toISOString().slice(0, 10),
         adminNote: adminNote || null,
+      });
+    }
+    if (employeeWithUser?.user?.id) {
+      void sendPushToUsers([employeeWithUser.user.id], {
+        title: "Demande d'absence refusée",
+        body: `${ABSENCE_LABELS[request.absenceCode]} — voir le détail`,
+        url: "/absences",
+        tag: "absence-decision",
       });
     }
 
@@ -192,6 +201,14 @@ async function reviewAbsence(
       dateStart: request.dateStart.toISOString().slice(0, 10),
       dateEnd: request.dateEnd.toISOString().slice(0, 10),
       adminNote: adminNote || null,
+    });
+  }
+  if (employeeWithUser?.user?.id) {
+    void sendPushToUsers([employeeWithUser.user.id], {
+      title: "✅ Absence validée",
+      body: `${ABSENCE_LABELS[request.absenceCode]} — c'est confirmé`,
+      url: "/absences",
+      tag: "absence-decision",
     });
   }
 

@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { isAdminLevel } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { sendDailyNoticeEmail } from "@/lib/email";
+import { sendPushToPharmacy } from "@/lib/push";
 
 function baseUrl(): string {
   const v = process.env.NEXTAUTH_URL?.trim();
@@ -80,12 +81,19 @@ async function PATCH__impl(req: Request) {
           select: { email: true },
         });
         const emails = recipients.map((r) => r.email).filter(Boolean);
-        await sendDailyNoticeEmail({
-          to: emails,
-          pharmacyName: prev?.name ?? "votre officine",
-          text,
-          planningUrl: `${baseUrl()}/planning`,
-        });
+        await Promise.allSettled([
+          sendDailyNoticeEmail({
+            to: emails,
+            pharmacyName: prev?.name ?? "votre officine",
+            text,
+            planningUrl: `${baseUrl()}/planning`,
+          }),
+          sendPushToPharmacy(
+            session.user.pharmacyId,
+            { title: "📌 Consigne du jour", body: text, url: "/planning", tag: "daily-notice" },
+            session.user.id
+          ),
+        ]);
       } catch {
         /* best-effort : l'échec e-mail ne bloque pas la pose de consigne */
       }

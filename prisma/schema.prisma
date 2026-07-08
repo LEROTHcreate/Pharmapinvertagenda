@@ -142,7 +142,7 @@ model Pharmacy {
 
   // Horaires d'ouverture (JSON : 7 jours Lun→Dim, chaque jour = créneaux
   // {open,close}). Affichés sur l'écran vitrine public. Cf. src/lib/opening-hours.ts.
-  openingHours  String?
+  openingHours String?
 
   // ─── Réglages Rémunération ─────────────────────────────────────────
   // Région de référence pour le benchmark marché (NATIONAL, IDF,
@@ -152,6 +152,10 @@ model Pharmacy {
   // Null = on retombe sur DEFAULT_PAYROLL_RATES.
   payrollContribEmployee Float? // Cotisations salariales (ex: 0.22)
   payrollContribEmployer Float? // Cotisations patronales (ex: 0.42)
+  // Budget annuel de masse salariale (coût employeur total, €). Sert au
+  // prévisionnel Rémunération (projection au rythme du mois vs budget + alerte
+  // de dérive). Null = pas de budget défini.
+  payrollAnnualBudget    Float?
 
   // ─── Réglages Pharmacie de garde ───────────────────────────────────
   // Indemnités de garde (€) par type. Null = valeurs par défaut indicatives
@@ -246,10 +250,28 @@ model User {
   swapsTargeted           ShiftSwapRequest[]   @relation("swapsTargeted")
   swapsReviewed           ShiftSwapRequest[]   @relation("swapsReviewed")
   payrollNotes            PayrollNote[]
+  pushSubscriptions       PushSubscription[]
 
   @@index([pharmacyId])
   @@index([pharmacyId, status])
   @@map("users")
+}
+
+/// Abonnement Web Push d'un utilisateur (un par navigateur/appareil).
+/// `endpoint` + clés issus de la PushSubscription du navigateur. Sert à
+/// envoyer des notifications hors-app (absence validée, consigne, événement).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 /// Employé — profil métier (apparaît comme colonne dans le planning)

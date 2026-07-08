@@ -9,6 +9,7 @@ import {
   Check,
   Clock,
   Copy,
+  FileSpreadsheet,
   LayoutTemplate,
   Loader2,
   Pencil,
@@ -39,6 +40,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
+import {
+  ImportExcelDialog,
+  type ImportDialogEmployee,
+} from "@/components/templates/ImportExcelDialog";
 import { cn } from "@/lib/utils";
 
 export type GabaritRow = {
@@ -72,9 +77,12 @@ type TypeFilter = "ALL" | WeekType;
 export function GabaritsList({
   rows,
   currentWeekStart,
+  employees = [],
 }: {
   rows: GabaritRow[];
   currentWeekStart: string;
+  /** Équipe active — pour l'import Excel (matching des prénoms + rôle/poste). */
+  employees?: ImportDialogEmployee[];
 }) {
   const router = useRouter();
   const [busyDelete, setBusyDelete] = useState<string | null>(null);
@@ -83,6 +91,7 @@ export function GabaritsList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [settingDefault, setSettingDefault] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [excelOpen, setExcelOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -328,6 +337,15 @@ export function GabaritsList({
             <CalendarPlus className="h-4 w-4" />
             Importer une semaine
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setExcelOpen(true)}
+            title="Créer un gabarit en collant ton planning Excel"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Importer Excel
+          </Button>
           {TYPES.map((type) => (
             <Button key={type} asChild size="sm" variant="outline">
               <Link href={`/gabarits/new/${type}`}>
@@ -410,6 +428,14 @@ export function GabaritsList({
           setDuplicateTarget(null);
           router.push(`/gabarits/${newId}/edit`);
         }}
+      />
+
+      {/* Dialog import depuis Excel (collage) */}
+      <ImportExcelDialog
+        open={excelOpen}
+        employees={employees}
+        onClose={() => setExcelOpen(false)}
+        onCreated={() => startTransition(() => router.refresh())}
       />
 
       {/* Dialog import depuis une semaine réelle */}
