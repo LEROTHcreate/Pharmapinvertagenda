@@ -208,6 +208,9 @@ export function AssistantBubble({
     setLoading(true);
     const controller = new AbortController();
     abortRef.current = controller;
+    // Passe à true dès qu'un fragment de réponse est affiché → sert à la gestion
+    // d'erreur (garder le partiel vs remettre la question dans le champ).
+    let streamed = false;
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
@@ -215,17 +218,79 @@ export function AssistantBubble({
         body: JSON.stringify({ messages: next }),
         signal: controller.signal,
       });
-      const data = (await res.json().catch(() => null)) as
-        | { reply?: string; pendingAction?: PendingAction }
-        | null;
-      const reply = data?.reply ?? "Désolé, je n'ai pas pu répondre. Réessaie.";
-      setMessages((m) => [...m, { role: "assistant", content: reply }]);
-      if (data?.pendingAction) setPending(data.pendingAction);
+      if (!res.ok) throw new Error("http");
+      const ct = res.headers.get("content-type") ?? "";
+
+      // Réponse NON streamée (clé Groq absente…) → ancien format { reply }.
+      if (!ct.includes("ndjson") || !res.body) {
+        const data = (await res.json().catch(() => null)) as
+          | { reply?: string; pendingAction?: PendingAction }
+          | null;
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: data?.reply ?? "Désolé, je n'ai pas pu répondre. Réessaie.",
+          },
+        ]);
+        if (data?.pendingAction) setPending(data.pendingAction);
+        return;
+      }
+
+      // Réponse STREAMÉE (NDJSON, une trame JSON par ligne). On affiche la
+      // réponse d'Hygie au fur et à mesure qu'elle arrive.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let acc = "";
+      let pendingAction: PendingAction | null = null;
+
+      // La bulle de réponse n'est ajoutée qu'au 1er fragment (puis mise à jour).
+      const pushChunk = (chunk: string) => {
+        acc += chunk;
+        if (!streamed) {
+          streamed = true;
+          setMessages((m) => [...m, { role: "assistant", content: acc }]);
+        } else {
+          setMessages((m) => [...m.slice(0, -1), { role: "assistant", content: acc }]);
+        }
+      };
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          let frame: { t?: string; v?: unknown };
+          try {
+            frame = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (frame.t === "delta" && typeof frame.v === "string") pushChunk(frame.v);
+          else if (frame.t === "pending") pendingAction = frame.v as PendingAction;
+        }
+      }
+
+      if (!streamed && !pendingAction) {
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: "Désolé, je n'ai pas pu répondre. Réessaie." },
+        ]);
+      }
+      if (pendingAction) setPending(pendingAction);
     } catch {
-      // Interruption volontaire OU erreur réseau : on retire la question restée
-      // sans réponse et on la remet dans le champ pour un renvoi immédiat.
-      setMessages((m) => m.slice(0, -1));
-      setInput(text);
+      // Si rien n'a été affiché : on retire la question et on la remet dans le
+      // champ (renvoi facile). Si un partiel est déjà affiché, on le garde.
+      if (!streamed) {
+        setMessages((m) => m.slice(0, -1));
+        setInput(text);
+      }
+      // Stop volontaire (abort) = pas une erreur ; sinon on signale la coupure.
       if (!controller.signal.aborted) setError("Connexion échouée. Réessaie.");
     } finally {
       setLoading(false);
@@ -398,7 +463,12 @@ export function AssistantBubble({
             {messages.map((m, i) => (
               <Bubble key={i} role={m.role} content={m.content} onNavigate={goTo} />
             ))}
-            {loading && <Bubble role="assistant" content="…" typing onNavigate={goTo} />}
+            {/* Indicateur « … » seulement AVANT le 1er fragment : dès que la
+                réponse streamée commence, la bulle grandit d'elle-même. */}
+            {loading &&
+              messages[messages.length - 1]?.role !== "assistant" && (
+                <Bubble role="assistant" content="…" typing onNavigate={goTo} />
+              )}
 
             {/* Suggestions de départ (cliquables) */}
             {showSuggestions && (

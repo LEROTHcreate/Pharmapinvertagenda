@@ -59,17 +59,25 @@ type GroqResult =
   | { status: "rate_limit" }
   | { status: "error" };
 
-async function callGroq(
+/**
+ * Appel Groq en STREAMING (Server-Sent Events). Chaque fragment de texte est
+ * transmis en direct via `onContent` (→ le client affiche la réponse au fil de
+ * l'eau). Les éventuels appels d'outils (tool_calls) arrivent aussi en deltas :
+ * on les ré-assemble par index avant de les renvoyer. Le contenu complet et les
+ * tool_calls finaux sont retournés une fois le flux terminé.
+ */
+async function callGroqStream(
   apiKey: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  onContent: (chunk: string) => void
 ): Promise<GroqResult> {
   let res: Response;
   try {
     res = await fetch(GROQ_URL, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: AbortSignal.timeout(30000),
     });
   } catch {
     return { status: "error" };
@@ -81,25 +89,79 @@ async function callGroq(
     if (res.status === 429 || res.status === 503) return { status: "rate_limit" };
     return { status: "error" };
   }
-  const data = (await res.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string | null;
-        tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-      };
-    }>;
-  };
-  const m = data.choices?.[0]?.message;
-  const toolCalls = (m?.tool_calls ?? []).map((tc) => {
-    let args: Record<string, unknown> = {};
-    try {
-      args = JSON.parse(tc.function.arguments || "{}");
-    } catch {
-      /* args illisibles → objet vide */
+  if (!res.body) return { status: "error" };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let content = "";
+  // Les arguments d'un tool_call sont fragmentés → on les concatène par index.
+  const toolAcc = new Map<number, { id: string; name: string; args: string }>();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl: number;
+      // Flux SSE : des lignes « data: {json} », séparées par des sauts de ligne.
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        let json: {
+          choices?: Array<{
+            delta?: {
+              content?: string | null;
+              tool_calls?: Array<{
+                index?: number;
+                id?: string;
+                function?: { name?: string; arguments?: string };
+              }>;
+            };
+          }>;
+        };
+        try {
+          json = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        const delta = json.choices?.[0]?.delta;
+        if (!delta) continue;
+        if (typeof delta.content === "string" && delta.content) {
+          content += delta.content;
+          onContent(delta.content);
+        }
+        if (Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            const i = tc.index ?? 0;
+            const cur = toolAcc.get(i) ?? { id: "", name: "", args: "" };
+            if (tc.id) cur.id = tc.id;
+            if (tc.function?.name) cur.name = tc.function.name;
+            if (tc.function?.arguments) cur.args += tc.function.arguments;
+            toolAcc.set(i, cur);
+          }
+        }
+      }
     }
-    return { id: tc.id, name: tc.function.name, args };
-  });
-  return { status: "ok", content: m?.content ?? null, toolCalls };
+  } catch {
+    return { status: "error" };
+  }
+
+  const toolCalls = [...toolAcc.values()]
+    .filter((t) => t.name)
+    .map((t) => {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(t.args || "{}");
+      } catch {
+        /* args illisibles → objet vide */
+      }
+      return { id: t.id, name: t.name, args };
+    });
+  return { status: "ok", content: content || null, toolCalls };
 }
 
 async function POST__impl(req: Request) {
@@ -167,66 +229,117 @@ async function POST__impl(req: Request) {
   const history = parsed.data.messages.slice(-12);
   const tools = getToolsForUser(user);
 
-  try {
-    const baseMessages = [{ role: "system", content: system }, ...history];
-    const first = await callGroq(apiKey, {
-      model: GROQ_MODEL,
-      temperature: 0.3,
-      max_tokens: 900,
-      messages: baseMessages,
-      ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
-    });
+  const baseMessages = [{ role: "system", content: system }, ...history];
 
-    // Groq saturé (quota/capacité max) → message de maintenance préparé.
-    if (first.status === "rate_limit") {
-      return NextResponse.json({ reply: ASSISTANT_MAINTENANCE_MESSAGE, maintenance: true });
-    }
-    if (first.status === "error") {
-      return NextResponse.json({
-        reply: "Désolé, je n'ai pas pu répondre à l'instant. Réessaie dans quelques secondes.",
-      });
-    }
+  // Réponse en flux NDJSON : une trame JSON par ligne.
+  //   { t: "delta",   v: "texte" }   → fragment de réponse à concaténer
+  //   { t: "pending", v: {…} }       → action d'écriture à confirmer
+  // Le client lit le flux et affiche la réponse au fur et à mesure.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const frame = (obj: unknown) =>
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      const sendDelta = (text: string) => frame({ t: "delta", v: text });
 
-    // Pas d'outil → réponse directe.
-    if (first.toolCalls.length === 0) {
-      return NextResponse.json({
-        reply: first.content?.trim() || "Je n'ai pas de réponse pour ça. Reformule ou demande à ton titulaire.",
-      });
-    }
+      try {
+        // 1re passe : Groq décide de répondre OU d'appeler un outil. Le texte
+        // (cas courant) est streamé en direct au client.
+        const first = await callGroqStream(
+          apiKey,
+          {
+            model: GROQ_MODEL,
+            temperature: 0.3,
+            max_tokens: 900,
+            messages: baseMessages,
+            ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
+          },
+          sendDelta
+        );
 
-    const call = first.toolCalls[0];
+        if (first.status === "rate_limit") {
+          sendDelta(ASSISTANT_MAINTENANCE_MESSAGE);
+          controller.close();
+          return;
+        }
+        if (first.status === "error") {
+          sendDelta(
+            "Désolé, je n'ai pas pu répondre à l'instant. Réessaie dans quelques secondes."
+          );
+          controller.close();
+          return;
+        }
 
-    // Outil d'ÉCRITURE → on NE l'exécute PAS : on demande confirmation.
-    if (WRITE_TOOLS.has(call.name)) {
-      const summary = actionSummary(call.name, call.args);
-      return NextResponse.json({
-        reply: `Je te propose : **${summary}**. Tu confirmes ?`,
-        pendingAction: { tool: call.name, args: call.args, summary },
-      });
-    }
+        // Pas d'outil → le texte a déjà été streamé ci-dessus.
+        if (first.toolCalls.length === 0) {
+          if (!first.content?.trim()) {
+            sendDelta(
+              "Je n'ai pas de réponse pour ça. Reformule ou demande à ton titulaire."
+            );
+          }
+          controller.close();
+          return;
+        }
 
-    // Outil de LECTURE → on l'exécute et on renvoie le résultat au modèle.
-    const result = await executeTool(user, call.name, call.args, ctx);
-    const second = await callGroq(apiKey, {
-      model: GROQ_MODEL,
-      temperature: 0.3,
-      max_tokens: 800,
-      messages: [
-        ...baseMessages,
-        { role: "assistant", content: first.content ?? "", tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: JSON.stringify(call.args) } }] },
-        { role: "tool", tool_call_id: call.id, content: result.message },
-      ],
-    });
-    // Si Groq sature à la 2e passe, on a déjà le résultat de l'outil : on le
-    // renvoie tel quel (plus utile qu'un message de maintenance ici).
-    return NextResponse.json({
-      reply: (second.status === "ok" && second.content?.trim()) || result.message,
-    });
-  } catch {
-    return NextResponse.json({
-      reply: "Désolé, la connexion a échoué. Vérifie ta connexion et réessaie.",
-    });
-  }
+        const call = first.toolCalls[0];
+
+        // Outil d'ÉCRITURE → on NE l'exécute PAS : on demande confirmation.
+        if (WRITE_TOOLS.has(call.name)) {
+          const summary = actionSummary(call.name, call.args);
+          sendDelta(`Je te propose : **${summary}**. Tu confirmes ?`);
+          frame({ t: "pending", v: { tool: call.name, args: call.args, summary } });
+          controller.close();
+          return;
+        }
+
+        // Outil de LECTURE → on l'exécute et on renvoie le résultat au modèle,
+        // qui rédige (en streaming) une réponse synthétique.
+        const result = await executeTool(user, call.name, call.args, ctx);
+        const second = await callGroqStream(
+          apiKey,
+          {
+            model: GROQ_MODEL,
+            temperature: 0.3,
+            max_tokens: 800,
+            messages: [
+              ...baseMessages,
+              {
+                role: "assistant",
+                content: first.content ?? "",
+                tool_calls: [
+                  {
+                    id: call.id,
+                    type: "function",
+                    function: { name: call.name, arguments: JSON.stringify(call.args) },
+                  },
+                ],
+              },
+              { role: "tool", tool_call_id: call.id, content: result.message },
+            ],
+          },
+          sendDelta
+        );
+        // Si la 2e passe échoue / ne produit rien, on a déjà le résultat de
+        // l'outil : on le renvoie tel quel (plus utile qu'un message d'erreur).
+        if (!(second.status === "ok" && second.content?.trim())) {
+          sendDelta(result.message);
+        }
+        controller.close();
+      } catch {
+        sendDelta("Désolé, la connexion a échoué. Vérifie ta connexion et réessaie.");
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store",
+      // Désactive le buffering d'éventuels proxys → le flux part vraiment vif.
+      "x-accel-buffering": "no",
+    },
+  });
 }
 
 export const POST = withErrorHandling(POST__impl);
