@@ -17,6 +17,7 @@ import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { AssistantBubble } from "@/components/assistant/AssistantBubble";
+import { CommandPalette } from "@/components/command/CommandPalette";
 
 /**
  * Surcharge dynamique du favicon : sur les pages connectées, on affiche le
@@ -161,6 +162,12 @@ export default async function DashboardLayout({
       <AssistantBubble
         firstName={session.user.name?.split(/\s+/)[0] ?? ""}
         role={session.user.role}
+      />
+
+      {/* Palette de commande (Ctrl/⌘ + K) — saut rapide vers n'importe quelle page. */}
+      <CommandPalette
+        userRole={session.user.role}
+        canViewPayroll={canSeePayroll}
       />
     </div>
   );

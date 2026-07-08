@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Eye, EyeOff, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,17 @@ export function SignupForm() {
 
   // Champs SIRET (utilisé dans les 2 modes — identifie la pharmacie)
   const [pharmacySiret, setPharmacySiret] = useState("");
+
+  // Pré-remplissage depuis un lien d'invitation (/signup?siret=...) : le SIRET
+  // de l'officine est injecté et le mode reste « rejoindre ». Lecture client
+  // (window.location) → pas de dépendance à useSearchParams / Suspense.
+  useEffect(() => {
+    const siret = new URLSearchParams(window.location.search).get("siret");
+    if (siret) {
+      setPharmacySiret(siret.replace(/\s+/g, ""));
+      setMode("join");
+    }
+  }, []);
 
   // Champs création officine (mode "create" uniquement)
   const [pharmacyName, setPharmacyName] = useState("");

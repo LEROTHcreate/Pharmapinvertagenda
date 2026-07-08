@@ -78,6 +78,53 @@ function isNoise(title: string): boolean {
   return /^Commentez sur l'article/i.test(title);
 }
 
+/**
+ * Récupère et parse un flux RSS « direct » d'un éditeur (RSS 2.0 standard :
+ * <item><title><link><pubDate>). Contrairement à Google Actualités, ces flux ne
+ * throttlent pas les IP datacenter → source de fond fiable même quand Google
+ * renvoie vide depuis les serveurs Vercel. Le nom de source est fixe (le flux
+ * n'a pas de balise <source>).
+ */
+async function fetchDirect(feed: {
+  url: string;
+  source: string;
+}): Promise<ParsedItem[]> {
+  try {
+    const res = await fetch(feed.url, {
+      headers: { "user-agent": "Mozilla/5.0 (PharmaPlanning)" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+
+    const items: ParsedItem[] = [];
+    const blocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) ?? [];
+    for (const block of blocks) {
+      const title = tag(block, "title");
+      const link = tag(block, "link");
+      if (!title || !link) continue;
+      const pub = tag(block, "pubDate");
+      const d = pub ? new Date(pub) : null;
+      const ts = d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+      const dateLabel = ts
+        ? new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+        : "";
+      items.push({
+        title,
+        // Force HTTPS (certains flux listent les articles en http://).
+        link: link.replace(/^http:\/\//i, "https://"),
+        source: feed.source,
+        ts,
+        dateLabel,
+      });
+    }
+    return items;
+  } catch {
+    return [];
+  }
+}
+
 /** Récupère et parse un flux RSS Google Actualités (une requête). */
 async function fetchQuery(query: string): Promise<ParsedItem[]> {
   try {
@@ -117,14 +164,23 @@ async function fetchQuery(query: string): Promise<ParsedItem[]> {
 }
 
 /**
- * Fusionne plusieurs requêtes → dédoublonne (par titre normalisé) → trie par
- * date décroissante → garde les `limit` plus récentes.
+ * Fusionne plusieurs requêtes Google + des flux directs → dédoublonne (par titre
+ * normalisé) → trie par date décroissante → garde les `limit` plus récentes.
+ * Les flux directs servent de socle fiable quand Google renvoie vide.
  */
-async function fetchMerged(queries: string[], limit: number): Promise<NewsItem[]> {
-  const results = await Promise.all(queries.map(fetchQuery));
+async function fetchMerged(
+  queries: string[],
+  limit: number,
+  directFeeds: { url: string; source: string }[] = []
+): Promise<NewsItem[]> {
+  const [googleResults, directResults] = await Promise.all([
+    Promise.all(queries.map(fetchQuery)),
+    Promise.all(directFeeds.map(fetchDirect)),
+  ]);
+  const results = [...googleResults.flat(), ...directResults.flat()];
   const seen = new Set<string>();
   const merged: ParsedItem[] = [];
-  for (const it of results.flat()) {
+  for (const it of results) {
     if (isNoise(it.title)) continue;
     const key = dedupKey(it.title);
     if (!key || seen.has(key)) continue;
@@ -152,11 +208,24 @@ const ALERT_QUERIES = [
   "ANSM rappel de lot médicament when:45d",
 ];
 
+/**
+ * Flux RSS pharma directs (éditeurs), socle fiable de l'actu générale : ils
+ * répondent même quand Google Actualités throttle l'IP des serveurs Vercel
+ * (c'est ce qui faisait disparaître / figer la bulle actus de l'accueil).
+ */
+const DIRECT_NEWS_FEEDS: { url: string; source: string }[] = [
+  {
+    url: "https://www.lequotidiendupharmacien.fr/rss.xml",
+    source: "Le Quotidien du Pharmacien",
+  },
+];
+
 export const getPharmacyNews = () =>
-  unstable_cache(() => fetchMerged(GENERAL_QUERIES, 8), ["pharmacy-news-general-v2"], {
-    revalidate: 3600,
-    tags: ["pharmacy-news"],
-  })();
+  unstable_cache(
+    () => fetchMerged(GENERAL_QUERIES, 8, DIRECT_NEWS_FEEDS),
+    ["pharmacy-news-general-v3"],
+    { revalidate: 3600, tags: ["pharmacy-news"] }
+  )();
 
 /** Ruptures de stock & rappels de lots de médicaments (très actionnable). */
 export const getMedicineAlerts = () =>
@@ -167,12 +236,13 @@ export const getMedicineAlerts = () =>
 
 /* ─── Versions « longues » pour la page Actualités plein écran ────────── */
 
-/** Actu pharmacie — liste étendue (page /actualites). */
+/** Actu pharmacie — liste étendue. */
 export const getPharmacyNewsFull = () =>
-  unstable_cache(() => fetchMerged(GENERAL_QUERIES, 30), ["pharmacy-news-general-full-v2"], {
-    revalidate: 3600,
-    tags: ["pharmacy-news"],
-  })();
+  unstable_cache(
+    () => fetchMerged(GENERAL_QUERIES, 30, DIRECT_NEWS_FEEDS),
+    ["pharmacy-news-general-full-v3"],
+    { revalidate: 3600, tags: ["pharmacy-news"] }
+  )();
 
 /** Ruptures & rappels — liste étendue (page /actualites). */
 export const getMedicineAlertsFull = () =>
