@@ -77,8 +77,6 @@ export function GabaritPrintView({
     return () => clearTimeout(t);
   }, []);
 
-  const orderIndex = new Map(employees.map((e, i) => [e.id, i]));
-
   // Y a-t-il quelque chose à imprimer dans le périmètre demandé ?
   const hasContent = entries.some(
     (e) => onlyDay == null || e.dayOfWeek === onlyDay
@@ -151,13 +149,10 @@ export function GabaritPrintView({
           const dayEntries = entries.filter((e) => e.dayOfWeek === day);
           if (dayEntries.length === 0) return null;
 
-          // Collaborateurs présents ce jour (dans l'ordre d'affichage).
-          const empIds = [...new Set(dayEntries.map((e) => e.employeeId))].sort(
-            (a, b) => (orderIndex.get(a) ?? 0) - (orderIndex.get(b) ?? 0)
-          );
-          const dayEmployees = empIds
-            .map((id) => employees.find((e) => e.id === id))
-            .filter((e): e is GabaritPrintEmployee => !!e);
+          // TOUTE l'équipe en colonnes (dans l'ordre d'affichage), y compris
+          // les collaborateurs qui ne travaillent PAS ce jour → colonne vide,
+          // pour retrouver la grille complète comme à l'écran.
+          const dayEmployees = employees;
 
           // Plage de créneaux réellement utilisée (du 1er au dernier).
           const usedSlots = new Set(dayEntries.map((e) => e.timeSlot));
