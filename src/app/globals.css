@@ -770,14 +770,18 @@
   table[data-fit="true"] thead th:last-child {
     z-index: 30;
   }
-  /* Lignes compressées à la hauteur calculée (bornée à un minimum lisible). */
-  table[data-fit="true"] tbody tr {
+  /* Lignes compressées à la hauteur calculée (bornée à un minimum lisible).
+     IMPORTANT : on force AUSSI la hauteur sur les <td> — le `h-9` (36px) de
+     Tailwind sur les cellules imposait sinon un plancher de 36px qui empêchait
+     toute compression (la journée débordait → scroll). */
+  table[data-fit="true"] tbody tr,
+  table[data-fit="true"] tbody td {
     height: var(--row-h, 28px);
   }
   table[data-fit="true"] tbody td {
     padding-top: 1px;
     padding-bottom: 1px;
-    line-height: 1.15;
+    line-height: 1.1;
   }
 }
 

@@ -1551,9 +1551,13 @@ export function PlanningView({
       // Plancher abaissé à 16 px (au lieu de 20) : sur les écrans un peu courts,
       // les lignes se compriment davantage pour faire tenir TOUTE la journée
       // sans défilement interne. Reste lisible (grille dense type tableur).
+      // Hauteur de ligne = espace dispo ÷ nb de créneaux. On fait tenir TOUTE
+      // la journée (07:30→20:00) sans scroll : plancher bas (13 px) pour les
+      // petits écrans, plafond haut (56 px) pour que les cases grandissent quand
+      // la fenêtre est grande.
       const rowHeight = Math.min(
-        44,
-        Math.max(16, Math.floor((maxHeight - headerH) / numSlots))
+        56,
+        Math.max(13, Math.floor((maxHeight - headerH) / numSlots))
       );
       setFit({ maxHeight, rowHeight });
     }
