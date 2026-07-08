@@ -27,6 +27,7 @@ import { canEditPlanning } from "@/lib/permissions";
 import { TASK_LABELS, STATUS_LABELS } from "@/types";
 import type { ApplyScope } from "@/components/planning/ApplyScopeSelector";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
+import { AutoFillButton } from "@/components/planning/AutoFillButton";
 import { EmployeeStatusFilter } from "@/components/planning/EmployeeStatusFilter";
 import { useMetierFilter } from "@/components/planning/useMetierFilter";
 import { appendCurrentMetier } from "@/lib/metier-filter";
@@ -1868,6 +1869,12 @@ export function PlanningView({
           <div className="hidden md:contents">
             {isAdmin && (
               <ApplyTemplateButton
+                weekStart={weekStart}
+                onApplied={() => refetchWeek(weekStart)}
+              />
+            )}
+            {isAdmin && (
+              <AutoFillButton
                 weekStart={weekStart}
                 onApplied={() => refetchWeek(weekStart)}
               />
