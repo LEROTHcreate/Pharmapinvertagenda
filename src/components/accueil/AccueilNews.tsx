@@ -78,8 +78,11 @@ function NewsTicker({
   tone: keyof typeof TONE;
   items: NewsItem[];
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLUListElement>(null);
   const pausedRef = useRef(false);
+  // Décalage vertical courant (px), partagé entre l'animation auto et la molette.
+  const offsetRef = useRef(0);
   const t = TONE[tone];
 
   // Marquee seulement s'il y a assez d'items pour boucler proprement.
@@ -89,12 +92,15 @@ function NewsTicker({
   useEffect(() => {
     if (!animate) return;
     const el = trackRef.current;
-    if (!el) return;
+    const box = boxRef.current;
+    if (!el || !box) return;
 
     let raf = 0;
     let last = 0;
-    let offset = 0;
     const SPEED = 24; // px / seconde (doux)
+
+    const apply = () =>
+      (el.style.transform = `translateY(${-offsetRef.current}px)`);
 
     const step = (now: number) => {
       if (last === 0) last = now;
@@ -103,15 +109,32 @@ function NewsTicker({
       if (!pausedRef.current) {
         const half = el.scrollHeight / 2; // hauteur d'UN jeu (liste dupliquée)
         if (half > 0) {
-          offset += (SPEED * dt) / 1000;
-          if (offset >= half) offset -= half; // boucle sans couture
-          el.style.transform = `translateY(${-offset}px)`;
+          offsetRef.current += (SPEED * dt) / 1000;
+          if (offsetRef.current >= half) offsetRef.current -= half; // boucle sans couture
+          apply();
         }
       }
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+
+    // Molette au survol → on fait défiler la liste (et non la page). Listener
+    // natif non-passif pour pouvoir preventDefault. On enroule dans [0, half)
+    // pour garder la boucle sans couture, quel que soit le sens.
+    const onWheel = (e: WheelEvent) => {
+      const half = el.scrollHeight / 2;
+      if (half <= 0) return;
+      e.preventDefault();
+      const next = offsetRef.current + e.deltaY;
+      offsetRef.current = ((next % half) + half) % half;
+      apply();
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      box.removeEventListener("wheel", onWheel);
+    };
   }, [animate, items.length]);
 
   const pause = () => {
@@ -151,6 +174,7 @@ function NewsTicker({
         </div>
       ) : (
         <div
+          ref={boxRef}
           onMouseEnter={pause}
           onMouseLeave={resume}
           onTouchStart={pause}
