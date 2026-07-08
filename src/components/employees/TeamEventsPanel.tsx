@@ -285,13 +285,6 @@ function EventCard({
       )}
       style={isToday ? ({ ["--glow"]: cfg.glow } as React.CSSProperties) : undefined}
     >
-      {/* Ruban « aujourd'hui » */}
-      {isToday && (
-        <div className="absolute right-0 top-0 z-10 flex items-center gap-0.5 rounded-bl-lg bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-foreground shadow-sm dark:bg-black/40">
-          <PartyPopper className="h-2.5 w-2.5 tev-wiggle" /> Aujourd&apos;hui
-        </div>
-      )}
-
       {/* Reflet doux qui balaie la carte au survol */}
       <span
         aria-hidden
@@ -336,12 +329,15 @@ function EventCard({
             </span>
             <span
               className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                soon
-                  ? "bg-violet-600 text-white tev-pulse"
-                  : "bg-white/70 text-foreground/70 dark:bg-black/25"
+                "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                isToday
+                  ? "bg-gradient-to-r from-amber-400 to-rose-400 text-white tev-pulse"
+                  : soon
+                    ? "bg-violet-600 text-white tev-pulse"
+                    : "bg-white/70 text-foreground/70 dark:bg-black/25"
               )}
             >
+              {isToday && <PartyPopper className="h-2.5 w-2.5" />}
               {countdownLabel(ev.date)}
             </span>
           </div>
@@ -423,7 +419,7 @@ function Confetti({ colors }: { colors: string[] }) {
       setPieces([]);
       return;
     }
-    const arr: Piece[] = Array.from({ length: 34 }, (_, i) => ({
+    const arr: Piece[] = Array.from({ length: 22 }, (_, i) => ({
       left: Math.round(Math.random() * 100),
       delay: Math.round(Math.random() * 5000) / 1000,
       dur: 3 + Math.round(Math.random() * 3000) / 1000,

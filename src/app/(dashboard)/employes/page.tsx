@@ -150,7 +150,7 @@ export default async function EmployesPage() {
         </div>
       </header>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         {/* Colonne gauche : échéances RH (titulaires) + tableau de l'équipe */}
         <div className="min-w-0 flex-1 space-y-4">
           {canEdit && <HrDeadlinesCard deadlines={deadlines} />}
@@ -163,7 +163,7 @@ export default async function EmployesPage() {
         </div>
 
         {/* Colonne droite : la vie de l'équipe (événements animés) */}
-        <div className="xl:w-[360px] xl:shrink-0">
+        <div className="lg:w-[420px] lg:shrink-0">
           <TeamEventsPanel events={eventRows} canManage={canManageEvents} />
         </div>
       </div>
