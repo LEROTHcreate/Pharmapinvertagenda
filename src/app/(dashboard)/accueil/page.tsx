@@ -14,6 +14,7 @@ import type { TaskCode, AbsenceCode } from "@prisma/client";
 import { toIsoDate, startOfWeek, weekDays } from "@/lib/planning-utils";
 import { GARDE_TYPE_LABELS } from "@/lib/gardes";
 import { getPharmacyNews, getMedicineAlerts } from "@/lib/pharmacy-news";
+import { parseWeekHours, hasAnyHours } from "@/lib/opening-hours";
 import {
   getMessagesUnreadCounts,
   getPendingUsersCount,
@@ -83,7 +84,6 @@ export default async function AccueilPage() {
     alerts,
     payrollCtx,
     templateExists,
-    planningExists,
   ] = await Promise.all([
     // Équipe active (pour nommer présents / absents du jour).
     prisma.employee.findMany({
@@ -129,7 +129,7 @@ export default async function AccueilPage() {
     // Effectif minimum de l'officine (pour colorer l'affluence / sous-effectif).
     prisma.pharmacy.findUnique({
       where: { id: pharmacyId },
-      select: { minStaff: true },
+      select: { minStaff: true, openingHours: true },
     }),
     // Files d'attente à valider (admin uniquement).
     isAdmin
@@ -156,12 +156,9 @@ export default async function AccueilPage() {
     getMedicineAlerts(),
     // Contexte paie (flag + statut) pour décider l'accès Rémunération (admin).
     isAdmin ? getPayrollUserContext(session.user.id) : Promise.resolve(null),
-    // Onboarding (manageur+) : l'officine a-t-elle un gabarit / un planning ?
+    // Onboarding (manageur+) : l'officine a-t-elle un gabarit ?
     isManager
       ? prisma.weekTemplate.findFirst({ where: { pharmacyId }, select: { id: true } })
-      : Promise.resolve(null),
-    isManager
-      ? prisma.scheduleEntry.findFirst({ where: { pharmacyId }, select: { id: true } })
       : Promise.resolve(null),
   ]);
 
@@ -361,8 +358,8 @@ export default async function AccueilPage() {
       alerts={alerts}
       onboarding={{
         hasTeam: employees.length > 0,
+        hasHours: hasAnyHours(parseWeekHours(pharmacy?.openingHours ?? null)),
         hasTemplate: !!templateExists,
-        hasPlanning: !!planningExists,
       }}
       myDay={myDay}
       myWeek={myWeek}
