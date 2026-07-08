@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { isAdminLevel } from "@/lib/permissions";
+import { isAdminLevel, canApplyTemplates } from "@/lib/permissions";
+
+/**
+ * Contexte serveur transmis pour les actions ADMIN : Hygie agit en appelant les
+ * routes API existantes (mêmes validations + RBAC + effets de bord) via un fetch
+ * interne authentifié (le cookie de session de l'utilisateur est retransmis).
+ * On ne DUPLIQUE donc pas la logique métier critique (approbation d'absence,
+ * application de gabarit).
+ */
+export type ToolContext = { baseUrl: string; cookie: string };
 
 /**
  * Outils (function-calling) de l'assistant Hygie.
@@ -30,7 +39,12 @@ type ToolDef = {
 };
 
 /** Outils qui MODIFIENT des données → confirmation obligatoire avant exécution. */
-export const WRITE_TOOLS = new Set(["poser_absence", "signaler_disponibilite"]);
+export const WRITE_TOOLS = new Set([
+  "poser_absence",
+  "signaler_disponibilite",
+  "valider_absence",
+  "appliquer_gabarit",
+]);
 
 const ABSENCE_TYPE_LABELS: Record<string, string> = {
   CONGE: "congé",
@@ -99,6 +113,55 @@ const absencesAValiderDef: ToolDef = {
   },
 };
 
+const validerAbsenceDef: ToolDef = {
+  type: "function",
+  function: {
+    name: "valider_absence",
+    description:
+      "(Titulaire) Valide (APPROVE) ou refuse (REJECT) la demande d'absence EN ATTENTE d'un collaborateur, en le désignant par son nom. Utilise-le quand l'admin dit par ex. « valide l'absence de Marie » ou « refuse le congé de Paul ».",
+    parameters: {
+      type: "object",
+      properties: {
+        employeeName: {
+          type: "string",
+          description: "Nom ou prénom du collaborateur concerné",
+        },
+        decision: {
+          type: "string",
+          enum: ["APPROVE", "REJECT"],
+          description: "APPROVE pour valider, REJECT pour refuser",
+        },
+      },
+      required: ["employeeName", "decision"],
+    },
+  },
+};
+
+const appliquerGabaritDef: ToolDef = {
+  type: "function",
+  function: {
+    name: "appliquer_gabarit",
+    description:
+      "(Manageur/Titulaire) Applique un gabarit de semaine (S1 ou S2) sur cette semaine ou la semaine prochaine. Préserve les créneaux déjà saisis (n'écrase pas). Utilise-le quand l'admin dit par ex. « applique le gabarit S1 sur la semaine prochaine ».",
+    parameters: {
+      type: "object",
+      properties: {
+        weekType: {
+          type: "string",
+          enum: ["S1", "S2"],
+          description: "Type de gabarit à appliquer",
+        },
+        when: {
+          type: "string",
+          enum: ["this", "next"],
+          description: "this = cette semaine, next = la semaine prochaine",
+        },
+      },
+      required: ["weekType"],
+    },
+  },
+};
+
 /** Renvoie les outils disponibles selon le rôle de l'utilisateur. */
 export function getToolsForUser(user: ToolUser): ToolDef[] {
   const tools: ToolDef[] = [];
@@ -106,9 +169,13 @@ export function getToolsForUser(user: ToolUser): ToolDef[] {
   if (user.employeeId) {
     tools.push(posetAbsenceDef, dispoDef);
   }
-  // Lecture réservée aux titulaires.
+  // Actions titulaire : lister + valider les absences en attente.
   if (isAdminLevel(user.role)) {
-    tools.push(absencesAValiderDef);
+    tools.push(absencesAValiderDef, validerAbsenceDef);
+  }
+  // Application de gabarit : manageur et plus.
+  if (canApplyTemplates(user.role)) {
+    tools.push(appliquerGabaritDef);
   }
   return tools;
 }
@@ -126,6 +193,14 @@ export function actionSummary(name: string, args: Record<string, unknown>): stri
   if (name === "signaler_disponibilite") {
     const k = WISH_LABELS[String(args.kind)] ?? "disponibilité";
     return `Signaler « ${k} » le ${frDate(String(args.date))}`;
+  }
+  if (name === "valider_absence") {
+    const verb = args.decision === "REJECT" ? "Refuser" : "Valider";
+    return `${verb} l'absence en attente de ${String(args.employeeName)}`;
+  }
+  if (name === "appliquer_gabarit") {
+    const when = args.when === "next" ? "la semaine prochaine" : "cette semaine";
+    return `Appliquer le gabarit ${String(args.weekType)} sur ${when}`;
   }
   return "Effectuer cette action";
 }
@@ -155,6 +230,47 @@ const dispoArgs = z.object({
   note: z.string().trim().max(200).optional(),
 });
 
+const validerAbsenceArgs = z.object({
+  employeeName: z.string().trim().min(1).max(80),
+  decision: z.enum(["APPROVE", "REJECT"]),
+});
+
+const appliquerGabaritArgs = z.object({
+  weekType: z.enum(["S1", "S2"]),
+  when: z.enum(["this", "next"]).default("this"),
+});
+
+/** Lundi (UTC, YYYY-MM-DD) de cette semaine ou de la semaine prochaine. */
+function mondayIso(when: "this" | "next"): string {
+  const now = new Date();
+  const d = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
+  const dow = (d.getUTCDay() + 6) % 7; // 0 = lundi
+  d.setUTCDate(d.getUTCDate() - dow + (when === "next" ? 7 : 0));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Appel interne authentifié à une route API (cookie de session retransmis). */
+async function callInternal(
+  ctx: ToolContext,
+  path: string,
+  method: string,
+  body?: unknown
+): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+  try {
+    const res = await fetch(`${ctx.baseUrl}${path}`, {
+      method,
+      headers: { "content-type": "application/json", cookie: ctx.cookie },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return { ok: res.ok, data };
+  } catch {
+    return { ok: false, data: {} };
+  }
+}
+
 /**
  * Exécute un outil. RBAC RE-VÉRIFIÉ ici (source de vérité). Renvoie un message
  * en français destiné à l'utilisateur (et re-injecté au modèle pour les lectures).
@@ -162,7 +278,8 @@ const dispoArgs = z.object({
 export async function executeTool(
   user: ToolUser,
   name: string,
-  rawArgs: Record<string, unknown>
+  rawArgs: Record<string, unknown>,
+  ctx?: ToolContext
 ): Promise<{ ok: boolean; message: string }> {
   // ── poser_absence (self) ──
   if (name === "poser_absence") {
@@ -237,6 +354,101 @@ export async function executeTool(
     return {
       ok: true,
       message: `${pend.length} demande(s) en attente :\n${lines.join("\n")}\n(La validation se fait sur la page « Absences & dispos ».)`,
+    };
+  }
+
+  // ── valider_absence (titulaire) : approuve/refuse via la route existante ──
+  if (name === "valider_absence") {
+    if (!isAdminLevel(user.role)) {
+      return { ok: false, message: "Seul un titulaire peut valider une absence." };
+    }
+    if (!ctx) return { ok: false, message: "Action indisponible pour l'instant." };
+    const parsed = validerAbsenceArgs.safeParse(rawArgs);
+    if (!parsed.success) {
+      return { ok: false, message: "Précise le nom du collaborateur et si tu valides ou refuses." };
+    }
+    const { employeeName, decision } = parsed.data;
+    // Résout la demande EN ATTENTE correspondant au nom donné.
+    const pend = await prisma.absenceRequest.findMany({
+      where: { pharmacyId: user.pharmacyId, status: "PENDING" },
+      orderBy: { dateStart: "asc" },
+      select: {
+        id: true,
+        employee: { select: { firstName: true, lastName: true } },
+      },
+    });
+    const q = employeeName.trim().toLowerCase();
+    const matches = pend.filter((a) => {
+      const full = `${a.employee.firstName} ${a.employee.lastName}`.toLowerCase();
+      return (
+        full.includes(q) ||
+        a.employee.firstName.toLowerCase().includes(q) ||
+        a.employee.lastName.toLowerCase().includes(q)
+      );
+    });
+    if (matches.length === 0) {
+      return { ok: false, message: `Aucune demande d'absence en attente pour « ${employeeName} ».` };
+    }
+    if (matches.length > 1) {
+      return {
+        ok: false,
+        message: `Plusieurs demandes en attente correspondent à « ${employeeName} ». Ouvre la page Absences & dispos pour choisir la bonne.`,
+      };
+    }
+    const target = matches[0];
+    const who = `${target.employee.firstName} ${target.employee.lastName}`.trim();
+    const res = await callInternal(ctx, `/api/absences/${target.id}`, "PATCH", {
+      decision,
+    });
+    if (!res.ok) {
+      return { ok: false, message: (res.data.error as string) ?? "La validation a échoué." };
+    }
+    return {
+      ok: true,
+      message:
+        decision === "APPROVE"
+          ? `✅ Absence de ${who} validée (le planning est mis à jour et un e-mail lui est envoyé).`
+          : `Absence de ${who} refusée.`,
+    };
+  }
+
+  // ── appliquer_gabarit (manageur+) : applique un template via la route ──
+  if (name === "appliquer_gabarit") {
+    if (!canApplyTemplates(user.role)) {
+      return { ok: false, message: "Réservé aux manageurs et titulaires." };
+    }
+    if (!ctx) return { ok: false, message: "Action indisponible pour l'instant." };
+    const parsed = appliquerGabaritArgs.safeParse(rawArgs);
+    if (!parsed.success) {
+      return { ok: false, message: "Précise le gabarit (S1 ou S2) et la semaine." };
+    }
+    const { weekType, when } = parsed.data;
+    // Gabarit à appliquer : celui par défaut du type, sinon le plus récent.
+    const tpl = await prisma.weekTemplate.findFirst({
+      where: { pharmacyId: user.pharmacyId, weekType },
+      orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }],
+      select: { id: true, name: true },
+    });
+    if (!tpl) {
+      return { ok: false, message: `Aucun gabarit ${weekType} n'existe encore. Crée-le d'abord dans Gabarits.` };
+    }
+    const body: Record<string, unknown> = {
+      weekStart: mondayIso(when),
+      weeks: 1,
+      overwrite: false,
+      deleteAbsences: false,
+      [weekType === "S1" ? "s1TemplateId" : "s2TemplateId"]: tpl.id,
+    };
+    const res = await callInternal(ctx, `/api/templates/apply-batch`, "POST", body);
+    if (!res.ok) {
+      return { ok: false, message: (res.data.error as string) ?? "L'application du gabarit a échoué." };
+    }
+    const inserted = Number(res.data.inserted ?? 0);
+    const preserved = Number(res.data.preserved ?? 0);
+    const whenLabel = when === "next" ? "la semaine prochaine" : "cette semaine";
+    return {
+      ok: true,
+      message: `✅ Gabarit ${weekType} « ${tpl.name} » appliqué sur ${whenLabel} : ${inserted} créneau(x) ajouté(s)${preserved ? `, ${preserved} déjà présent(s) conservé(s)` : ""}.`,
     };
   }
 

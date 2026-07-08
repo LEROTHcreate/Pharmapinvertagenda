@@ -247,15 +247,23 @@ export function buildSystemPrompt(user: AssistantUser): string {
       ? `- signaler_disponibilite : enregistrer un souhait de dispo POUR ${user.name}.`
       : ``,
     user.isAdmin
-      ? `- absences_a_valider : lister les demandes d'absence en attente (pour information).`
+      ? `- absences_a_valider : lister les demandes d'absence en attente.`
+      : ``,
+    user.isAdmin
+      ? `- valider_absence : valider (APPROVE) ou refuser (REJECT) la demande d'absence EN ATTENTE d'un collaborateur, en le nommant (« valide l'absence de Marie »).`
+      : ``,
+    user.isAdmin
+      ? `- appliquer_gabarit : appliquer un gabarit S1 ou S2 sur cette semaine ou la semaine prochaine (« applique le S1 sur la semaine prochaine »). Préserve les créneaux déjà saisis.`
       : ``,
     `RÈGLES D'ACTION :`,
     `- N'utilise un outil QUE si la personne le demande clairement.`,
-    `- S'il manque une info (la date, le type de congé…), DEMANDE-la d'abord.`,
+    `- S'il manque une info (la date, le type de congé, quel collaborateur…),`,
+    `  DEMANDE-la d'abord.`,
     `- Dès que tu as le nécessaire, appelle l'outil : l'app affichera une`,
     `  CONFIRMATION à l'utilisateur avant d'exécuter — tu n'as pas à re-demander.`,
-    `- Pour tout le reste (éditer le planning, valider une absence, changer un`,
-    `  réglage…), tu ne fais PAS l'action : tu EXPLIQUES comment la faire dans l'app.`,
+    `- Pour ce qui n'a pas d'outil (éditer le planning cellule par cellule,`,
+    `  changer un réglage…), tu ne fais PAS l'action : tu EXPLIQUES comment faire`,
+    `  dans l'app (avec un lien cliquable vers la bonne page).`,
     ``,
     `--- GUIDE PHARMAPLANNING ---`,
     PHARMAPLANNING_GUIDE,

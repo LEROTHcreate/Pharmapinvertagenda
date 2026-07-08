@@ -132,6 +132,14 @@ async function POST__impl(req: Request) {
     employeeId: session.user.employeeId ?? null,
   };
 
+  // Contexte pour les actions ADMIN d'Hygie : elles rappellent les routes API
+  // existantes (même RBAC + logique) via un fetch interne authentifié → on
+  // retransmet l'origine et le cookie de session de la requête courante.
+  const ctx = {
+    baseUrl: new URL(req.url).origin,
+    cookie: req.headers.get("cookie") ?? "",
+  };
+
   // ── Mode CONFIRMATION : exécute l'action (droits re-vérifiés) ──
   if (parsed.data.confirm) {
     const { tool, args } = parsed.data.confirm;
@@ -142,7 +150,7 @@ async function POST__impl(req: Request) {
     if (!allowed) {
       return NextResponse.json({ reply: "Tu n'as pas les droits pour cette action." });
     }
-    const result = await executeTool(user, tool, args);
+    const result = await executeTool(user, tool, args, ctx);
     return NextResponse.json({ reply: result.message });
   }
 
@@ -198,7 +206,7 @@ async function POST__impl(req: Request) {
     }
 
     // Outil de LECTURE → on l'exécute et on renvoie le résultat au modèle.
-    const result = await executeTool(user, call.name, call.args);
+    const result = await executeTool(user, call.name, call.args, ctx);
     const second = await callGroq(apiKey, {
       model: GROQ_MODEL,
       temperature: 0.3,
