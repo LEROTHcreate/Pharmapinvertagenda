@@ -363,6 +363,28 @@ export function PlanningView({
     }
   }
 
+  /**
+   * Efface plusieurs créneaux en UNE seule requête (DELETE avec corps JSON).
+   * Avant, on tirait une requête HTTP par case (`Promise.all(cells.map(fetch))`),
+   * ce qui ouvrait N connexions BDD simultanées et saturait le pool Supabase
+   * (erreur EMAXCONN → 500 → page d'erreur). Renvoie true si l'appel a réussi.
+   */
+  async function deletePlanningEntries(
+    cells: Array<{ employeeId: string; date: string; timeSlot: string }>
+  ): Promise<boolean> {
+    if (cells.length === 0) return true;
+    try {
+      const res = await fetch("/api/planning", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cells }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   // `pushUndo` (capture l'état AVANT mutation + empile, vide le redo) est
   // fourni par le store : `const pushUndo = usePlanningStore(s => s.pushUndo)`
   // plus haut. La capture de snapshots est interne au store.
@@ -408,15 +430,18 @@ export function PlanningView({
       flashCells(action.snapshots.map((s) => entryKey(s)));
 
       try {
+        // 1 DELETE bulk (cases à vider) + 1 POST bulk (cases à restaurer) en
+        // parallèle — au lieu d'une requête par case (qui saturait le pool).
         const promises: Array<Promise<unknown>> = [];
-        for (const c of toDelete) {
-          const params = new URLSearchParams({
-            employeeId: c.employeeId,
-            date: c.date,
-            timeSlot: c.timeSlot,
-          });
+        if (toDelete.length > 0) {
           promises.push(
-            fetch(`/api/planning?${params.toString()}`, { method: "DELETE" })
+            deletePlanningEntries(
+              toDelete.map((c) => ({
+                employeeId: c.employeeId,
+                date: c.date,
+                timeSlot: c.timeSlot,
+              }))
+            )
           );
         }
         if (toRestore.length > 0) {
@@ -874,18 +899,8 @@ export function PlanningView({
     setEntries((prev) => applyEntriesDelete(prev, deletes, visibleDates));
     setSelection(null);
 
-    try {
-      await Promise.all(
-        dates.map((date) => {
-          const params = new URLSearchParams({
-            employeeId: sel.employeeId,
-            date,
-            timeSlot: sel.timeSlot,
-          });
-          return fetch(`/api/planning?${params.toString()}`, { method: "DELETE" });
-        })
-      );
-    } catch {
+    const ok = await deletePlanningEntries(deletes);
+    if (!ok) {
       setEntries(previousEntries);
       toast({
         tone: "error",
@@ -1157,17 +1172,11 @@ export function PlanningView({
       // Backend : DELETE en parallèle pour toutes les sources + 1 POST bulk
       // pour les nouvelles cellules. Pour 10 cellules : ~5 RT en parallèle
       // + 1 POST = ~150ms total via prismaDirect.
-      const deletePromises = moves.map((m) => {
-        const params = new URLSearchParams({
-          employeeId: m.from.employeeId,
-          date: m.from.date,
-          timeSlot: m.from.timeSlot,
-        });
-        return fetch(`/api/planning?${params.toString()}`, { method: "DELETE" });
-      });
-      const [postRes, ...delResults] = await Promise.all([
+      // 1 POST bulk (nouvelles cases) + 1 DELETE bulk (cases d'origine), en
+      // parallèle — 2 requêtes au total quel que soit le nombre de cellules.
+      const [postRes, deleteOk] = await Promise.all([
         postPlanningEntries(newEntriesPayload),
-        ...deletePromises,
+        deletePlanningEntries(moves.map((m) => m.from)),
       ]);
 
       if (!postRes.ok) {
@@ -1182,8 +1191,7 @@ export function PlanningView({
         });
         return;
       }
-      const failedDelete = delResults.find((r) => !r.ok);
-      if (failedDelete) {
+      if (!deleteOk) {
         setEntries(previousEntries);
         toast({
           tone: "error",
@@ -1341,14 +1349,8 @@ export function PlanningView({
     setBulkOpen(false);
     setMultiSelection(new Set());
 
-    try {
-      await Promise.all(
-        expanded.map((c) => {
-          const params = new URLSearchParams(c);
-          return fetch(`/api/planning?${params.toString()}`, { method: "DELETE" });
-        })
-      );
-    } catch {
+    const ok = await deletePlanningEntries(expanded);
+    if (!ok) {
       setEntries(previousEntries);
       toast({
         tone: "error",
@@ -1643,11 +1645,83 @@ export function PlanningView({
     canEdit: effectiveCanEdit,
   };
 
+  // Onglets de jour (segmented control iOS-like). Défini en variable pour être
+  // rendu INLINE à droite du titre « Planning · S28 » (gain de hauteur) tout en
+  // gardant toute sa logique (badges absences/férié + animation événement).
+  const dayTabsControl = (
+    <div className="no-print">
+      <div className="inline-flex w-full md:w-auto items-center gap-0.5 rounded-xl bg-muted/40 dark:bg-zinc-800/60 p-1">
+        {WEEK_DAYS.map((label, i) => {
+          const date = days[i];
+          const absCount = absencesPerDay[i];
+          const active = i === dayIndex;
+          const holiday = holidaysIndex.get(dayDates[i]) ?? null;
+          const dayEvents = eventsByDate.get(dayDates[i]) ?? [];
+          const hasEvent = dayEvents.length > 0;
+          return (
+            <button
+              key={i}
+              onClick={() => setDayIndex(i)}
+              title={
+                hasEvent
+                  ? `🎉 ${dayEvents.map((e) => e.title).join(" · ")}`
+                  : holiday
+                    ? `${holiday.name} (jour férié)`
+                    : undefined
+              }
+              className={cn(
+                "relative flex-1 md:flex-none flex flex-col items-center gap-0.5 rounded-lg px-3 py-1 transition-all min-w-[58px]",
+                active
+                  ? "bg-card shadow-[0_1px_2px_rgba(0,0,0,0.06)] text-foreground dark:shadow-none dark:ring-1 dark:ring-zinc-700"
+                  : "text-muted-foreground hover:text-foreground",
+                holiday && (active ? "text-rose-700 dark:text-rose-300" : "text-rose-500 dark:text-rose-400"),
+                hasEvent && "ring-1 ring-violet-300/80 dark:ring-violet-700/70"
+              )}
+            >
+              <span className="text-[10px] uppercase tracking-[0.08em] font-medium">
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">{WEEK_DAYS_SHORT[i]}</span>
+              </span>
+              <span className="text-[12.5px] font-semibold tabular-nums leading-none">
+                {date.getDate().toString().padStart(2, "0")}
+                <span className="text-muted-foreground/40">/</span>
+                {(date.getMonth() + 1).toString().padStart(2, "0")}
+              </span>
+              {holiday && (
+                <span
+                  aria-hidden
+                  className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-zinc-100/70 dark:ring-zinc-800/70"
+                />
+              )}
+              {absCount > 0 && (
+                <span
+                  className="absolute -top-1 -left-1 h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-semibold text-white inline-flex items-center justify-center tabular-nums"
+                  aria-label={`${absCount} absent(s)`}
+                >
+                  {absCount}
+                </span>
+              )}
+              {hasEvent && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute -bottom-1.5 -right-1.5 tev-bob text-violet-500 drop-shadow-sm dark:text-violet-300"
+                >
+                  <PartyPopper className="h-3.5 w-3.5" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-2 md:px-6 md:py-2 space-y-1.5 md:space-y-2 relative">
       {/* En-tête : titre + navigation, design Apple épuré */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
+        <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-4 min-w-0">
+          <div className="min-w-0 shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
             {/* Sur mobile : titre compact ("Planning · S19") en 18px,
                 sur desktop : version complète 26px */}
@@ -1690,6 +1764,9 @@ export function PlanningView({
             {" "}—{" "}
             {days[5].toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}
           </p>
+          </div>
+          {/* Onglets de jour — INLINE à droite du titre (gain de hauteur) */}
+          {dayTabsControl}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap no-print">
           {/* Sélecteur Jour/Semaine/Mois — pointe vers des pages dédiées
@@ -1787,81 +1864,6 @@ export function PlanningView({
         </div>
       </div>
 
-      {/* Segmented control jour — façon iOS */}
-      <div className="no-print">
-        <div className="inline-flex w-full sm:w-auto items-center gap-0.5 rounded-xl bg-muted/40 dark:bg-zinc-800/60 p-1">
-          {WEEK_DAYS.map((label, i) => {
-            const date = days[i];
-            const absCount = absencesPerDay[i];
-            const active = i === dayIndex;
-            const holiday = holidaysIndex.get(dayDates[i]) ?? null;
-            const dayEvents = eventsByDate.get(dayDates[i]) ?? [];
-            const hasEvent = dayEvents.length > 0;
-            return (
-              <button
-                key={i}
-                onClick={() => setDayIndex(i)}
-                title={
-                  hasEvent
-                    ? `🎉 ${dayEvents.map((e) => e.title).join(" · ")}`
-                    : holiday
-                      ? `${holiday.name} (jour férié)`
-                      : undefined
-                }
-                className={cn(
-                  "relative flex-1 sm:flex-none flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 transition-all min-w-[64px]",
-                  active
-                    ? "bg-card shadow-[0_1px_2px_rgba(0,0,0,0.06)] text-foreground dark:shadow-none dark:ring-1 dark:ring-zinc-700"
-                    : "text-muted-foreground hover:text-foreground",
-                  // Jour férié : couleur rouge subtile pour signaler visuellement
-                  holiday && (active ? "text-rose-700 dark:text-rose-300" : "text-rose-500 dark:text-rose-400"),
-                  // Jour d'événement d'équipe : liseré festif (le popper animé
-                  // en coin apporte le mouvement).
-                  hasEvent && "ring-1 ring-violet-300/80 dark:ring-violet-700/70"
-                )}
-              >
-                <span className="text-[10px] uppercase tracking-[0.08em] font-medium">
-                  <span className="hidden sm:inline">{label}</span>
-                  <span className="sm:hidden">{WEEK_DAYS_SHORT[i]}</span>
-                </span>
-                <span className="text-[13px] font-semibold tabular-nums">
-                  {date.getDate().toString().padStart(2, "0")}
-                  <span className="text-muted-foreground/40">/</span>
-                  {(date.getMonth() + 1).toString().padStart(2, "0")}
-                </span>
-                {/* Pastille férié à DROITE (petit dot 8px), pastille
-                    absences à GAUCHE (badge 16px min). On les sépare pour
-                    éviter le chevauchement quand un jour est à la fois
-                    férié + a des absences. */}
-                {holiday && (
-                  <span
-                    aria-hidden
-                    className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-zinc-100/70 dark:ring-zinc-800/70"
-                  />
-                )}
-                {absCount > 0 && (
-                  <span
-                    className="absolute -top-1 -left-1 h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-semibold text-white inline-flex items-center justify-center tabular-nums"
-                    aria-label={`${absCount} absent(s)`}
-                  >
-                    {absCount}
-                  </span>
-                )}
-                {/* Jour d'événement d'équipe → petit popper animé (coin bas-droit,
-                    libre des pastilles férié/absences). */}
-                {hasEvent && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute -bottom-1.5 -right-1.5 tev-bob text-violet-500 drop-shadow-sm dark:text-violet-300"
-                  >
-                    <PartyPopper className="h-3.5 w-3.5" />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Pastille festive « jour d'événement » — en TÊTE du jour sélectionné
           (visible, contrairement à un bandeau en bas). Animation discrète. */}
