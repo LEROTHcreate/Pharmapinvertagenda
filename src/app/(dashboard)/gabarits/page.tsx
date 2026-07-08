@@ -76,27 +76,35 @@ export default async function GabaritsPage() {
   if (!session?.user) redirect("/login");
   if (!canApplyTemplates(session.user.role)) redirect("/planning");
 
-  const templates = await prisma.weekTemplate.findMany({
-    where: { pharmacyId: session.user.pharmacyId },
-    orderBy: [
-      { isDefault: "desc" },
-      { category: "asc" },
-      { weekType: "asc" },
-      { name: "asc" },
-    ],
-    select: {
-      id: true,
-      name: true,
-      weekType: true,
-      category: true,
-      description: true,
-      isDefault: true,
-      updatedAt: true,
-      entries: {
-        select: { employeeId: true, dayOfWeek: true, timeSlot: true, type: true },
+  const [templates, team] = await Promise.all([
+    prisma.weekTemplate.findMany({
+      where: { pharmacyId: session.user.pharmacyId },
+      orderBy: [
+        { isDefault: "desc" },
+        { category: "asc" },
+        { weekType: "asc" },
+        { name: "asc" },
+      ],
+      select: {
+        id: true,
+        name: true,
+        weekType: true,
+        category: true,
+        description: true,
+        isDefault: true,
+        updatedAt: true,
+        entries: {
+          select: { employeeId: true, dayOfWeek: true, timeSlot: true, type: true },
+        },
       },
-    },
-  });
+    }),
+    // Équipe active — pour l'import Excel (matching prénoms + compatibilité rôle).
+    prisma.employee.findMany({
+      where: { pharmacyId: session.user.pharmacyId, isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
+      select: { id: true, firstName: true, lastName: true, status: true },
+    }),
+  ]);
 
   const rows: GabaritRow[] = templates.map((t) => {
     const preview = buildPreview(t.entries);
@@ -137,7 +145,11 @@ export default async function GabaritsPage() {
         </p>
       </div>
 
-      <GabaritsList rows={rows} currentWeekStart={currentWeekStart} />
+      <GabaritsList
+        rows={rows}
+        currentWeekStart={currentWeekStart}
+        employees={team}
+      />
     </div>
   );
 }
