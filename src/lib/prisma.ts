@@ -45,8 +45,24 @@ function makeDirectClient(): PrismaClient {
   if (isDemoMode) return prisma;
   const directUrl = process.env.DIRECT_URL;
   if (!directUrl) return prisma; // Pas de DIRECT_URL → fallback
+
+  // DIRECT_URL vise le pooler en mode SESSION (port 5432) : chaque connexion
+  // ouverte consomme une vraie connexion Postgres tant que le client vit. En
+  // serverless, sans plafond, chaque instance ouvre plusieurs connexions
+  // (défaut Prisma ≈ 2·CPU+1) qui s'accumulent → limite Supabase (200) atteinte
+  // → FATAL EMAXCONN sur TOUTES les requêtes. On borne donc à 1 connexion par
+  // instance : le POST planning enchaîne deleteMany puis createMany en série,
+  // 1 suffit. `pool_timeout` laisse le temps d'obtenir la connexion.
+  const url = new URL(directUrl);
+  if (!url.searchParams.has("connection_limit")) {
+    url.searchParams.set("connection_limit", "1");
+  }
+  if (!url.searchParams.has("pool_timeout")) {
+    url.searchParams.set("pool_timeout", "15");
+  }
+
   return new PrismaClient({
-    datasources: { db: { url: directUrl } },
+    datasources: { db: { url: url.toString() } },
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 }
