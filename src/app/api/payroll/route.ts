@@ -193,6 +193,8 @@ async function GET__impl(req: Request) {
     month: parsed.data.month,
     region: pharmacy?.payrollRegion ?? "NATIONAL",
     annualBudget: pharmacy?.payrollAnnualBudget ?? null,
+    // Taux patronal effectif (réglage officine ou défaut) — pour le simulateur.
+    employerRate: rates.socialContributionsEmployer,
     revenue: revenue ?? null,
     lines,
     totals: {

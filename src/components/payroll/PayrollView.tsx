@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/types";
+import { HiringSimulator } from "@/components/payroll/HiringSimulator";
 import type { EmployeeStatus } from "@prisma/client";
 import { computeBenchmark, type Benchmark } from "@/lib/payroll-benchmark";
 import { computeInsights, type Insight } from "@/lib/payroll-insights";
@@ -172,6 +173,8 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
   const [totals, setTotals] = useState<Totals | null>(null);
   // Budget annuel de masse salariale (réglé dans Paramètres) → prévisionnel.
   const [annualBudget, setAnnualBudget] = useState<number | null>(null);
+  // Taux patronal effectif (pour le simulateur d'embauche).
+  const [employerRate, setEmployerRate] = useState(0.42);
   // CA HT du mois saisi par le titulaire (pour le ratio masse salariale / CA).
   const [revenue, setRevenue] = useState<{
     revenueHT: number;
@@ -278,6 +281,9 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         setAnnualBudget(
           typeof data.annualBudget === "number" ? data.annualBudget : null
         );
+        if (typeof data.employerRate === "number") {
+          setEmployerRate(data.employerRate);
+        }
         // Région : si l'utilisateur n'a pas de préférence locale, on adopte
         // celle réglée au niveau de la pharmacie (renvoyée par l'API).
         if (
@@ -581,6 +587,16 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
             0
           )}
           onSaved={() => fetchPayroll(month)}
+        />
+      )}
+
+      {/* Simulateur d'embauche (#4) */}
+      {totals && (
+        <HiringSimulator
+          month={month}
+          employerRate={employerRate}
+          currentAnnualProjection={totals.totalEmployerCost * 12}
+          annualBudget={annualBudget}
         />
       )}
 
