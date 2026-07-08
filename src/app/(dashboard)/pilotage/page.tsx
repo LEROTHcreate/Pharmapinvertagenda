@@ -84,6 +84,17 @@ export default async function PilotagePage() {
     }),
   ]);
 
+  // CA HT des mois de la période (saisi dans Rémunération) → ratio masse
+  // salariale / CA. Absent = ratio non affiché pour le mois.
+  const revenues = await prisma.monthlyRevenue.findMany({
+    where: {
+      pharmacyId: session.user.pharmacyId,
+      month: { in: months.map((m) => m.key) },
+    },
+    select: { month: true, revenueHT: true },
+  });
+  const revenueByMonth = new Map(revenues.map((r) => [r.month, r.revenueHT]));
+
   const rates: PayrollRates = {
     ...DEFAULT_PAYROLL_RATES,
     socialContributionsEmployee:
@@ -117,7 +128,7 @@ export default async function PilotagePage() {
     notes: null,
   }));
 
-  const data = computeHrDashboard(employeesForCalc, entriesDTO, months, rates);
+  const data = computeHrDashboard(employeesForCalc, entriesDTO, months, rates, revenueByMonth);
 
   return <PilotageView data={data} />;
 }

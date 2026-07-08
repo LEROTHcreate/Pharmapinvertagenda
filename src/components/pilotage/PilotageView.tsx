@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   Banknote,
   Clock,
@@ -5,54 +6,69 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  Percent,
+  ArrowRight,
+  AlertTriangle,
+  Info,
+  CheckCircle2,
+  Flame,
 } from "lucide-react";
-import { STATUS_LABELS } from "@/types";
-import type { HrDashboard } from "@/lib/hr-dashboard";
+import type { HrDashboard, HrMonthStat } from "@/lib/hr-dashboard";
 import { cn } from "@/lib/utils";
 
-const eur = (n: number) =>
-  n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
+const eur = (n: number) => n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 const h = (n: number) => `${n.toLocaleString("fr-FR")} h`;
 const pct = (n: number) => `${(n * 100).toFixed(1).replace(".", ",")} %`;
+const pct0 = (n: number) => `${Math.round(n * 100)} %`;
 
 /**
- * Tableau de bord RH — pilotage titulaire. Présentation pure (données calculées
- * côté serveur). KPIs du mois + Δ, tendances 6 mois (heures / coût /
- * absentéisme), et cumul par collaborateur.
+ * Pilotage RH — cockpit STRATÉGIQUE du titulaire : tendances sur 6 mois +
+ * signaux d'alerte. Volontairement complémentaire (pas de doublon) :
+ *  · le détail par collaborateur vit dans Statistiques (/stats) ;
+ *  · la paie mensuelle + exports vivent dans Rémunération (/remuneration).
+ * Ici on ne montre que la TRAJECTOIRE et les POINTS D'ATTENTION.
  */
 export function PilotageView({ data }: { data: HrDashboard }) {
   const { months, employees } = data;
   const cur = months[months.length - 1];
   const prev = months[months.length - 2];
+  const first = months[0];
 
-  const totalCost = employees.reduce((s, e) => s + e.cost, 0);
-  const totalOvertime = employees.reduce((s, e) => s + e.overtimeHours, 0);
-
+  const hasRevenue = months.some((m) => m.salaryToRevenue != null);
   const maxHours = Math.max(1, ...months.map((m) => m.workedHours + m.absenceHours));
   const maxCost = Math.max(1, ...months.map((m) => m.cost));
   const maxRate = Math.max(0.02, ...months.map((m) => m.absenteeismRate));
+  const maxRatio = Math.max(0.02, ...months.map((m) => m.salaryToRevenue ?? 0));
+
+  const signals = buildSignals(months, employees);
 
   return (
-    <div className="w-full p-3 md:p-4 lg:p-6 pb-16 max-w-5xl mx-auto">
-      {/* En-tête */}
-      <header className="mb-5 flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
-          <TrendingUp className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">Pilotage RH</h1>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Absentéisme, heures sup, coût et tendances — estimations sur 6 mois.
-          </p>
+    <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-6">
+      {/* En-tête pleine largeur */}
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
+            <TrendingUp className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Pilotage RH</h1>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              Tendances et signaux sur 6 mois ({first.label} → {cur.label}) — estimations.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <CrossLink href="/stats" label="Détail par collaborateur" />
+          <CrossLink href="/remuneration" label="Paie du mois" />
         </div>
       </header>
 
-      {/* KPIs du mois courant */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* KPIs — mois courant + Δ vs mois précédent */}
+      <div className={cn("grid gap-3 grid-cols-2", hasRevenue ? "xl:grid-cols-5" : "xl:grid-cols-4")}>
         <Kpi
           icon={<Banknote className="h-4 w-4" />}
           tone="emerald"
-          label={`Coût estimé · ${cur.label}`}
+          label={`Coût employeur · ${cur.label}`}
           value={eur(cur.cost)}
           delta={prev ? deltaPct(cur.cost, prev.cost) : null}
           invertDelta
@@ -65,7 +81,7 @@ export function PilotageView({ data }: { data: HrDashboard }) {
           delta={prev ? deltaPct(cur.workedHours, prev.workedHours) : null}
         />
         <Kpi
-          icon={<Clock className="h-4 w-4" />}
+          icon={<Flame className="h-4 w-4" />}
           tone="amber"
           label={`Heures sup · ${cur.label}`}
           value={h(cur.overtimeHours)}
@@ -80,154 +96,265 @@ export function PilotageView({ data }: { data: HrDashboard }) {
           delta={prev ? deltaPts(cur.absenteeismRate, prev.absenteeismRate) : null}
           invertDelta
         />
+        {hasRevenue && (
+          <Kpi
+            icon={<Percent className="h-4 w-4" />}
+            tone="blue"
+            label={`Masse sal. / CA · ${cur.label}`}
+            value={cur.salaryToRevenue != null ? pct(cur.salaryToRevenue) : "—"}
+            delta={
+              prev && cur.salaryToRevenue != null && prev.salaryToRevenue != null
+                ? deltaPts(cur.salaryToRevenue, prev.salaryToRevenue)
+                : null
+            }
+            invertDelta
+          />
+        )}
       </div>
 
-      {/* Tendances */}
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        {/* Heures : travaillées (dont HS) + absences */}
-        <Panel title="Heures par mois" hint="Travaillées (violet) · heures sup (ambre) · absences subies (rose)">
-          <div className="flex items-end justify-between gap-2 pt-2">
-            {months.map((m) => {
-              const regular = Math.max(0, m.workedHours - m.overtimeHours);
-              const H = 132;
-              const seg = (v: number) => Math.round((v / maxHours) * H);
-              return (
-                <div key={m.key} className="flex flex-1 flex-col items-center gap-1.5">
-                  <div
-                    className="flex w-full max-w-[38px] flex-col-reverse overflow-hidden rounded-md"
-                    style={{ height: H }}
-                    title={`${m.label} — ${h(m.workedHours)} travaillées (dont ${h(m.overtimeHours)} sup), ${h(m.absenceHours)} d'absence`}
-                  >
-                    <div className="bg-violet-500" style={{ height: seg(regular) }} />
-                    <div className="bg-amber-400" style={{ height: seg(m.overtimeHours) }} />
-                    <div className="bg-rose-400" style={{ height: seg(m.absenceHours) }} />
-                  </div>
-                  <span className="text-[10.5px] capitalize text-muted-foreground">{m.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-
-        {/* Coût par mois */}
-        <Panel title="Coût employeur par mois" hint="Estimation (brut + charges patronales)">
-          <div className="flex items-end justify-between gap-2 pt-2">
-            {months.map((m) => {
-              const H = 132;
-              const barH = Math.max(2, Math.round((m.cost / maxCost) * H));
-              return (
-                <div key={m.key} className="flex flex-1 flex-col items-center gap-1.5">
-                  <div className="flex w-full flex-col items-center justify-end" style={{ height: H }}>
-                    <span className="mb-0.5 text-[9.5px] font-medium tabular-nums text-muted-foreground">
-                      {Math.round(m.cost / 1000)}k
-                    </span>
-                    <div
-                      className="w-full max-w-[38px] rounded-md bg-emerald-500"
-                      style={{ height: barH }}
-                      title={`${m.label} — ${eur(m.cost)}`}
-                    />
-                  </div>
-                  <span className="text-[10.5px] capitalize text-muted-foreground">{m.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-      </div>
-
-      {/* Absentéisme (tendance fine) */}
-      <Panel
-        className="mt-4"
-        title="Taux d'absentéisme"
-        hint="Maladie + absences injustifiées / heures totales"
-      >
-        <div className="flex items-end justify-between gap-2 pt-2">
-          {months.map((m) => {
-            const H = 70;
-            const barH = Math.max(2, Math.round((m.absenteeismRate / maxRate) * H));
-            const hot = m.absenteeismRate >= 0.08;
-            return (
-              <div key={m.key} className="flex flex-1 flex-col items-center gap-1.5">
-                <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
-                  {pct(m.absenteeismRate)}
-                </span>
-                <div className="flex w-full items-end justify-center" style={{ height: H }}>
-                  <div
-                    className={cn("w-full max-w-[38px] rounded-md", hot ? "bg-rose-500" : "bg-rose-300")}
-                    style={{ height: barH }}
-                    title={`${m.label} — ${pct(m.absenteeismRate)}`}
-                  />
-                </div>
-                <span className="text-[10.5px] capitalize text-muted-foreground">{m.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      </Panel>
-
-      {/* Cumul par collaborateur */}
-      <section className="mt-6 rounded-2xl border border-border bg-card overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
-          <h2 className="text-[13px] font-semibold text-foreground">
-            Par collaborateur · 6 mois
-          </h2>
-          <p className="text-[12px] text-muted-foreground">
-            Total : <strong className="text-foreground">{eur(totalCost)}</strong> ·{" "}
-            {h(totalOvertime)} sup
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground/70">
-                <th className="px-4 py-2 font-medium">Collaborateur</th>
-                <th className="px-3 py-2 text-right font-medium">Travaillées</th>
-                <th className="px-3 py-2 text-right font-medium">H. sup</th>
-                <th className="px-3 py-2 text-right font-medium">Absences</th>
-                <th className="px-4 py-2 text-right font-medium">Coût estimé</th>
-              </tr>
-            </thead>
-            <tbody>
-              {employees.map((e) => (
-                <tr key={e.id} className="border-t border-border/50">
-                  <td className="px-4 py-2">
-                    <span className="font-medium text-foreground">{e.name}</span>
-                    <span className="ml-1.5 text-[11px] text-muted-foreground">
-                      {STATUS_LABELS[e.status]}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{h(e.workedHours)}</td>
-                  <td
-                    className={cn(
-                      "px-3 py-2 text-right tabular-nums",
-                      e.overtimeHours > 0 && "font-medium text-amber-600 dark:text-amber-400"
-                    )}
-                  >
-                    {e.overtimeHours > 0 ? h(e.overtimeHours) : "—"}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-3 py-2 text-right tabular-nums",
-                      e.absenceHours > 0 && "text-rose-600 dark:text-rose-400"
-                    )}
-                  >
-                    {e.absenceHours > 0 ? h(e.absenceHours) : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-foreground">
-                    {eur(e.cost)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Points d'attention — le cœur du cockpit */}
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+        <h2 className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+          <AlertTriangle className="h-4 w-4 text-amber-500" /> Points d'attention
+        </h2>
+        <ul className="grid gap-2 md:grid-cols-2">
+          {signals.map((s, i) => (
+            <li
+              key={i}
+              className={cn(
+                "flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[13px]",
+                SIGNAL_STYLE[s.tone]
+              )}
+            >
+              <span className="mt-0.5 shrink-0">{SIGNAL_ICON[s.tone]}</span>
+              <span className="leading-snug">{s.text}</span>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      <p className="mt-4 text-[11px] text-muted-foreground/70">
-        Chiffres estimatifs, calculés à partir du planning et des réglages de paie
-        (mêmes hypothèses que le module Rémunération). À usage de pilotage interne.
+      {/* Tendances — pleine largeur, 2 colonnes */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Heures par mois" hint="Travaillées (violet) · heures sup (ambre) · absences subies (rose)">
+          <Bars
+            months={months}
+            height={150}
+            render={(m) => {
+              const regular = Math.max(0, m.workedHours - m.overtimeHours);
+              const seg = (v: number) => Math.round((v / maxHours) * 150);
+              return (
+                <div
+                  className="flex w-full max-w-[46px] flex-col-reverse overflow-hidden rounded-md"
+                  style={{ height: 150 }}
+                  title={`${m.label} — ${h(m.workedHours)} (dont ${h(m.overtimeHours)} sup), ${h(m.absenceHours)} absence`}
+                >
+                  <div className="bg-violet-500" style={{ height: seg(regular) }} />
+                  <div className="bg-amber-400" style={{ height: seg(m.overtimeHours) }} />
+                  <div className="bg-rose-400" style={{ height: seg(m.absenceHours) }} />
+                </div>
+              );
+            }}
+          />
+        </Panel>
+
+        <Panel title="Coût employeur par mois" hint="Estimation (brut + charges patronales)">
+          <Bars
+            months={months}
+            height={150}
+            topLabel={(m) => `${Math.round(m.cost / 1000)}k`}
+            render={(m) => (
+              <div
+                className="w-full max-w-[46px] rounded-md bg-emerald-500"
+                style={{ height: Math.max(2, Math.round((m.cost / maxCost) * 132)) }}
+                title={`${m.label} — ${eur(m.cost)}`}
+              />
+            )}
+          />
+        </Panel>
+
+        <Panel title="Taux d'absentéisme" hint="Maladie + absences injustifiées / heures totales">
+          <Bars
+            months={months}
+            height={110}
+            topLabel={(m) => pct0(m.absenteeismRate)}
+            render={(m) => (
+              <div
+                className={cn(
+                  "w-full max-w-[46px] rounded-md",
+                  m.absenteeismRate >= 0.08 ? "bg-rose-500" : "bg-rose-300"
+                )}
+                style={{ height: Math.max(2, Math.round((m.absenteeismRate / maxRate) * 92)) }}
+                title={`${m.label} — ${pct(m.absenteeismRate)}`}
+              />
+            )}
+          />
+        </Panel>
+
+        {hasRevenue ? (
+          <Panel title="Masse salariale / CA" hint="Coût employeur rapporté au chiffre d'affaires HT">
+            <Bars
+              months={months}
+              height={110}
+              topLabel={(m) => (m.salaryToRevenue != null ? pct0(m.salaryToRevenue) : "—")}
+              render={(m) =>
+                m.salaryToRevenue != null ? (
+                  <div
+                    className="w-full max-w-[46px] rounded-md bg-blue-500"
+                    style={{ height: Math.max(2, Math.round((m.salaryToRevenue / maxRatio) * 92)) }}
+                    title={`${m.label} — ${pct(m.salaryToRevenue)} (CA ${m.revenueHT ? eur(m.revenueHT) : "?"})`}
+                  />
+                ) : (
+                  <div className="w-full max-w-[46px] rounded-md bg-muted" style={{ height: 4 }} />
+                )
+              }
+            />
+          </Panel>
+        ) : (
+          <Panel title="Masse salariale / CA" hint="Suivi du poids de la paie dans le chiffre d'affaires">
+            <div className="flex h-[110px] flex-col items-center justify-center gap-2 text-center">
+              <p className="max-w-xs text-[13px] text-muted-foreground">
+                Renseigne le chiffre d'affaires mensuel dans Rémunération pour suivre ce ratio
+                clé de pilotage.
+              </p>
+              <Link
+                href="/remuneration"
+                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
+              >
+                Saisir le CA <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </Panel>
+        )}
+      </div>
+
+      <p className="text-[11px] text-muted-foreground/70">
+        Chiffres estimatifs (planning + réglages de paie, mêmes hypothèses que Rémunération).
+        Le détail par collaborateur est dans{" "}
+        <Link href="/stats" className="underline hover:text-foreground">Statistiques</Link>, la
+        paie mensuelle dans{" "}
+        <Link href="/remuneration" className="underline hover:text-foreground">Rémunération</Link>.
       </p>
     </div>
+  );
+}
+
+/* ─── Signaux (points d'attention) ─────────────────────────────── */
+type Signal = { tone: "critical" | "warning" | "info" | "positive"; text: string };
+
+const SIGNAL_STYLE: Record<Signal["tone"], string> = {
+  critical: "border-rose-200 bg-rose-50/60 text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-200",
+  warning: "border-amber-200 bg-amber-50/60 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200",
+  info: "border-blue-200 bg-blue-50/60 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200",
+  positive: "border-emerald-200 bg-emerald-50/60 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200",
+};
+const SIGNAL_ICON: Record<Signal["tone"], React.ReactNode> = {
+  critical: <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />,
+  warning: <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
+  info: <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />,
+  positive: <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+};
+
+function buildSignals(months: HrMonthStat[], employees: HrDashboard["employees"]): Signal[] {
+  const out: Signal[] = [];
+  const cur = months[months.length - 1];
+  const prior = months.slice(0, -1);
+  const avg = (arr: number[]) => (arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0);
+
+  // Absentéisme du mois courant
+  if (cur.absenteeismRate >= 0.08) {
+    out.push({
+      tone: cur.absenteeismRate >= 0.12 ? "critical" : "warning",
+      text: `Absentéisme élevé en ${cur.label} : ${pct(cur.absenteeismRate)} (maladie + absences injustifiées).`,
+    });
+  }
+
+  // Heures sup : mois courant vs moyenne des mois précédents
+  const avgPriorHS = avg(prior.map((m) => m.overtimeHours));
+  if (cur.overtimeHours >= 8 && avgPriorHS > 0 && cur.overtimeHours > avgPriorHS * 1.3) {
+    out.push({
+      tone: "warning",
+      text: `Heures sup en hausse : ${h(cur.overtimeHours)} en ${cur.label}, contre ~${h(Math.round(avgPriorHS))} en moyenne les mois précédents.`,
+    });
+  }
+
+  // Coût : tendance 6 mois
+  const firstCost = months[0].cost;
+  if (firstCost > 0) {
+    const d = (cur.cost - firstCost) / firstCost;
+    if (d >= 0.1)
+      out.push({
+        tone: "info",
+        text: `Coût employeur en progression : ${deltaPct(cur.cost, firstCost).text} sur 6 mois (${eur(firstCost)} → ${eur(cur.cost)}).`,
+      });
+    else if (d <= -0.1)
+      out.push({
+        tone: "positive",
+        text: `Coût employeur en baisse de ${Math.abs(Math.round(d * 100))} % sur 6 mois.`,
+      });
+  }
+
+  // Ratio masse salariale / CA
+  if (cur.salaryToRevenue != null) {
+    out.push({
+      tone: cur.salaryToRevenue >= 0.16 ? "warning" : "info",
+      text: `Masse salariale = ${pct(cur.salaryToRevenue)} du CA en ${cur.label}.`,
+    });
+  }
+
+  // Top heures sup cumulées (signal, PAS un tableau — le détail est dans /stats)
+  const topHS = [...employees].sort((a, b) => b.overtimeHours - a.overtimeHours)[0];
+  if (topHS && topHS.overtimeHours >= 12) {
+    out.push({
+      tone: "info",
+      text: `${topHS.name} cumule ${h(topHS.overtimeHours)} d'heures sup sur la période — à surveiller.`,
+    });
+  }
+
+  if (out.length === 0)
+    out.push({ tone: "positive", text: "Indicateurs stables : rien de préoccupant sur les 6 derniers mois. 👍" });
+
+  return out;
+}
+
+/* ─── UI helpers ───────────────────────────────────────────────── */
+function Bars({
+  months,
+  height,
+  render,
+  topLabel,
+}: {
+  months: HrMonthStat[];
+  height: number;
+  render: (m: HrMonthStat) => React.ReactNode;
+  topLabel?: (m: HrMonthStat) => string;
+}) {
+  return (
+    <div className="flex items-end justify-between gap-2 pt-2">
+      {months.map((m) => (
+        <div key={m.key} className="flex flex-1 flex-col items-center gap-1.5">
+          <div className="flex w-full flex-col items-center justify-end" style={{ height }}>
+            {topLabel && (
+              <span className="mb-0.5 text-[9.5px] font-medium tabular-nums text-muted-foreground">
+                {topLabel(m)}
+              </span>
+            )}
+            {render(m)}
+          </div>
+          <span className="text-[10.5px] capitalize text-muted-foreground">{m.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CrossLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted/50"
+    >
+      {label} <ArrowRight className="h-3.5 w-3.5 opacity-60" />
+    </Link>
   );
 }
 
@@ -248,6 +375,7 @@ const KPI_TONE: Record<string, string> = {
   violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
   amber: "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300",
   rose: "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300",
+  blue: "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300",
 };
 
 function Kpi({
@@ -263,7 +391,6 @@ function Kpi({
   label: string;
   value: string;
   delta: { text: string; dir: "up" | "down" | "flat" } | null;
-  /** Pour coût/HS/absentéisme : une HAUSSE est « mauvaise » (rouge). */
   invertDelta?: boolean;
 }) {
   const dirColor =
@@ -273,7 +400,6 @@ function Kpi({
         ? "text-emerald-600 dark:text-emerald-400"
         : "text-rose-600 dark:text-rose-400";
   const DirIcon = !delta || delta.dir === "flat" ? Minus : delta.dir === "up" ? TrendingUp : TrendingDown;
-
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
       <div className="flex items-center justify-between">
@@ -288,7 +414,7 @@ function Kpi({
       {delta && (
         <div className={cn("mt-1.5 flex items-center gap-1 text-[11.5px] font-medium", dirColor)}>
           <DirIcon className="h-3.5 w-3.5" />
-          {delta.text} <span className="text-muted-foreground/70">vs mois préc.</span>
+          {delta.text} <span className="text-muted-foreground/70">vs préc.</span>
         </div>
       )}
     </div>
@@ -298,21 +424,14 @@ function Kpi({
 function Panel({
   title,
   hint,
-  className,
   children,
 }: {
   title: string;
   hint?: string;
-  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section
-      className={cn(
-        "rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
-        className
-      )}
-    >
+    <section className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
       <div className="mb-1">
         <h2 className="text-[13px] font-semibold text-foreground">{title}</h2>
         {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}

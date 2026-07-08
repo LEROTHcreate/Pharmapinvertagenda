@@ -29,6 +29,10 @@ export type HrMonthStat = {
   /** Taux d'absentéisme = absenceHours / (travaillées + toutes absences). */
   absenteeismRate: number;
   cost: number;
+  /** CA HT du mois (saisi dans Rémunération) — null si non renseigné. */
+  revenueHT: number | null;
+  /** Ratio coût employeur / CA HT (null si pas de CA). */
+  salaryToRevenue: number | null;
 };
 
 export type HrEmployeeStat = {
@@ -69,7 +73,9 @@ export function computeHrDashboard(
   employees: EmployeeForPayroll[],
   entries: ScheduleEntryDTO[], // toutes les entrées sur la période (date en ISO)
   months: Array<{ key: string; label: string; start: Date; end: Date }>,
-  rates: PayrollRates = DEFAULT_PAYROLL_RATES
+  rates: PayrollRates = DEFAULT_PAYROLL_RATES,
+  /** CA HT par mois ("YYYY-MM" → €), pour le ratio masse salariale / CA. */
+  revenueByMonth: Map<string, number> = new Map()
 ): HrDashboard {
   // Index : mois → employé → entrées.
   const byMonthEmp = new Map<string, Map<string, ScheduleEntryDTO[]>>();
@@ -133,6 +139,8 @@ export function computeHrDashboard(
     const allAbsence = leave + sick + unpaid + training;
     const denom = worked + allAbsence;
     const absenceHours = sick + unpaid;
+    const roundedCost = Math.round(cost);
+    const revenueHT = revenueByMonth.get(m.key) ?? null;
     return {
       key: m.key,
       label: m.label,
@@ -143,7 +151,9 @@ export function computeHrDashboard(
       unpaidHours: r1(unpaid),
       absenceHours: r1(absenceHours),
       absenteeismRate: denom > 0 ? absenceHours / denom : 0,
-      cost: Math.round(cost),
+      cost: roundedCost,
+      revenueHT,
+      salaryToRevenue: revenueHT && revenueHT > 0 ? roundedCost / revenueHT : null,
     };
   });
 
