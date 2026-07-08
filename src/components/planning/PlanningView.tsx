@@ -231,15 +231,19 @@ export function PlanningView({
   const copyPasteRef = useRef<{
     copy: () => void;
     paste: () => void;
+    bulkClear: () => void;
     hasSelection: boolean;
     hasClipboard: boolean;
     canEdit: boolean;
+    modalOpen: boolean;
   }>({
     copy: () => {},
     paste: () => {},
+    bulkClear: () => {},
     hasSelection: false,
     hasClipboard: false,
     canEdit: false,
+    modalOpen: false,
   });
   // Liste de collaborateurs locale — mirror du prop, mais éditable quand
   // l'admin réordonne les colonnes via drag & drop. Resync sur l'initial
@@ -622,6 +626,28 @@ export function PlanningView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [multiSelection.size]);
+
+  // Suppr / Retour arrière → efface les cases sélectionnées (agenda planning
+  // ET gabarit). On lit l'état via `copyPasteRef` (mis à jour au rendu) pour
+  // garder un listener stable. Garde-fous : édition autorisée, au moins une
+  // case sélectionnée, aucun modal ouvert, et on ne capture pas la frappe
+  // quand l'utilisateur tape dans un champ (le Retour arrière natif prime).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      const s = copyPasteRef.current;
+      if (!s.canEdit || !s.hasSelection || s.modalOpen) return;
+      e.preventDefault();
+      s.bulkClear();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const monday = useMemo(() => new Date(`${weekStart}T00:00:00`), [weekStart]);
   // Vrai quand la semaine affichée est la semaine calendaire en cours — sert au
@@ -1640,9 +1666,15 @@ export function PlanningView({
   copyPasteRef.current = {
     copy: copySelection,
     paste: pasteClipboard,
+    // Suppr efface exactement les cases sélectionnées (scope "1" = la case
+    // elle-même, aucune réplication sur d'autres semaines).
+    bulkClear: () => void handleBulkClear({ scope: "1" }),
     hasSelection: multiSelection.size > 0,
     hasClipboard: clipboard.length > 0,
     canEdit: effectiveCanEdit,
+    // Un modal ouvert (TaskSelector / BulkTaskSelector) capte déjà le clavier :
+    // on ne déclenche pas la suppression globale par-dessus.
+    modalOpen: !!selection || bulkOpen,
   };
 
   // Onglets de jour (segmented control iOS-like). Défini en variable pour être
@@ -2132,7 +2164,7 @@ export function PlanningView({
                 onClick={() => void handleBulkClear({ scope: "1" })}
                 className="h-7 w-7 inline-flex items-center justify-center rounded-full text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
                 aria-label={`Vider ${multiSelection.size} case${multiSelection.size > 1 ? "s" : ""} sélectionnée${multiSelection.size > 1 ? "s" : ""}`}
-                title="Vider les cases sélectionnées"
+                title="Vider les cases sélectionnées (Suppr)"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
