@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Pill, RotateCcw, Send, Sparkles, Square, X } from "lucide-react";
+import { ExternalLink, Pill, RotateCcw, Send, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HygieLogo } from "@/components/assistant/HygieLogo";
 
@@ -473,9 +473,6 @@ export function AssistantBubble({
             {/* Suggestions de départ (cliquables) */}
             {showSuggestions && (
               <div className="flex flex-col gap-1.5 pt-1">
-                <p className="flex items-center gap-1 px-1 text-[11px] font-medium text-muted-foreground">
-                  <Sparkles className="h-3 w-3" /> Exemples de questions
-                </p>
                 {suggestions.map((s) => (
                   <button
                     key={s}
