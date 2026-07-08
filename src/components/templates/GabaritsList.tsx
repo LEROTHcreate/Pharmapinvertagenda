@@ -13,6 +13,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Printer,
   Search,
   Star,
   Tag,
@@ -30,6 +31,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ApplyTemplateButton } from "@/components/planning/ApplyTemplateButton";
 import { cn } from "@/lib/utils";
 
@@ -259,6 +267,53 @@ export function GabaritsList({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Imprimer — on choisit ensuite le gabarit à imprimer (semaine A4). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                title="Imprimer un gabarit (semaine)"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimer
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="max-h-[60vh] w-64 overflow-y-auto"
+            >
+              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+                Choisir le gabarit à imprimer (semaine)
+              </DropdownMenuLabel>
+              {rows.filter((r) => r.entryCount > 0).length === 0 ? (
+                <DropdownMenuItem disabled>
+                  Aucun gabarit à imprimer
+                </DropdownMenuItem>
+              ) : (
+                rows
+                  .filter((r) => r.entryCount > 0)
+                  .map((r) => (
+                    <DropdownMenuItem
+                      key={r.id}
+                      onSelect={() =>
+                        window.open(
+                          `/gabarits/${r.id}/imprimer`,
+                          "_blank",
+                          "noopener"
+                        )
+                      }
+                    >
+                      <Printer className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{r.name}</span>
+                      <span className="ml-auto shrink-0 rounded bg-violet-100 px-1.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+                        {r.weekType}
+                      </span>
+                    </DropdownMenuItem>
+                  ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ApplyTemplateButton
             weekStart={currentWeekStart}
             onApplied={() => startTransition(() => router.refresh())}
