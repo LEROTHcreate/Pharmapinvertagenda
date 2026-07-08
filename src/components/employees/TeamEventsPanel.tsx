@@ -13,7 +13,6 @@ import {
   PartyPopper,
   Pencil,
   Plus,
-  Sparkles,
   Trash2,
   UtensilsCrossed,
   X,
@@ -194,8 +193,7 @@ export function TeamEventsPanel({
       {/* En-tête */}
       <div className="relative z-[1] mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight">
-            <Sparkles className="h-4 w-4 text-violet-500 tev-sparkle" />
+          <h2 className="text-[15px] font-semibold tracking-tight">
             La vie de l&apos;équipe
           </h2>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
@@ -278,13 +276,20 @@ function EventCard({
   return (
     <li
       className={cn(
-        "group/ev relative overflow-hidden rounded-2xl bg-gradient-to-br p-3 transition-transform duration-200 hover:-translate-y-0.5",
+        "group/ev relative overflow-hidden rounded-2xl bg-gradient-to-br p-3 pl-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg",
         cfg.card,
         isToday ? "tev-today-card ring-2" : "ring-1",
         cfg.ring
       )}
       style={isToday ? ({ ["--glow"]: cfg.glow } as React.CSSProperties) : undefined}
     >
+      {/* Liseré d'accent (couleur du type) */}
+      <span
+        aria-hidden
+        className="absolute inset-y-2.5 left-1.5 w-1 rounded-full"
+        style={{ backgroundColor: cfg.confetti[0] }}
+      />
+
       {/* Reflet doux qui balaie la carte au survol */}
       <span
         aria-hidden
@@ -294,26 +299,28 @@ function EventCard({
       <div className="relative flex items-start gap-3">
         {/* Pastille date + icône du type */}
         <div className="flex flex-col items-center gap-1.5">
-          <div className="flex h-14 w-14 flex-col items-center justify-center rounded-xl bg-white/70 shadow-sm ring-1 ring-black/5 dark:bg-black/20">
+          <div className="flex h-14 w-14 flex-col items-center justify-center rounded-2xl bg-white/80 shadow-sm ring-1 ring-black/5 dark:bg-black/25">
             <span className="text-[10px] font-medium uppercase leading-none text-muted-foreground">
               {WEEKDAYS[d.getDay()]}
             </span>
-            <span className="font-mono text-[20px] font-bold leading-tight tabular-nums text-foreground">
+            <span
+              className="font-mono text-[21px] font-bold leading-tight tabular-nums"
+              style={{ color: cfg.confetti[0] }}
+            >
               {d.getDate()}
             </span>
             <span className="text-[9px] font-medium leading-none text-muted-foreground">
               {MONTHS[d.getMonth()]}
             </span>
           </div>
+          {/* Icône du type — statique (alignée) ; l'ambiance vient de la carte. */}
           <div
             className={cn(
-              "flex items-center justify-center rounded-lg",
-              isToday ? "h-9 w-9" : "h-8 w-8",
-              cfg.chip,
-              cfg.anim
+              "flex h-9 w-9 items-center justify-center rounded-xl ring-1 ring-black/5 dark:ring-white/10",
+              cfg.chip
             )}
           >
-            <Icon className={isToday ? "h-5 w-5" : "h-4 w-4"} />
+            <Icon className="h-4 w-4" />
           </div>
         </div>
 
