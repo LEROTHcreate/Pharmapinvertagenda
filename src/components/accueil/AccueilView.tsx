@@ -42,6 +42,7 @@ export function AccueilView(data: AccueilData) {
     role,
     canViewPayroll,
     news,
+    alerts,
     onboarding,
     myDay,
     myWeek,
@@ -156,8 +157,8 @@ export function AccueilView(data: AccueilData) {
         {/* Prochaine garde */}
         {nextGarde && <NextGardeCard garde={nextGarde} />}
 
-        {/* Actus pharmacie (défilent, cliquables) */}
-        <AccueilNews items={news} />
+        {/* Actus pharmacie + ruptures (2 colonnes, défilent, cliquables) */}
+        <AccueilNews news={news} alerts={alerts} />
 
         {/* Accès rapides */}
         <section>

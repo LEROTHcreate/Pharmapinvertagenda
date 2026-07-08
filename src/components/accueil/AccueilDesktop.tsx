@@ -107,6 +107,7 @@ export function AccueilDesktop(data: AccueilData) {
     role,
     canViewPayroll,
     news,
+    alerts,
     onboarding,
     teamPresent,
     teamSize,
@@ -203,8 +204,8 @@ export function AccueilDesktop(data: AccueilData) {
         />
       </div>
 
-      {/* Actus — pleine largeur (dernières infos de l'officine qui défilent) */}
-      <AccueilNews items={news} />
+      {/* Actus + ruptures — 2 colonnes qui défilent */}
+      <AccueilNews news={news} alerts={alerts} />
 
       {/* Actions admin à traiter — pleine largeur */}
       {isAdmin && (

@@ -171,13 +171,19 @@ async function fetchQuery(query: string): Promise<ParsedItem[]> {
 async function fetchMerged(
   queries: string[],
   limit: number,
-  directFeeds: { url: string; source: string }[] = []
+  directFeeds: { url: string; source: string }[] = [],
+  // Filtre appliqué UNIQUEMENT aux items des flux directs (les requêtes Google
+  // sont déjà ciblées). Sert p.ex. à ne garder que les ruptures/rappels.
+  directFilter?: (title: string) => boolean
 ): Promise<NewsItem[]> {
   const [googleResults, directResults] = await Promise.all([
     Promise.all(queries.map(fetchQuery)),
     Promise.all(directFeeds.map(fetchDirect)),
   ]);
-  const results = [...googleResults.flat(), ...directResults.flat()];
+  const directItems = directResults
+    .flat()
+    .filter((it) => !directFilter || directFilter(it.title));
+  const results = [...googleResults.flat(), ...directItems];
   const seen = new Set<string>();
   const merged: ParsedItem[] = [];
   for (const it of results) {
@@ -220,6 +226,10 @@ const DIRECT_NEWS_FEEDS: { url: string; source: string }[] = [
   },
 ];
 
+/** Ne retient (du flux direct) que les titres parlant rupture / rappel. */
+const ALERT_KEYWORDS =
+  /rupture|rappel|retrait de lot|pénurie|tension d.approvisionnement|indisponib/i;
+
 export const getPharmacyNews = () =>
   unstable_cache(
     () => fetchMerged(GENERAL_QUERIES, 8, DIRECT_NEWS_FEEDS),
@@ -229,10 +239,11 @@ export const getPharmacyNews = () =>
 
 /** Ruptures de stock & rappels de lots de médicaments (très actionnable). */
 export const getMedicineAlerts = () =>
-  unstable_cache(() => fetchMerged(ALERT_QUERIES, 6), ["pharmacy-news-alerts-v2"], {
-    revalidate: 3600,
-    tags: ["pharmacy-news"],
-  })();
+  unstable_cache(
+    () => fetchMerged(ALERT_QUERIES, 6, DIRECT_NEWS_FEEDS, (t) => ALERT_KEYWORDS.test(t)),
+    ["pharmacy-news-alerts-v3"],
+    { revalidate: 3600, tags: ["pharmacy-news"] }
+  )();
 
 /* ─── Versions « longues » pour la page Actualités plein écran ────────── */
 
@@ -244,12 +255,13 @@ export const getPharmacyNewsFull = () =>
     { revalidate: 3600, tags: ["pharmacy-news"] }
   )();
 
-/** Ruptures & rappels — liste étendue (page /actualites). */
+/** Ruptures & rappels — liste étendue. */
 export const getMedicineAlertsFull = () =>
-  unstable_cache(() => fetchMerged(ALERT_QUERIES, 24), ["pharmacy-news-alerts-full-v2"], {
-    revalidate: 3600,
-    tags: ["pharmacy-news"],
-  })();
+  unstable_cache(
+    () => fetchMerged(ALERT_QUERIES, 24, DIRECT_NEWS_FEEDS, (t) => ALERT_KEYWORDS.test(t)),
+    ["pharmacy-news-alerts-full-v3"],
+    { revalidate: 3600, tags: ["pharmacy-news"] }
+  )();
 
 /**
  * Recherche libre dans l'actu pharmacie (barre de recherche de /actualites).
