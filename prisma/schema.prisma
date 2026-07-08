@@ -171,6 +171,7 @@ model Pharmacy {
   monthlyRevenues    MonthlyRevenue[]
   gardes             Garde[]
   teamEvents         TeamEvent[]
+  openShifts         OpenShift[]
 
   @@map("pharmacies")
 }
@@ -319,6 +320,8 @@ model Employee {
   templateEntries    WeekTemplateEntry[]
   availabilityWishes AvailabilityWish[]
   gardes             Garde[]
+  openShiftsAssigned OpenShift[]          @relation("OpenShiftAssigned")
+  openShiftVolunteers OpenShiftVolunteer[] @relation("OpenShiftVolunteer")
 
   @@index([pharmacyId])
   @@index([pharmacyId, isActive])
@@ -708,4 +711,54 @@ model Garde {
   @@index([pharmacyId, date])
   @@index([pharmacistId])
   @@map("gardes")
+}
+
+// ─── Créneaux à couvrir ────────────────────────────────────────────
+// Un responsable signale un trou de planning « à pourvoir » (date + plage
+// horaire + poste optionnel). Les collaborateurs se positionnent (volunteers) ;
+// le responsable en assigne un → statut FILLED (et peut écrire le planning).
+enum OpenShiftStatus {
+  OPEN      // à pourvoir
+  FILLED    // pourvu (assigné à un collaborateur)
+  CANCELLED // annulé
+}
+
+model OpenShift {
+  id         String          @id @default(cuid())
+  date       DateTime        @db.Date
+  startSlot  String          // "HH:MM" (inclus)
+  endSlot    String          // "HH:MM" (exclu)
+  taskCode   TaskCode?       // poste souhaité (optionnel)
+  note       String?
+  status     OpenShiftStatus @default(OPEN)
+  createdById String?        // User qui a créé le créneau (info)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  assignedEmployeeId String?
+  assignedEmployee   Employee? @relation("OpenShiftAssigned", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+
+  volunteers OpenShiftVolunteer[]
+
+  @@index([pharmacyId, date])
+  @@index([pharmacyId, status])
+  @@map("open_shifts")
+}
+
+model OpenShiftVolunteer {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  openShiftId String
+  openShift   OpenShift @relation(fields: [openShiftId], references: [id], onDelete: Cascade)
+
+  employeeId  String
+  employee    Employee  @relation("OpenShiftVolunteer", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([openShiftId, employeeId])
+  @@index([employeeId])
+  @@map("open_shift_volunteers")
 }
