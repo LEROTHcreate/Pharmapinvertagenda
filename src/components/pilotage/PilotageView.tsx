@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { HrDashboard, HrMonthStat } from "@/lib/hr-dashboard";
 import { HiringSimulator } from "@/components/payroll/HiringSimulator";
+import { BarTrend } from "@/components/charts/BarTrend";
 import { MarketGauge } from "@/components/market/MarketGauge";
 import { SECTOR_META } from "@/lib/sector-benchmark";
 import { REFERENCE_META } from "@/lib/payroll-reference";
@@ -25,6 +26,16 @@ const eur = (n: number) => n.toLocaleString("fr-FR", { maximumFractionDigits: 0 
 const h = (n: number) => `${n.toLocaleString("fr-FR")} h`;
 const pct = (n: number) => `${(n * 100).toFixed(1).replace(".", ",")} %`;
 const pct0 = (n: number) => `${Math.round(n * 100)} %`;
+
+// Palette des graphiques (hex — identité de série, valable en clair/sombre).
+const CHART = {
+  worked: "#8b5cf6", // violet — heures travaillées
+  overtime: "#f59e0b", // ambre — heures sup
+  absence: "#fb7185", // rose — absences subies
+  cost: "#10b981", // émeraude — coût
+  absenteeism: "#f43f5e", // rose vif — absentéisme
+  ratio: "#3b82f6", // bleu — ratio masse sal./CA
+} as const;
 
 /**
  * Pilotage RH — cockpit STRATÉGIQUE du titulaire : tendances sur 6 mois +
@@ -77,12 +88,12 @@ export function PilotageView({
     avgMonthlyRevenue != null && fte > 0.05
       ? (avgMonthlyRevenue * 12) / fte
       : null;
+  // Structure d'équipe : effectif actif, ETP moyen, coût employeur moyen / ETP.
+  const headcount = employees.length;
+  const avgMonthlyCost = mean(months.map((m) => m.cost));
+  const costPerFte = fte > 0.05 ? avgMonthlyCost / fte : null;
 
   const hasRevenue = months.some((m) => m.salaryToRevenue != null);
-  const maxHours = Math.max(1, ...months.map((m) => m.workedHours + m.absenceHours));
-  const maxCost = Math.max(1, ...months.map((m) => m.cost));
-  const maxRate = Math.max(0.02, ...months.map((m) => m.absenteeismRate));
-  const maxRatio = Math.max(0.02, ...months.map((m) => m.salaryToRevenue ?? 0));
 
   const signals = buildSignals(months, employees);
 
@@ -156,6 +167,27 @@ export function PilotageView({
         )}
       </div>
 
+      {/* Structure d'équipe — repères de dimensionnement (moyenne période). */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-border bg-card px-4 py-3">
+        <StructStat
+          label="Effectif actif"
+          value={`${headcount}`}
+          hint="collaborateurs"
+        />
+        <span className="hidden h-8 w-px bg-border sm:block" />
+        <StructStat
+          label="ETP moyen"
+          value={fte.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}
+          hint={`≈ ${Math.round(REFERENCE_META.monthlyHoursFullTime)} h/mois par ETP`}
+        />
+        <span className="hidden h-8 w-px bg-border sm:block" />
+        <StructStat
+          label="Coût moyen / ETP"
+          value={costPerFte != null ? eur(costPerFte) : "—"}
+          hint="employeur, par mois"
+        />
+      </div>
+
       {/* Positionnement marché — situe l'officine vs le secteur (ratios de
           gestion). Vue STRATÉGIQUE : ni Statistiques ni Rémunération ne montrent
           ces ratios agrégés. */}
@@ -222,83 +254,72 @@ export function PilotageView({
 
       {/* Tendances — pleine largeur, 2 colonnes */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Heures par mois" hint="Travaillées (violet) · heures sup (ambre) · absences subies (rose)">
-          <Bars
-            months={months}
+        <Panel title="Heures par mois" hint="Répartition travaillées / heures sup / absences subies">
+          <BarTrend
             height={150}
-            render={(m) => {
-              const regular = Math.max(0, m.workedHours - m.overtimeHours);
-              const seg = (v: number) => Math.round((v / maxHours) * 150);
-              return (
-                <div
-                  className="flex w-full max-w-[46px] flex-col-reverse overflow-hidden rounded-md"
-                  style={{ height: 150 }}
-                  title={`${m.label} — ${h(m.workedHours)} (dont ${h(m.overtimeHours)} sup), ${h(m.absenceHours)} absence`}
-                >
-                  <div className="bg-violet-500" style={{ height: seg(regular) }} />
-                  <div className="bg-amber-400" style={{ height: seg(m.overtimeHours) }} />
-                  <div className="bg-rose-400" style={{ height: seg(m.absenceHours) }} />
-                </div>
-              );
-            }}
+            series={[
+              { key: "regular", label: "Travaillées", color: CHART.worked },
+              { key: "overtime", label: "Heures sup", color: CHART.overtime },
+              { key: "absence", label: "Absences subies", color: CHART.absence },
+            ]}
+            data={months.map((m) => ({
+              key: m.key,
+              label: m.label,
+              values: {
+                regular: Math.max(0, m.workedHours - m.overtimeHours),
+                overtime: m.overtimeHours,
+                absence: m.absenceHours,
+              },
+            }))}
+            format={(n) => h(Math.round(n * 10) / 10)}
           />
         </Panel>
 
         <Panel title="Coût employeur par mois" hint="Estimation (brut + charges patronales)">
-          <Bars
-            months={months}
+          <BarTrend
             height={150}
-            topLabel={(m) => `${Math.round(m.cost / 1000)}k`}
-            render={(m) => (
-              <div
-                className="w-full max-w-[46px] rounded-md bg-emerald-500"
-                style={{ height: Math.max(2, Math.round((m.cost / maxCost) * 132)) }}
-                title={`${m.label} — ${eur(m.cost)}`}
-              />
-            )}
+            series={[{ key: "cost", label: "Coût employeur", color: CHART.cost }]}
+            data={months.map((m) => ({
+              key: m.key,
+              label: m.label,
+              values: { cost: m.cost },
+            }))}
+            topLabel={(_, total) => `${Math.round(total / 1000)}k`}
+            format={(n) => eur(n)}
           />
         </Panel>
 
         <Panel title="Taux d'absentéisme" hint="Maladie + absences injustifiées / heures totales">
-          <Bars
-            months={months}
-            height={110}
-            topLabel={(m) => pct0(m.absenteeismRate)}
-            render={(m) => (
-              <div
-                className={cn(
-                  "w-full max-w-[46px] rounded-md",
-                  m.absenteeismRate >= 0.08 ? "bg-rose-500" : "bg-rose-300"
-                )}
-                style={{ height: Math.max(2, Math.round((m.absenteeismRate / maxRate) * 92)) }}
-                title={`${m.label} — ${pct(m.absenteeismRate)}`}
-              />
-            )}
+          <BarTrend
+            height={120}
+            series={[{ key: "rate", label: "Absentéisme", color: CHART.absenteeism }]}
+            data={months.map((m) => ({
+              key: m.key,
+              label: m.label,
+              values: { rate: m.absenteeismRate },
+            }))}
+            topLabel={(_, total) => pct0(total)}
+            format={(n) => pct(n)}
           />
         </Panel>
 
         {hasRevenue ? (
           <Panel title="Masse salariale / CA" hint="Coût employeur rapporté au chiffre d'affaires HT">
-            <Bars
-              months={months}
-              height={110}
-              topLabel={(m) => (m.salaryToRevenue != null ? pct0(m.salaryToRevenue) : "—")}
-              render={(m) =>
-                m.salaryToRevenue != null ? (
-                  <div
-                    className="w-full max-w-[46px] rounded-md bg-blue-500"
-                    style={{ height: Math.max(2, Math.round((m.salaryToRevenue / maxRatio) * 92)) }}
-                    title={`${m.label} — ${pct(m.salaryToRevenue)} (CA ${m.revenueHT ? eur(m.revenueHT) : "?"})`}
-                  />
-                ) : (
-                  <div className="w-full max-w-[46px] rounded-md bg-muted" style={{ height: 4 }} />
-                )
-              }
+            <BarTrend
+              height={120}
+              series={[{ key: "ratio", label: "Masse sal. / CA", color: CHART.ratio }]}
+              data={months.map((m) => ({
+                key: m.key,
+                label: m.label,
+                values: { ratio: m.salaryToRevenue ?? 0 },
+              }))}
+              topLabel={(_, total) => (total > 0 ? pct0(total) : "—")}
+              format={(n) => pct(n)}
             />
           </Panel>
         ) : (
           <Panel title="Masse salariale / CA" hint="Suivi du poids de la paie dans le chiffre d'affaires">
-            <div className="flex h-[110px] flex-col items-center justify-center gap-2 text-center">
+            <div className="flex h-[120px] flex-col items-center justify-center gap-2 text-center">
               <p className="max-w-xs text-[13px] text-muted-foreground">
                 Renseigne le chiffre d'affaires mensuel dans Rémunération pour suivre ce ratio
                 clé de pilotage.
@@ -474,32 +495,27 @@ function buildSignals(months: HrMonthStat[], employees: HrDashboard["employees"]
 }
 
 /* ─── UI helpers ───────────────────────────────────────────────── */
-function Bars({
-  months,
-  height,
-  render,
-  topLabel,
+/** Petit repère de structure d'équipe (effectif, ETP, coût/ETP). */
+function StructStat({
+  label,
+  value,
+  hint,
 }: {
-  months: HrMonthStat[];
-  height: number;
-  render: (m: HrMonthStat) => React.ReactNode;
-  topLabel?: (m: HrMonthStat) => string;
+  label: string;
+  value: string;
+  hint: string;
 }) {
   return (
-    <div className="flex items-end justify-between gap-2 pt-2">
-      {months.map((m) => (
-        <div key={m.key} className="flex flex-1 flex-col items-center gap-1.5">
-          <div className="flex w-full flex-col items-center justify-end" style={{ height }}>
-            {topLabel && (
-              <span className="mb-0.5 text-[9.5px] font-medium tabular-nums text-muted-foreground">
-                {topLabel(m)}
-              </span>
-            )}
-            {render(m)}
-          </div>
-          <span className="text-[10.5px] capitalize text-muted-foreground">{m.label}</span>
-        </div>
-      ))}
+    <div className="min-w-0">
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-mono text-[18px] font-semibold tabular-nums leading-none text-foreground">
+          {value}
+        </span>
+        <span className="text-[11.5px] font-medium text-muted-foreground">
+          {label}
+        </span>
+      </div>
+      <p className="mt-0.5 text-[10.5px] text-muted-foreground/70">{hint}</p>
     </div>
   );
 }
