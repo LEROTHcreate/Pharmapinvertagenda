@@ -14,8 +14,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { STATUS_LABELS } from "@/types";
-import type { EmployeeStat, PeriodTotals, StatsPeriod } from "@/lib/stats";
+import { STATUS_LABELS, TASK_COLORS, TASK_DESCRIPTIONS } from "@/types";
+import type {
+  ActivityStat,
+  EmployeeStat,
+  PeriodTotals,
+  StatsPeriod,
+} from "@/lib/stats";
 import type { EmployeeStatus } from "@prisma/client";
 
 type Props = {
@@ -24,12 +29,9 @@ type Props = {
   employees: EmployeeStat[];
   /** Totaux de la période précédente (null si "tout l'historique"). */
   previous: PeriodTotals | null;
+  /** Répartition des heures travaillées équipe par activité. */
+  activityBreakdown: ActivityStat[];
 };
-
-// Taux brut horaire moyen SUPPOSÉ pour l'estimation du coût des heures sup.
-// Volontairement indépendant des salaires réels (module Rémunération) → c'est
-// une estimation "ordre de grandeur" affichée comme telle.
-const ASSUMED_GROSS_HOURLY = 14;
 
 const PERIOD_OPTIONS: Array<{ value: StatsPeriod; label: string }> = [
   { value: "week", label: "Semaine" },
@@ -270,7 +272,13 @@ function SortHeader({
 }
 
 // ─── Vue principale ────────────────────────────────────────────────
-export function StatsView({ period, periodLabel, employees, previous }: Props) {
+export function StatsView({
+  period,
+  periodLabel,
+  employees,
+  previous,
+  activityBreakdown,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -369,10 +377,6 @@ export function StatsView({ period, periodLabel, employees, previous }: Props) {
       ),
     [employees]
   );
-
-  // Coût indicatif des heures sup. (estimation ordre de grandeur) :
-  // heures × taux brut supposé × 1,25 (majoration légale HS).
-  const overtimeCost = Math.round(totals.overtime * ASSUMED_GROSS_HOURLY * 1.25);
 
   // Série hebdo agrégée équipe (somme des heures planifiées par semaine) →
   // courbe d'évolution de la charge globale.
@@ -473,8 +477,9 @@ export function StatsView({ period, periodLabel, employees, previous }: Props) {
           <h1 className="text-xl md:text-2xl font-bold tracking-tight">
             Statistiques
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5 capitalize">
-            {periodLabel}
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Temps de travail &amp; activité de l&apos;équipe ·{" "}
+            <span className="capitalize">{periodLabel}</span>
           </p>
         </div>
         <div className="inline-flex items-center rounded-full border border-zinc-200 bg-white p-0.5">
@@ -513,11 +518,7 @@ export function StatsView({ period, periodLabel, employees, previous }: Props) {
           icon={TrendingUp}
           label="Heures supplémentaires"
           value={`${totals.overtime.toFixed(0)}h`}
-          hint={
-            overtimeCost > 0
-              ? `≈ ${overtimeCost.toLocaleString("fr-FR")} € estimé (≈${ASSUMED_GROSS_HOURLY} €/h × 1,25)`
-              : "au-delà du contrat hebdo"
-          }
+          hint="au-delà du contrat hebdo · coût dans Rémunération"
           tone="rose"
           delta={
             previous
@@ -598,6 +599,13 @@ export function StatsView({ period, periodLabel, employees, previous }: Props) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Répartition du temps par activité — où passe le temps de l'équipe.
+          Vue OPÉRATIONNELLE propre à Statistiques (ni Pilotage ni Rémunération
+          ne montrent la ventilation par poste). */}
+      {activityBreakdown.length > 0 && (
+        <ActivityBreakdownCard data={activityBreakdown} />
       )}
 
       {/* Évolution de la charge équipe (semaine par semaine) */}
@@ -885,6 +893,60 @@ export function StatsView({ period, periodLabel, employees, previous }: Props) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Répartition des heures travaillées équipe par activité (poste). */
+function ActivityBreakdownCard({ data }: { data: ActivityStat[] }) {
+  const total = data.reduce((s, a) => s + a.hours, 0);
+  if (total <= 0) return null;
+  const max = Math.max(...data.map((a) => a.hours));
+  return (
+    <div className="rounded-2xl border border-zinc-200/70 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-[12px] font-semibold uppercase tracking-wide text-zinc-500">
+          Répartition du temps par activité
+        </h2>
+        <span className="text-[11px] text-zinc-400">
+          {total.toFixed(0)}h travaillées · part de l&apos;équipe
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {data.map((a) => {
+          const color = TASK_COLORS[a.taskCode];
+          const share = total > 0 ? a.hours / total : 0;
+          return (
+            <li key={a.taskCode} className="flex items-center gap-3">
+              <span className="flex w-28 shrink-0 items-center gap-1.5 text-[12.5px] text-zinc-700">
+                <span
+                  aria-hidden
+                  className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                  style={{ background: color.border }}
+                />
+                <span className="truncate" title={TASK_DESCRIPTIONS[a.taskCode]}>
+                  {TASK_DESCRIPTIONS[a.taskCode]}
+                </span>
+              </span>
+              <div className="relative h-4 flex-1 overflow-hidden rounded-md bg-zinc-100">
+                <div
+                  className="h-full rounded-md"
+                  style={{
+                    width: `${Math.max(2, (a.hours / max) * 100)}%`,
+                    background: color.border,
+                  }}
+                />
+              </div>
+              <span className="w-24 shrink-0 text-right font-mono text-[12px] tabular-nums text-zinc-600">
+                {a.hours.toFixed(0)}h
+                <span className="ml-1 text-zinc-400">
+                  {Math.round(share * 100)}%
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   Flame,
 } from "lucide-react";
 import type { HrDashboard, HrMonthStat } from "@/lib/hr-dashboard";
+import { HiringSimulator } from "@/components/payroll/HiringSimulator";
 import { cn } from "@/lib/utils";
 
 const eur = (n: number) => n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
@@ -28,11 +29,27 @@ const pct0 = (n: number) => `${Math.round(n * 100)} %`;
  *  · la paie mensuelle + exports vivent dans Rémunération (/remuneration).
  * Ici on ne montre que la TRAJECTOIRE et les POINTS D'ATTENTION.
  */
-export function PilotageView({ data }: { data: HrDashboard }) {
+export function PilotageView({
+  data,
+  annualBudget,
+  employerRate,
+  currentMonth,
+}: {
+  data: HrDashboard;
+  /** Budget annuel de masse salariale (réglé dans Paramètres) — null si absent. */
+  annualBudget: number | null;
+  /** Taux patronal effectif (pour le simulateur d'embauche). */
+  employerRate: number;
+  /** Mois courant "YYYY-MM" (SMIC de référence du simulateur). */
+  currentMonth: string;
+}) {
   const { months, employees } = data;
   const cur = months[months.length - 1];
   const prev = months[months.length - 2];
   const first = months[0];
+  // Projection annuelle = coût employeur du mois courant × 12 (hypothèse simple,
+  // cohérente avec Rémunération).
+  const annualProjection = cur.cost * 12;
 
   const hasRevenue = months.some((m) => m.salaryToRevenue != null);
   const maxHours = Math.max(1, ...months.map((m) => m.workedHours + m.absenceHours));
@@ -226,6 +243,76 @@ export function PilotageView({ data }: { data: HrDashboard }) {
           </Panel>
         )}
       </div>
+
+      {/* ─── Prévisionnel & décisions ─────────────────────────────────
+          Projection annuelle vs budget + simulateur d'embauche. Regroupés ici
+          (décisions stratégiques) plutôt que dans Rémunération (paie du mois). */}
+      <section className="space-y-4">
+        <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+          <Percent className="h-4 w-4 text-violet-500" /> Prévisionnel &amp; décisions
+        </h2>
+
+        {/* Projection annuelle vs budget */}
+        {annualBudget != null && annualBudget > 0 ? (
+          (() => {
+            const over = annualProjection > annualBudget;
+            const ratio = Math.round((annualProjection / annualBudget) * 100);
+            const gap = Math.abs(annualProjection - annualBudget);
+            return (
+              <div
+                className={cn(
+                  "flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-2xl border px-4 py-3 text-[13px]",
+                  over
+                    ? "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-100"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100"
+                )}
+              >
+                <span className="inline-flex items-center gap-1.5 font-semibold">
+                  {over ? (
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  )}
+                  Budget annuel : {eur(annualBudget)}
+                </span>
+                <span className="tabular-nums">
+                  Projection {eur(annualProjection)} ·{" "}
+                  {over ? "dérive projetée" : "marge"} :{" "}
+                  <strong>
+                    {over ? "+" : "−"}
+                    {eur(gap)}
+                  </strong>{" "}
+                  <span className="opacity-75">({ratio} % du budget)</span>
+                </span>
+              </div>
+            );
+          })()
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-[13px]">
+            <span className="text-muted-foreground">
+              Projection annuelle ≈{" "}
+              <strong className="tabular-nums text-foreground">
+                {eur(annualProjection)}
+              </strong>{" "}
+              (coût du mois × 12). Définis un budget annuel pour suivre la dérive.
+            </span>
+            <Link
+              href="/parametres"
+              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
+            >
+              Définir le budget <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
+
+        {/* Simulateur d'embauche */}
+        <HiringSimulator
+          month={currentMonth}
+          employerRate={employerRate}
+          currentAnnualProjection={annualProjection}
+          annualBudget={annualBudget}
+        />
+      </section>
 
       <p className="text-[11px] text-muted-foreground/70">
         Chiffres estimatifs (planning + réglages de paie, mêmes hypothèses que Rémunération).

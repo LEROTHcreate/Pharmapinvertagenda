@@ -19,6 +19,28 @@ const PAID_ABSENCE_CODES: ReadonlySet<AbsenceCode> = new Set([
 
 export type StatsPeriod = "week" | "month" | "semester" | "all";
 
+/** Répartition du temps de travail équipe par activité (poste). */
+export type ActivityStat = { taskCode: TaskCode; hours: number };
+
+/**
+ * Agrège les heures TRAVAILLÉES de l'équipe par activité (taskCode), sur un lot
+ * d'entrées. Exclut les absences et les postes non travaillés (ECHANGE texturé).
+ * Résultat trié par heures décroissantes.
+ */
+export function buildActivityBreakdown(
+  entries: Array<{ type: ScheduleType; taskCode: TaskCode | null }>
+): ActivityStat[] {
+  const slots = new Map<TaskCode, number>();
+  for (const e of entries) {
+    if (e.type !== ScheduleType.TASK || !e.taskCode) continue;
+    if (isNonWorkedTask(e.taskCode)) continue;
+    slots.set(e.taskCode, (slots.get(e.taskCode) ?? 0) + 1);
+  }
+  return Array.from(slots.entries())
+    .map(([taskCode, n]) => ({ taskCode, hours: n * SLOT_HOURS }))
+    .sort((a, b) => b.hours - a.hours);
+}
+
 export type EmployeeStat = {
   id: string;
   firstName: string;
@@ -265,6 +287,7 @@ export async function computeStats(
   employees: EmployeeStat[];
   periodLabel: string;
   previous: PeriodTotals | null;
+  activityBreakdown: ActivityStat[];
 }> {
   const range = getPeriodRange(period);
   // La plage de la période précédente ne dépend que de `period` (aucune requête)
@@ -311,6 +334,7 @@ export async function computeStats(
   const previous: PeriodTotals | null = prevEntries
     ? totalsFrom(buildEmployeeStats(employees, prevEntries))
     : null;
+  const activityBreakdown = buildActivityBreakdown(entries);
 
-  return { employees: stats, periodLabel: range.label, previous };
+  return { employees: stats, periodLabel: range.label, previous, activityBreakdown };
 }

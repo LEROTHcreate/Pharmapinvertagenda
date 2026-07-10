@@ -80,7 +80,11 @@ export default async function PilotagePage() {
     }),
     prisma.pharmacy.findUnique({
       where: { id: session.user.pharmacyId },
-      select: { payrollContribEmployee: true, payrollContribEmployer: true },
+      select: {
+        payrollContribEmployee: true,
+        payrollContribEmployer: true,
+        payrollAnnualBudget: true,
+      },
     }),
   ]);
 
@@ -130,5 +134,17 @@ export default async function PilotagePage() {
 
   const data = computeHrDashboard(employeesForCalc, entriesDTO, months, rates, revenueByMonth);
 
-  return <PilotageView data={data} />;
+  // Prévisionnel / décisions (déplacés depuis Rémunération, qui reste la paie
+  // du mois) : budget annuel + taux patronal effectif + mois courant pour le
+  // simulateur d'embauche.
+  const cur = data.months[data.months.length - 1];
+
+  return (
+    <PilotageView
+      data={data}
+      annualBudget={pharmacy?.payrollAnnualBudget ?? null}
+      employerRate={rates.socialContributionsEmployer}
+      currentMonth={cur.key}
+    />
+  );
 }
