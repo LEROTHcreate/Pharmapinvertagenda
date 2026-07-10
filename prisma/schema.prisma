@@ -886,8 +886,10 @@ model Bilan {
   year        Int
   label       String
   kind        BilanKind @default(REEL)
-  // Toutes les valeurs financières (clé → montant €), cf. src/lib/bilan-fields.ts.
+  // Valeurs financières de l'exercice N (clé → montant €), cf. bilan-fields.ts.
   data        Json
+  // Valeurs de l'exercice N-1 (même structure) — permet l'étude de l'évolution.
+  dataPrev    Json?
   // Analyse experte mise en cache (synthèse + recommandations) — regénérable.
   analysis    Json?
   sourceName  String? // Nom du document importé (info), si extraction.

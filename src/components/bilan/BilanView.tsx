@@ -16,6 +16,8 @@ import {
   Info,
   ChevronRight,
   Scale,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -23,12 +25,14 @@ import {
   BILAN_FIELDS,
   BILAN_GROUPS,
   computeBilanRatios,
+  fieldEvolution,
   type BilanData,
   type BilanFieldKey,
   type BilanRatio,
 } from "@/lib/bilan-fields";
 
 type Kind = "REEL" | "ESTIMATION";
+type Which = "data" | "dataPrev";
 type Reco = {
   domaine: string;
   titre: string;
@@ -47,6 +51,7 @@ type Bilan = {
   label: string;
   kind: Kind;
   data: BilanData;
+  dataPrev: BilanData | null;
   analysis: Analysis | null;
   sourceName: string | null;
   updatedAt: string;
@@ -58,6 +63,7 @@ type Draft = {
   label: string;
   kind: Kind;
   data: BilanData;
+  dataPrev: BilanData;
   sourceName: string | null;
 };
 
@@ -92,27 +98,35 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
   }, []);
 
   function selectBilan(b: Bilan) {
-    setDraft({ id: b.id, year: b.year, label: b.label, kind: b.kind, data: { ...b.data }, sourceName: b.sourceName });
+    setDraft({
+      id: b.id,
+      year: b.year,
+      label: b.label,
+      kind: b.kind,
+      data: { ...b.data },
+      dataPrev: { ...(b.dataPrev ?? {}) },
+      sourceName: b.sourceName,
+    });
     setAnalysis(b.analysis);
     setDirty(false);
   }
 
   function newBilan() {
     const y = new Date().getFullYear() - 1;
-    setDraft({ id: null, year: y, label: `Bilan ${y}`, kind: "REEL", data: {}, sourceName: null });
+    setDraft({ id: null, year: y, label: `Bilan ${y}`, kind: "REEL", data: {}, dataPrev: {}, sourceName: null });
     setAnalysis(null);
     setDirty(true);
     setCompare(false);
   }
 
-  function setField(key: BilanFieldKey, value: string) {
+  function setField(key: BilanFieldKey, value: string, which: Which) {
     setDraft((prev) => {
       if (!prev) return prev;
-      const data = { ...prev.data };
+      const target = { ...prev[which] };
       const n = value === "" ? NaN : Number(value.replace(/\s/g, "").replace(",", "."));
-      if (Number.isFinite(n)) data[key] = n;
-      else delete data[key];
-      return { ...prev, data };
+      if (Number.isFinite(n)) target[key] = n;
+      else delete target[key];
+      return { ...prev, [which]: target };
     });
     setDirty(true);
   }
@@ -139,6 +153,7 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
           label: draft.label.trim(),
           kind: draft.kind,
           data: draft.data,
+          dataPrev: draft.dataPrev,
           sourceName: draft.sourceName,
         }),
       });
@@ -191,6 +206,10 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
   }
 
   const ratios = useMemo(() => (draft ? computeBilanRatios(draft.data) : []), [draft]);
+  const ratiosPrev = useMemo(
+    () => (draft && Object.keys(draft.dataPrev).length > 0 ? computeBilanRatios(draft.dataPrev) : []),
+    [draft]
+  );
 
   return (
     <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-6">
@@ -203,8 +222,9 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Bilan &amp; décisions</h1>
             <p className="mt-0.5 text-[13px] text-muted-foreground">
-              Centralise les chiffres de {pharmacyName}, calcule les ratios clés et propose des
-              décisions expertes (comptable, fiscal, juridique, investissement) avec Hygie.
+              Importe le bilan de {pharmacyName} (exercice N &amp; N-1), suis les ratios et leur
+              évolution, et obtiens des décisions expertes (comptable, fiscal, juridique,
+              investissement) avec Hygie.
             </p>
           </div>
         </div>
@@ -272,27 +292,44 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
           <div className="grid gap-5 xl:grid-cols-3">
             {/* Colonne saisie / import */}
             <div className="space-y-5 xl:col-span-2">
-              <MetaBar draft={draft} setMeta={setMeta} onSave={save} onRemoveSelf={() => {
-                const b = bilans.find((x) => x.id === draft.id);
-                if (b) remove(b);
-              }} saving={saving} dirty={dirty} />
+              <MetaBar
+                draft={draft}
+                setMeta={setMeta}
+                onSave={save}
+                onRemoveSelf={() => {
+                  const b = bilans.find((x) => x.id === draft.id);
+                  if (b) remove(b);
+                }}
+                saving={saving}
+                dirty={dirty}
+              />
               <ImportPanel
-                onExtracted={(data, sourceName) => {
-                  setDraft((prev) => (prev ? { ...prev, data: { ...prev.data, ...data }, sourceName: sourceName ?? prev.sourceName } : prev));
+                onExtracted={(data, dataPrev, sourceName) => {
+                  setDraft((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          data: { ...prev.data, ...data },
+                          dataPrev: { ...prev.dataPrev, ...dataPrev },
+                          sourceName: sourceName ?? prev.sourceName,
+                        }
+                      : prev
+                  );
                   setDirty(true);
                 }}
               />
-              <FormFields data={draft.data} onChange={setField} />
+              <FormFields data={draft.data} dataPrev={draft.dataPrev} year={draft.year} onChange={setField} />
             </div>
 
             {/* Colonne ratios + analyse */}
             <div className="space-y-5">
-              <RatiosPanel ratios={ratios} />
+              <RatiosPanel ratios={ratios} ratiosPrev={ratiosPrev} />
               <AnalysisPanel
                 analysis={analysis}
                 analyzing={analyzing}
                 onAnalyze={analyze}
                 hasData={Object.keys(draft.data).length > 0}
+                hasPrev={Object.keys(draft.dataPrev).length > 0}
               />
             </div>
           </div>
@@ -313,8 +350,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <FileSpreadsheet className="mx-auto h-9 w-9 text-muted-foreground/50" />
       <p className="mt-3 text-[15px] font-medium text-foreground">Aucun bilan</p>
       <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
-        Importe un PDF de bilan comptable (l'IA remplit les valeurs) ou saisis les chiffres à la
-        main. Tu pourras ensuite obtenir des ratios et des recommandations expertes.
+        Importe le PDF de ton bilan comptable : l'IA lit tout le dossier et remplit les valeurs de
+        l'exercice N et de l'année précédente. Tu obtiens ensuite les ratios, leur évolution et des
+        recommandations expertes.
       </p>
       <button
         onClick={onCreate}
@@ -353,7 +391,7 @@ function MetaBar({
         />
       </label>
       <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
-        Année
+        Année (N)
         <input
           type="number"
           value={draft.year}
@@ -398,19 +436,36 @@ function MetaBar({
 function ImportPanel({
   onExtracted,
 }: {
-  onExtracted: (data: BilanData, sourceName: string | null) => void;
+  onExtracted: (data: BilanData, dataPrev: BilanData, sourceName: string | null) => void;
 }) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function reportResult(found: number, foundPrev: number, multi: boolean, error?: string) {
+    if (found > 0 || foundPrev > 0) {
+      toast({
+        tone: "success",
+        title: `${found} valeur(s) N détectée(s)${foundPrev > 0 ? ` · ${foundPrev} en N-1` : ""}`,
+        description: multi ? "Fusionnées depuis tes documents — vérifie et corrige." : "Vérifie et corrige si besoin.",
+      });
+    } else {
+      toast({
+        tone: error ? "error" : "info",
+        title: error ? "Import impossible" : "Aucune valeur détectée",
+        description: error || "Essaie une image plus nette, ou colle le texte du bilan.",
+      });
+    }
+  }
 
   async function handleFiles(files: File[]) {
     if (files.length === 0) return;
     setBusy(true);
     try {
       let total = 0;
+      let totalPrev = 0;
       let firstError = "";
       for (const file of files) {
         const form = new FormData();
@@ -421,22 +476,11 @@ function ImportPanel({
           if (!firstError) firstError = d.error ?? "Import impossible.";
           continue;
         }
-        onExtracted(d.data ?? {}, d.sourceName ?? file.name);
+        onExtracted(d.data ?? {}, d.dataPrev ?? {}, d.sourceName ?? file.name);
         total += d.found ?? 0;
+        totalPrev += d.foundPrev ?? 0;
       }
-      if (total > 0) {
-        toast({
-          tone: "success",
-          title: `${total} valeur(s) détectée(s)`,
-          description: files.length > 1 ? "Fusionnées depuis tes documents — vérifie et corrige." : "Vérifie et corrige si besoin.",
-        });
-      } else {
-        toast({
-          tone: firstError ? "error" : "info",
-          title: firstError ? "Import impossible" : "Aucune valeur détectée",
-          description: firstError || "Essaie une image plus nette, ou colle le texte du bilan.",
-        });
-      }
+      reportResult(total, totalPrev, files.length > 1, total === 0 ? firstError : undefined);
     } finally {
       setBusy(false);
     }
@@ -459,13 +503,9 @@ function ImportPanel({
         toast({ tone: "error", title: "Extraction impossible", description: d.error ?? "Réessaie." });
         return;
       }
-      onExtracted(d.data ?? {}, null);
+      onExtracted(d.data ?? {}, d.dataPrev ?? {}, null);
       setText("");
-      toast({
-        tone: d.found > 0 ? "success" : "info",
-        title: d.found > 0 ? `${d.found} valeur(s) détectée(s)` : "Aucune valeur détectée",
-        description: d.found > 0 ? "Vérifie et corrige si besoin." : undefined,
-      });
+      reportResult(d.found ?? 0, d.foundPrev ?? 0, false);
     } finally {
       setBusy(false);
     }
@@ -473,13 +513,10 @@ function ImportPanel({
 
   return (
     <div className="rounded-2xl border border-violet-200/70 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-950/10">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-left"
-      >
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 text-left">
         <Upload className="h-4 w-4 text-violet-600 dark:text-violet-300" />
         <span className="text-[13.5px] font-semibold text-foreground">Importer un document</span>
-        <span className="text-[12px] text-muted-foreground">— l'IA remplit les valeurs</span>
+        <span className="text-[12px] text-muted-foreground">— l'IA lit N &amp; N-1</span>
         <ChevronRight className={cn("ml-auto h-4 w-4 text-muted-foreground transition-transform", open && "rotate-90")} />
       </button>
 
@@ -500,10 +537,10 @@ function ImportPanel({
               <FileText className="h-6 w-6 text-violet-500" />
             )}
             <p className="text-[13px] font-medium text-foreground">
-              Dépose un PDF ou une photo/scan du bilan, ou clique pour choisir
+              Dépose le PDF du bilan (liasse complète) ou une photo, ou clique pour choisir
             </p>
             <p className="text-[11.5px] text-muted-foreground">
-              PDF · JPG · PNG… — lus automatiquement par l'IA (max 15 Mo)
+              PDF · JPG · PNG… — l'IA cible les tableaux de synthèse (max 15 Mo)
             </p>
             <input
               ref={fileRef}
@@ -527,7 +564,7 @@ function ImportPanel({
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={4}
-              placeholder="Colle ici le texte du bilan (utile pour une photo/scan que tu as retranscrit, ou un extrait)…"
+              placeholder="Colle ici le texte du bilan (ex. page « Analyse de votre entreprise » ou « Soldes intermédiaires de gestion »)…"
               className="w-full resize-y rounded-lg border border-input bg-card px-3 py-2 text-[12.5px] text-foreground"
             />
             <button
@@ -544,43 +581,102 @@ function ImportPanel({
   );
 }
 
+/** Petite variation N vs N-1 (flèche + %), neutre (le sens est interprété par l'analyse). */
+function Delta({ evo }: { evo: number | null }) {
+  if (evo == null) return <span className="text-[11px] text-muted-foreground/40">—</span>;
+  const up = evo >= 0;
+  const strong = Math.abs(evo) >= 0.15;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[11px] tabular-nums",
+        strong ? (up ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400") : "text-muted-foreground"
+      )}
+      title="Évolution N vs N-1"
+    >
+      {up ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+      {Math.abs(Math.round(evo * 100))}%
+    </span>
+  );
+}
+
 function FormFields({
   data,
+  dataPrev,
+  year,
   onChange,
 }: {
   data: BilanData;
-  onChange: (key: BilanFieldKey, value: string) => void;
+  dataPrev: BilanData;
+  year: number;
+  onChange: (key: BilanFieldKey, value: string, which: Which) => void;
 }) {
   return (
     <div className="space-y-4">
       {BILAN_GROUPS.map((group) => (
         <div key={group} className="rounded-2xl border border-border bg-card p-4">
-          <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/70">
             {group}
           </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {BILAN_FIELDS.filter((f) => f.group === group).map((f) => (
-              <label key={f.key} className="flex flex-col gap-1">
-                <span className="text-[12.5px] font-medium text-foreground" title={f.hint}>
-                  {f.label}
-                </span>
-                <div className="relative">
-                  <input
-                    inputMode="numeric"
-                    value={data[f.key] != null ? String(data[f.key]) : ""}
-                    onChange={(e) => onChange(f.key, e.target.value)}
-                    placeholder="—"
-                    className="w-full rounded-lg border border-input bg-card px-2.5 py-1.5 pr-7 text-[13.5px] tabular-nums text-foreground"
-                  />
-                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground">
-                    €
-                  </span>
-                </div>
-              </label>
-            ))}
+          <div className="overflow-x-auto">
+            <div className="min-w-[420px]">
+              {/* En-tête colonnes */}
+              <div className="grid grid-cols-[minmax(0,1fr)_112px_112px_52px] items-center gap-2 border-b border-border/60 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                <span>Poste</span>
+                <span className="text-right">{year} (N)</span>
+                <span className="text-right">{year - 1} (N-1)</span>
+                <span className="text-right">Δ</span>
+              </div>
+              {BILAN_FIELDS.filter((f) => f.group === group).map((f) => {
+                const evo = fieldEvolution(data, dataPrev, f.key);
+                return (
+                  <div
+                    key={f.key}
+                    className="grid grid-cols-[minmax(0,1fr)_112px_112px_52px] items-center gap-2 border-b border-border/40 py-1.5 last:border-0"
+                  >
+                    <span className="truncate text-[12.5px] font-medium text-foreground" title={f.hint}>
+                      {f.label}
+                    </span>
+                    <EuroInput value={data[f.key]} onChange={(v) => onChange(f.key, v, "data")} />
+                    <EuroInput value={dataPrev[f.key]} onChange={(v) => onChange(f.key, v, "dataPrev")} muted />
+                    <span className="text-right">
+                      <Delta evo={evo} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function EuroInput({
+  value,
+  onChange,
+  muted,
+}: {
+  value: number | undefined;
+  onChange: (v: string) => void;
+  muted?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <input
+        inputMode="numeric"
+        value={value != null ? String(value) : ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="—"
+        className={cn(
+          "w-full rounded-lg border px-2 py-1 pr-5 text-right text-[12.5px] tabular-nums",
+          muted ? "border-border/70 bg-muted/30 text-muted-foreground" : "border-input bg-card text-foreground"
+        )}
+      />
+      <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/60">
+        €
+      </span>
     </div>
   );
 }
@@ -598,22 +694,41 @@ const RATIO_DOT: Record<BilanRatio["tone"], string> = {
   neutral: "bg-zinc-300",
 };
 
-function RatiosPanel({ ratios }: { ratios: BilanRatio[] }) {
+function RatiosPanel({ ratios, ratiosPrev }: { ratios: BilanRatio[]; ratiosPrev: BilanRatio[] }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <h2 className="mb-3 text-[13px] font-semibold text-foreground">Ratios clés</h2>
       <ul className="space-y-2.5">
-        {ratios.map((r) => (
-          <li key={r.key} className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-[13px] text-foreground/80" title={r.hint}>
-              <span className={cn("h-2 w-2 shrink-0 rounded-full", RATIO_DOT[r.tone])} />
-              {r.label}
-            </span>
-            <span className={cn("shrink-0 text-[14px] font-semibold tabular-nums", RATIO_TONE[r.tone])}>
-              {r.value}
-            </span>
-          </li>
-        ))}
+        {ratios.map((r) => {
+          const p = ratiosPrev.find((x) => x.key === r.key);
+          // Tendance : amélioration si va dans le « bon » sens du ratio.
+          let trend: "up" | "down" | null = null;
+          if (p && r.raw != null && p.raw != null && r.raw !== p.raw) {
+            const better = r.higherIsBetter ? r.raw > p.raw : r.raw < p.raw;
+            trend = better ? "up" : "down";
+          }
+          return (
+            <li key={r.key} className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-[13px] text-foreground/80" title={r.hint}>
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", RATIO_DOT[r.tone])} />
+                {r.label}
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                {p && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground/60" title="Exercice N-1">
+                    {p.value}
+                  </span>
+                )}
+                {trend && (
+                  <span className={cn(trend === "up" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+                    {trend === "up" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                  </span>
+                )}
+                <span className={cn("text-[14px] font-semibold tabular-nums", RATIO_TONE[r.tone])}>{r.value}</span>
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -635,11 +750,13 @@ function AnalysisPanel({
   analyzing,
   onAnalyze,
   hasData,
+  hasPrev,
 }: {
   analysis: Analysis | null;
   analyzing: boolean;
   onAnalyze: () => void;
   hasData: boolean;
+  hasPrev: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-violet-200/70 bg-violet-50/30 p-4 dark:border-violet-900/40 dark:bg-violet-950/10">
@@ -656,6 +773,14 @@ function AnalysisPanel({
           {analysis ? "Ré-analyser" : "Analyser"}
         </button>
       </div>
+
+      {hasData && (
+        <p className="mt-2 text-[11.5px] text-muted-foreground">
+          {hasPrev
+            ? "Hygie analyse l'exercice et son évolution N vs N-1."
+            : "Renseigne aussi l'exercice N-1 pour une analyse des tendances."}
+        </p>
+      )}
 
       {!hasData && (
         <p className="mt-3 text-[12.5px] text-muted-foreground">

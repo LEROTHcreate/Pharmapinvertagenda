@@ -38,15 +38,15 @@ async function POST__impl(req: Request) {
 
   const bilan = await prisma.bilan.findFirst({
     where: { id: parsed.data.id, pharmacyId: session.user.pharmacyId },
-    select: { id: true, year: true, label: true, kind: true, data: true },
+    select: { id: true, year: true, label: true, kind: true, data: true, dataPrev: true },
   });
   if (!bilan) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const analysis = await analyzeBilan((bilan.data as BilanData) ?? {}, {
-    year: bilan.year,
-    label: bilan.label,
-    kind: bilan.kind,
-  });
+  const analysis = await analyzeBilan(
+    (bilan.data as BilanData) ?? {},
+    (bilan.dataPrev as BilanData) ?? {},
+    { year: bilan.year, label: bilan.label, kind: bilan.kind }
+  );
   if (!analysis) {
     return NextResponse.json(
       { error: "L'analyse n'a pas pu être générée (service IA indisponible). Réessaie." },

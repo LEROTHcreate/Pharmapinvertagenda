@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canViewPayroll } from "@/lib/payroll-permissions";
 import { extractBilanFigures, extractBilanFiguresFromImage } from "@/lib/bilan-ai";
-import type { BilanData } from "@/lib/bilan-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,8 +55,15 @@ async function POST__impl(req: Request) {
     if (isImage) {
       const b64 = Buffer.from(await file.arrayBuffer()).toString("base64");
       const mime = file.type && file.type.startsWith("image/") ? file.type : "image/jpeg";
-      const data: BilanData = await extractBilanFiguresFromImage(`data:${mime};base64,${b64}`);
-      return NextResponse.json({ data, sourceName, found: Object.keys(data).length, mode: "image" });
+      const { data, dataPrev } = await extractBilanFiguresFromImage(`data:${mime};base64,${b64}`);
+      return NextResponse.json({
+        data,
+        dataPrev,
+        sourceName,
+        found: Object.keys(data).length,
+        foundPrev: Object.keys(dataPrev).length,
+        mode: "image",
+      });
     }
 
     if (!isPdf) {
@@ -101,8 +107,15 @@ async function POST__impl(req: Request) {
     );
   }
 
-  const data = await extractBilanFigures(text);
-  return NextResponse.json({ data, sourceName, found: Object.keys(data).length, mode: "text" });
+  const { data, dataPrev } = await extractBilanFigures(text);
+  return NextResponse.json({
+    data,
+    dataPrev,
+    sourceName,
+    found: Object.keys(data).length,
+    foundPrev: Object.keys(dataPrev).length,
+    mode: "text",
+  });
 }
 
 export const POST = withErrorHandling(POST__impl);

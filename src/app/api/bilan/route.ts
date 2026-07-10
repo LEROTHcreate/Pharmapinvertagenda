@@ -34,6 +34,7 @@ const upsertSchema = z.object({
   label: z.string().trim().min(1).max(80),
   kind: z.enum(["REEL", "ESTIMATION"]).default("REEL"),
   data: z.record(z.string(), z.number()).default({}),
+  dataPrev: z.record(z.string(), z.number()).default({}),
   sourceName: z.string().max(200).nullish(),
 });
 
@@ -52,6 +53,7 @@ async function GET__impl() {
       label: true,
       kind: true,
       data: true,
+      dataPrev: true,
       analysis: true,
       sourceName: true,
       updatedAt: true,
@@ -81,6 +83,7 @@ async function POST__impl(req: Request) {
         label: d.label,
         kind: d.kind,
         data: d.data,
+        dataPrev: d.dataPrev,
         sourceName: d.sourceName ?? null,
         analysis: undefined,
       },
@@ -98,6 +101,7 @@ async function POST__impl(req: Request) {
       label: d.label,
       kind: d.kind,
       data: d.data,
+      dataPrev: d.dataPrev,
       sourceName: d.sourceName ?? null,
       createdById: session.user.id,
     },
