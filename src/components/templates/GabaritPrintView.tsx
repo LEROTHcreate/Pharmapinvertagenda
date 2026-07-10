@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Printer, X } from "lucide-react";
-import type { TaskCode, AbsenceCode } from "@prisma/client";
+import type { TaskCode, AbsenceCode, EmployeeStatus } from "@prisma/client";
 import {
   TASK_LABELS,
   TASK_COLORS,
@@ -10,7 +10,13 @@ import {
   ABSENCE_STYLES,
   TIME_SLOTS,
   WEEK_DAYS,
+  type ScheduleEntryDTO,
 } from "@/types";
+import {
+  staffingForSlot,
+  staffingLevel,
+  indexEntriesByEmployee,
+} from "@/lib/planning-utils";
 
 export type GabaritPrintEntry = {
   dayOfWeek: number; // 0 = Lundi … 5 = Samedi
@@ -25,6 +31,7 @@ export type GabaritPrintEmployee = {
   id: string;
   name: string;
   color: string;
+  status: EmployeeStatus;
 };
 
 type Props = {
@@ -37,6 +44,22 @@ type Props = {
   entries: GabaritPrintEntry[];
   /** Si défini (0=Lundi…5=Samedi) : n'imprime QUE ce jour. Sinon : la semaine. */
   onlyDay?: number | null;
+  /** Seuil d'effectif minimum de l'officine (colonne effectif). */
+  minStaff?: number;
+};
+
+const COUNTER_ROLES: EmployeeStatus[] = ["PHARMACIEN", "PREPARATEUR", "ETUDIANT"];
+
+// Couleurs de la colonne effectif (hex explicites → fiables à l'impression).
+const STAFF_BG: Record<"ok" | "warning" | "critical", string> = {
+  ok: "#ecfdf5", // emerald-50
+  warning: "#fef3c7", // amber-100
+  critical: "#fee2e2", // red-100
+};
+const STAFF_TEXT: Record<"ok" | "warning" | "critical", string> = {
+  ok: "#047857", // emerald-700
+  warning: "#92400e", // amber-800
+  critical: "#b91c1c", // red-700
 };
 
 /** Contenu d'une cellule (libellé + couleurs) ou null si vide. */
@@ -69,7 +92,26 @@ export function GabaritPrintView({
   employees,
   entries,
   onlyDay = null,
+  minStaff = 4,
 }: Props) {
+  // Effectif comptoir par créneau — mêmes règles que le planning
+  // (staffingForSlot). Index factice : la « date » = numéro du jour (0-5).
+  const staffIndex = indexEntriesByEmployee(
+    entries.map<ScheduleEntryDTO>((e, i) => ({
+      id: String(i),
+      employeeId: e.employeeId,
+      date: String(e.dayOfWeek),
+      timeSlot: e.timeSlot,
+      type: e.type,
+      taskCode: e.taskCode,
+      absenceCode: e.absenceCode,
+      notes: null,
+    }))
+  );
+  const counterIds = employees
+    .filter((e) => COUNTER_ROLES.includes(e.status))
+    .map((e) => e.id);
+  const allIds = employees.map((e) => e.id);
   // Ouvre la boîte d'impression automatiquement à l'arrivée (léger délai pour
   // laisser la page se peindre). L'utilisateur peut aussi cliquer « Imprimer ».
   useEffect(() => {
@@ -168,6 +210,16 @@ export function GabaritPrintView({
             dayEntries.map((e) => [`${e.employeeId}|${e.timeSlot}`, e])
           );
 
+          // Cellules par employé sur la plage — sert à n'afficher le LIBELLÉ du
+          // poste qu'au DÉBUT d'une série de créneaux identiques (ensuite la
+          // couleur suffit, comme sur le planning).
+          const cellsByEmp = new Map(
+            dayEmployees.map((emp) => [
+              emp.id,
+              slots.map((slot) => cellOf(byKey.get(`${emp.id}|${slot}`))),
+            ])
+          );
+
           return (
             <section key={day} className="gab-day">
               <h2 className="mb-1 text-[13px] font-bold uppercase tracking-wide text-zinc-700">
@@ -194,35 +246,65 @@ export function GabaritPrintView({
                         </span>
                       </th>
                     ))}
+                    <th
+                      className="border border-zinc-300 bg-zinc-100 px-1 py-1 font-semibold"
+                      title="Effectif comptoir sur le créneau (pharmaciens/préparateurs/étudiants, remplacements comptés, échange & commande exclus)"
+                    >
+                      Eff.
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {slots.map((slot) => (
-                    <tr key={slot}>
-                      <td className="border border-zinc-300 bg-zinc-50 px-1 py-0.5 font-mono tabular-nums text-zinc-600">
-                        {slot}
-                      </td>
-                      {dayEmployees.map((emp) => {
-                        const cell = cellOf(byKey.get(`${emp.id}|${slot}`));
-                        return (
-                          <td
-                            key={emp.id}
-                            className="border border-zinc-300 px-1 py-0.5 text-center"
-                            style={
-                              cell
-                                ? {
-                                    backgroundColor: cell.style.bg,
-                                    color: cell.style.text,
-                                  }
-                                : undefined
-                            }
-                          >
-                            {cell?.label ?? ""}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {slots.map((slot, si) => {
+                    const eff = staffingForSlot(
+                      String(day),
+                      slot,
+                      counterIds,
+                      staffIndex,
+                      allIds
+                    );
+                    const lvl = staffingLevel(eff, minStaff);
+                    return (
+                      <tr key={slot}>
+                        <td className="border border-zinc-300 bg-zinc-50 px-1 py-0.5 font-mono tabular-nums text-zinc-600">
+                          {slot}
+                        </td>
+                        {dayEmployees.map((emp) => {
+                          const empCells = cellsByEmp.get(emp.id);
+                          const cell = empCells ? empCells[si] : null;
+                          const prev = empCells && si > 0 ? empCells[si - 1] : null;
+                          // Libellé seulement au début d'une série (sinon couleur seule).
+                          const showLabel =
+                            !!cell && (!prev || prev.label !== cell.label);
+                          return (
+                            <td
+                              key={emp.id}
+                              className="border border-zinc-300 px-1 py-0.5 text-center"
+                              style={
+                                cell
+                                  ? {
+                                      backgroundColor: cell.style.bg,
+                                      color: cell.style.text,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {showLabel ? cell.label : ""}
+                            </td>
+                          );
+                        })}
+                        <td
+                          className="border border-zinc-300 px-1 py-0.5 text-center font-semibold tabular-nums"
+                          style={{
+                            backgroundColor: STAFF_BG[lvl],
+                            color: STAFF_TEXT[lvl],
+                          }}
+                        >
+                          {eff}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </section>

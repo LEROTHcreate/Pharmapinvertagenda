@@ -34,7 +34,7 @@ export default async function GabaritImprimerPage({
     }),
     prisma.pharmacy.findUnique({
       where: { id: session.user.pharmacyId },
-      select: { name: true },
+      select: { name: true, minStaff: true },
     }),
     prisma.employee.findMany({
       where: { pharmacyId: session.user.pharmacyId, isActive: true },
@@ -44,6 +44,7 @@ export default async function GabaritImprimerPage({
         firstName: true,
         lastName: true,
         displayColor: true,
+        status: true,
       },
     }),
   ]);
@@ -53,6 +54,7 @@ export default async function GabaritImprimerPage({
     id: e.id,
     name: `${e.firstName} ${e.lastName.charAt(0)}.`,
     color: e.displayColor,
+    status: e.status,
   }));
 
   const entries: GabaritPrintEntry[] = template.entries.map((e) => ({
@@ -74,6 +76,7 @@ export default async function GabaritImprimerPage({
       employees={employeeDTO}
       entries={entries}
       onlyDay={onlyDay}
+      minStaff={pharmacy?.minStaff ?? 4}
     />
   );
 }
