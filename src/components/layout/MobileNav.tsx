@@ -132,7 +132,11 @@ export function MobileNav({
             </SheetHeader>
             <nav className="mt-6 space-y-1">
               {NAV.filter((n) => {
-                if (n.key === "remuneration") return canViewPayroll;
+                // Rémunération ET Pilotage RH affichent des données de paie
+                // sensibles (coûts, budget, simulateur) → réservés aux titulaires
+                // autorisés au module paie, comme la garde de leurs pages.
+                if (n.key === "remuneration" || n.key === "pilotage")
+                  return canViewPayroll;
                 return !n.adminOnly || isAdmin || (n.manager === true && isManager);
               }).map((item) => {
                 const active = pathname.startsWith(item.href);

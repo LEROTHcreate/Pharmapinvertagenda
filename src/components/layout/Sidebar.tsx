@@ -165,9 +165,12 @@ export function Sidebar({
 
       <nav className="flex-1 p-3 space-y-1">
         {NAV.filter((n) => {
-          // Rémunération : visible UNIQUEMENT si l'utilisateur a explicitement
-          // canViewPayroll=true (super-admin OU admin titulaire autorisé).
-          if (n.key === "remuneration") return canViewPayroll;
+          // Rémunération ET Pilotage RH : visibles UNIQUEMENT si canViewPayroll
+          // (super-admin OU titulaire autorisé au module paie) — ils exposent
+          // des données de paie (coûts, budget, simulateur). Aligné sur la garde
+          // serveur de leurs pages (évite un item de menu qui redirige).
+          if (n.key === "remuneration" || n.key === "pilotage")
+            return canViewPayroll;
           return !n.adminOnly || isAdmin || (n.manager === true && isManager);
         }).map((item) => {
           const active = pathname.startsWith(item.href);
