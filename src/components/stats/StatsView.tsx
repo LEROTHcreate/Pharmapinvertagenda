@@ -14,6 +14,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MarketGauge } from "@/components/market/MarketGauge";
+import { SECTOR_META } from "@/lib/sector-benchmark";
 import { STATUS_LABELS, TASK_COLORS, TASK_DESCRIPTIONS } from "@/types";
 import type {
   ActivityStat,
@@ -547,6 +549,32 @@ export function StatsView({
           delta={null}
         />
       </div>
+
+      {/* Comparaison au marché — angle OPÉRATIONNEL (heures, pas d'argent) :
+          intensité des heures sup vs secteur. Le positionnement financier
+          (masse sal./CA, productivité) vit dans Pilotage RH. */}
+      {totals.task > 0 && (
+        <div className="rounded-2xl border border-zinc-200/70 bg-white p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-zinc-500">
+              <Scale className="h-3.5 w-3.5" /> Comparaison au marché
+            </h2>
+            <span className="text-[11px] text-zinc-400">
+              Secteur officine · indicatif
+            </span>
+          </div>
+          <div className="max-w-md">
+            <MarketGauge
+              sectorKey="overtimeShare"
+              value={totals.overtime / totals.task}
+            />
+          </div>
+          <p className="mt-3 text-[10.5px] leading-relaxed text-zinc-400">
+            {SECTOR_META.disclaimer} Le positionnement financier (masse salariale
+            / CA, productivité) est dans Pilotage RH.
+          </p>
+        </div>
+      )}
 
       {/* Points d'attention — highlights dirigeants */}
       {(insights.topOvertime ||

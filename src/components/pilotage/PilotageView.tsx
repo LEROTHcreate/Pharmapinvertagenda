@@ -12,9 +12,13 @@ import {
   Info,
   CheckCircle2,
   Flame,
+  Scale,
 } from "lucide-react";
 import type { HrDashboard, HrMonthStat } from "@/lib/hr-dashboard";
 import { HiringSimulator } from "@/components/payroll/HiringSimulator";
+import { MarketGauge } from "@/components/market/MarketGauge";
+import { SECTOR_META } from "@/lib/sector-benchmark";
+import { REFERENCE_META } from "@/lib/payroll-reference";
 import { cn } from "@/lib/utils";
 
 const eur = (n: number) => n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
@@ -50,6 +54,29 @@ export function PilotageView({
   // Projection annuelle = coût employeur du mois courant × 12 (hypothèse simple,
   // cohérente avec Rémunération).
   const annualProjection = cur.cost * 12;
+
+  // ─── Agrégats « positionnement marché » (moyennes sur la période) ─────
+  const revMonths = months.filter(
+    (m) => m.salaryToRevenue != null && m.revenueHT != null
+  );
+  const mean = (arr: number[]) =>
+    arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
+  // Absentéisme moyen (toujours disponible — ne dépend pas du CA).
+  const avgAbsenteeism = mean(months.map((m) => m.absenteeismRate));
+  // Masse salariale / CA moyen (mois avec CA saisi uniquement).
+  const avgPayrollToRevenue = revMonths.length
+    ? mean(revMonths.map((m) => m.salaryToRevenue as number))
+    : null;
+  // Productivité : CA HT annualisé ÷ ETP (ETP ≈ heures travaillées / 151,67).
+  const avgMonthlyWorked = mean(months.map((m) => m.workedHours));
+  const fte = avgMonthlyWorked / REFERENCE_META.monthlyHoursFullTime;
+  const avgMonthlyRevenue = revMonths.length
+    ? mean(revMonths.map((m) => m.revenueHT as number))
+    : null;
+  const revenuePerFte =
+    avgMonthlyRevenue != null && fte > 0.05
+      ? (avgMonthlyRevenue * 12) / fte
+      : null;
 
   const hasRevenue = months.some((m) => m.salaryToRevenue != null);
   const maxHours = Math.max(1, ...months.map((m) => m.workedHours + m.absenceHours));
@@ -128,6 +155,49 @@ export function PilotageView({
           />
         )}
       </div>
+
+      {/* Positionnement marché — situe l'officine vs le secteur (ratios de
+          gestion). Vue STRATÉGIQUE : ni Statistiques ni Rémunération ne montrent
+          ces ratios agrégés. */}
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+            <Scale className="h-4 w-4 text-blue-500" /> Positionnement marché
+            <span className="font-normal text-muted-foreground">
+              (moyenne {first.label} → {cur.label})
+            </span>
+          </h2>
+          <span className="text-[11px] text-muted-foreground">
+            Secteur officine · indicatif
+          </span>
+        </div>
+        <div className="grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
+          <MarketGauge sectorKey="absenteeism" value={avgAbsenteeism} />
+          {avgPayrollToRevenue != null ? (
+            <MarketGauge
+              sectorKey="payrollToRevenue"
+              value={avgPayrollToRevenue}
+            />
+          ) : (
+            <MarketPlaceholder
+              label="Masse salariale / CA HT"
+              hint="Saisis le CA mensuel dans Rémunération pour te comparer au secteur."
+            />
+          )}
+          {revenuePerFte != null ? (
+            <MarketGauge sectorKey="revenuePerFte" value={revenuePerFte} />
+          ) : (
+            <MarketPlaceholder
+              label="Productivité (CA HT / ETP)"
+              hint="Nécessite le CA mensuel (Rémunération) — CA annualisé ÷ ETP."
+            />
+          )}
+        </div>
+        <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground/80">
+          {SECTOR_META.disclaimer} À jour au {fmtSectorDate(SECTOR_META.lastReviewed)}.
+          Sources : {SECTOR_META.sources.join(", ")}.
+        </p>
+      </section>
 
       {/* Points d'attention — le cœur du cockpit */}
       <section className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
@@ -432,6 +502,25 @@ function Bars({
       ))}
     </div>
   );
+}
+
+/** Placeholder quand un indicateur marché nécessite une donnée manquante (CA). */
+function MarketPlaceholder({ label, hint }: { label: string; hint: string }) {
+  return (
+    <div className="space-y-1.5">
+      <span className="text-[12px] font-medium text-foreground/80">{label}</span>
+      <div className="flex h-6 items-center">
+        <span className="h-2 w-full rounded-full bg-muted" />
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+/** "2026-06-30" → "30/06/2026". */
+function fmtSectorDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
 function CrossLink({ href, label }: { href: string; label: string }) {
