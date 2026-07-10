@@ -15,6 +15,7 @@ import {
   Pencil,
   Printer,
   Save,
+  Scale,
   TrendingDown,
   TrendingUp,
   X,
@@ -337,6 +338,31 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
     );
   }, [lines, benchmarks, region, month]);
 
+  // Synthèse « niveaux de paie vs marché » (agrégé) — angle propre à
+  // Rémunération : combien de salariés sous / alignés / au-dessus du marché,
+  // conformité au minimum conventionnel, et écart moyen au marché.
+  const marketSummary = useMemo(() => {
+    let under = 0;
+    let aligned = 0;
+    let above = 0;
+    let belowMin = 0;
+    const gaps: number[] = [];
+    for (const l of lines) {
+      const b = benchmarks.get(l.employeeId);
+      if (!b) continue;
+      if (b.legal === "below_min") belowMin += 1;
+      if (b.market === "under") under += 1;
+      else if (b.market === "aligned") aligned += 1;
+      else if (b.market === "above") above += 1;
+      if (b.marketGapPct != null) gaps.push(b.marketGapPct);
+    }
+    const comparable = under + aligned + above;
+    const avgGap = gaps.length
+      ? Math.round((gaps.reduce((s, x) => s + x, 0) / gaps.length) * 10) / 10
+      : null;
+    return { under, aligned, above, belowMin, comparable, avgGap };
+  }, [lines, benchmarks]);
+
   return (
     <div className="p-3 md:p-4 space-y-4">
       {/* En-tête */}
@@ -491,6 +517,75 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
           <TotalCard label="Net estimé total" value={totals.netEstimated} tone="emerald" />
           <TotalCard label="Charges patronales" value={totals.socialContributionsEmployer} tone="amber" />
           <TotalCard label="Coût total officine" value={totals.totalEmployerCost} tone="violet" big />
+        </div>
+      )}
+
+      {/* Positionnement des rémunérations vs marché (agrégé) — angle propre à
+          Rémunération : niveaux de paie individuels + conformité conventionnelle.
+          Les RATIOS de gestion (masse sal./CA, productivité) sont dans Pilotage. */}
+      {!loading && marketSummary.comparable > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-3.5 sm:p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-zinc-800 dark:text-foreground">
+              <Scale className="h-4 w-4 text-violet-600" /> Rémunérations vs marché
+            </h2>
+            <span className="text-[11px] text-muted-foreground">
+              {REGION_LABELS[region]} · {marketSummary.comparable} salarié
+              {marketSummary.comparable > 1 ? "s" : ""} comparé
+              {marketSummary.comparable > 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <MarketStat
+              label="Sous le marché"
+              value={marketSummary.under}
+              tone="amber"
+            />
+            <MarketStat
+              label="Alignés (±3 %)"
+              value={marketSummary.aligned}
+              tone="emerald"
+            />
+            <MarketStat
+              label="Au-dessus"
+              value={marketSummary.above}
+              tone="violet"
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
+            {marketSummary.avgGap != null && (
+              <span className="text-muted-foreground">
+                Écart moyen au marché :{" "}
+                <strong
+                  className={cn(
+                    "tabular-nums",
+                    marketSummary.avgGap < 0
+                      ? "text-amber-700 dark:text-amber-400"
+                      : "text-emerald-700 dark:text-emerald-400"
+                  )}
+                >
+                  {marketSummary.avgGap > 0 ? "+" : ""}
+                  {marketSummary.avgGap.toFixed(1).replace(".", ",")} %
+                </strong>
+              </span>
+            )}
+            {marketSummary.belowMin > 0 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {marketSummary.belowMin} sous le minimum conventionnel — à
+                régulariser
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                <Check className="h-3.5 w-3.5" />
+                Tous au-dessus du minimum conventionnel
+              </span>
+            )}
+          </div>
+          <p className="mt-2.5 text-[10.5px] leading-relaxed text-muted-foreground/80">
+            Moyennes marché indicatives ({REGION_LABELS[region]}), à fin de
+            comparaison. Détail par salarié dans la colonne « Marché » du tableau.
+          </p>
         </div>
       )}
 
@@ -659,6 +754,32 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         à fin de comparaison. À jour au {fmtDate(REFERENCE_META.lastReviewed)}. Sources :{" "}
         {REFERENCE_META.sources.join(", ")}.
       </div>
+    </div>
+  );
+}
+
+/* ─── Statistique « vs marché » (compteur coloré) ───────────────────── */
+function MarketStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "amber" | "emerald" | "violet";
+}) {
+  const toneCls =
+    tone === "amber"
+      ? "text-amber-700 dark:text-amber-400"
+      : tone === "emerald"
+        ? "text-emerald-700 dark:text-emerald-400"
+        : "text-violet-700 dark:text-violet-300";
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-center">
+      <div className={cn("font-mono text-[22px] font-bold tabular-nums", toneCls)}>
+        {value}
+      </div>
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
     </div>
   );
 }
