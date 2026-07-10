@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LineTrend } from "@/components/charts/LineTrend";
 import { MarketGauge } from "@/components/market/MarketGauge";
 import { SECTOR_META } from "@/lib/sector-benchmark";
 import { STATUS_LABELS, TASK_COLORS, TASK_DESCRIPTIONS } from "@/types";
@@ -131,54 +132,10 @@ function MiniBarChart({
   );
 }
 
-// ─── Courbe d'évolution de la charge équipe ───────────────────────
-function TeamTrendChart({
-  data,
-}: {
-  data: Array<{ weekStart: string; hours: number }>;
-}) {
-  const W = 600;
-  const H = 90;
-  const pad = 6;
-  const n = data.length;
-  const max = Math.max(1, ...data.map((d) => d.hours));
-  const x = (i: number) => pad + (i / (n - 1)) * (W - 2 * pad);
-  const y = (h: number) => H - pad - (h / max) * (H - 2 * pad);
-  const linePts = data.map((d, i) => `${x(i)},${y(d.hours)}`).join(" ");
-  const areaPts = `${x(0)},${H - pad} ${linePts} ${x(n - 1)},${H - pad}`;
-  const fmt = (iso: string) => {
-    const [, m, d] = iso.split("-");
-    return `${d}/${m}`;
-  };
-  return (
-    <div>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="w-full h-24"
-        role="img"
-        aria-label="Évolution des heures planifiées de l'équipe par semaine"
-      >
-        <polygon points={areaPts} fill="rgb(124 58 237 / 0.10)" />
-        <polyline
-          points={linePts}
-          fill="none"
-          stroke="rgb(124 58 237)"
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <div className="mt-1 flex items-center justify-between text-[10px] text-zinc-400 tabular-nums">
-        <span>{fmt(data[0].weekStart)}</span>
-        <span className="text-zinc-500">
-          max {max.toFixed(0)}h · {data.length} sem.
-        </span>
-        <span>{fmt(data[n - 1].weekStart)}</span>
-      </div>
-    </div>
-  );
+// ─── Libellé court d'une semaine (ISO "YYYY-MM-DD" → "dd/mm") ──────
+function frWeekLabel(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
 }
 
 // ─── Barre de progression : avg vs contrat ────────────────────────
@@ -393,6 +350,13 @@ export function StatsView({
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([weekStart, hours]) => ({ weekStart, hours }));
   }, [employees]);
+
+  // Capacité contractuelle hebdo de l'équipe (somme des contrats) — repère de
+  // la courbe : « l'équipe planifie-t-elle près de sa capacité ? ».
+  const teamContract = useMemo(
+    () => employees.reduce((s, e) => s + e.weeklyHours, 0),
+    [employees]
+  );
 
   // ─── Points d'attention : highlights auto pour les dirigeants ──────
   // On surface les cas extrêmes utiles à un titulaire : qui accumule le plus
@@ -647,7 +611,20 @@ export function StatsView({
               heures planifiées / semaine
             </span>
           </div>
-          <TeamTrendChart data={teamWeekly} />
+          <LineTrend
+            data={teamWeekly.map((w) => ({
+              key: w.weekStart,
+              label: frWeekLabel(w.weekStart),
+              value: w.hours,
+            }))}
+            color="#7c3aed"
+            format={(n) => `${n.toFixed(0)} h`}
+            reference={
+              teamContract > 0
+                ? { value: teamContract, label: "Capacité" }
+                : undefined
+            }
+          />
         </div>
       )}
 
