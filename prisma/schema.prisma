@@ -459,6 +459,10 @@ model ScheduleEntry {
   // Null = la cellule n'a jamais été convertie (ou a été modifiée depuis).
   previousTaskCode TaskCode?
 
+  // True quand la cellule a été créée en assignant un « Créneau à couvrir »
+  // (page /creneaux) → encadrée visuellement dans la grille pour montrer l'origine.
+  fromOpenShift Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

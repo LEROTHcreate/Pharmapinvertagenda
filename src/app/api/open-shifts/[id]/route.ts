@@ -5,8 +5,9 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditPlanning } from "@/lib/permissions";
-import { isTaskAllowed } from "@/lib/role-task-rules";
+import { isTaskAllowed, getAllowedTasks } from "@/lib/role-task-rules";
 import { sendPushToPharmacy } from "@/lib/push";
+import type { TaskCode } from "@prisma/client";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { TIME_SLOTS } from "@/types";
 
@@ -64,6 +65,18 @@ async function PATCH__impl(req: Request, { params }: Ctx) {
     if (existing) {
       await prisma.openShiftVolunteer.delete({ where: { id: existing.id } });
     } else {
+      // Éligibilité : on ne peut se positionner QUE si l'on ne travaille pas
+      // déjà ce jour-là (sinon ça n'aurait pas de sens de couvrir un trou).
+      const worksThatDay = await prisma.scheduleEntry.findFirst({
+        where: { employeeId, date: shift.date, type: "TASK" },
+        select: { id: true },
+      });
+      if (worksThatDay) {
+        return NextResponse.json(
+          { error: "Tu travailles déjà ce jour-là — tu ne peux pas te positionner." },
+          { status: 409 }
+        );
+      }
       await prisma.openShiftVolunteer.create({ data: { openShiftId: shift.id, employeeId } });
     }
     revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));
@@ -119,32 +132,38 @@ async function PATCH__impl(req: Request, { params }: Ctx) {
     data: { status: "FILLED", assignedEmployeeId: employee.id },
   });
 
-  // Si un poste est défini ET compatible avec le rôle, on écrit directement les
-  // créneaux du planning pour le collaborateur assigné (gain de temps admin).
+  // On écrit TOUJOURS les créneaux du planning pour le collaborateur assigné
+  // (marqués `fromOpenShift` → encadrés dans la grille). Poste choisi : celui du
+  // créneau s'il est compatible avec le rôle, sinon le poste principal du rôle
+  // (1er poste autorisé). Ainsi le planning se remplit à coup sûr.
+  const taskToWrite: TaskCode =
+    shift.taskCode && isTaskAllowed(employee.status, shift.taskCode)
+      ? shift.taskCode
+      : getAllowedTasks(employee.status)[0];
+
   let wroteEntries = false;
-  if (shift.taskCode && isTaskAllowed(employee.status, shift.taskCode)) {
-    const slots = TIME_SLOTS.filter((s) => s >= shift.startSlot && s < shift.endSlot);
-    if (slots.length > 0) {
-      const keys = slots.map((timeSlot) => ({
+  const slots = TIME_SLOTS.filter((s) => s >= shift.startSlot && s < shift.endSlot);
+  if (slots.length > 0) {
+    const keys = slots.map((timeSlot) => ({
+      employeeId: employee.id,
+      date: shift.date,
+      timeSlot,
+    }));
+    await prisma.scheduleEntry.deleteMany({
+      where: { pharmacyId: session.user.pharmacyId, OR: keys },
+    });
+    await prisma.scheduleEntry.createMany({
+      data: slots.map((timeSlot) => ({
+        pharmacyId: session.user.pharmacyId,
         employeeId: employee.id,
         date: shift.date,
         timeSlot,
-      }));
-      await prisma.scheduleEntry.deleteMany({
-        where: { pharmacyId: session.user.pharmacyId, OR: keys },
-      });
-      await prisma.scheduleEntry.createMany({
-        data: slots.map((timeSlot) => ({
-          pharmacyId: session.user.pharmacyId,
-          employeeId: employee.id,
-          date: shift.date,
-          timeSlot,
-          type: "TASK" as const,
-          taskCode: shift.taskCode,
-        })),
-      });
-      wroteEntries = true;
-    }
+        type: "TASK" as const,
+        taskCode: taskToWrite,
+        fromOpenShift: true,
+      })),
+    });
+    wroteEntries = true;
   }
 
   revalidateTag(DASHBOARD_CACHE_TAGS.planningAll(session.user.pharmacyId));

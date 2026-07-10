@@ -144,6 +144,8 @@ export type ScheduleEntryDTO = {
   taskCode: TaskCode | null;
   absenceCode: AbsenceCode | null;
   notes: string | null;
+  /** True si la cellule vient de l'assignation d'un « Créneau à couvrir ». */
+  fromOpenShift?: boolean;
 };
 
 export type EmployeeDTO = {

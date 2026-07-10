@@ -115,6 +115,7 @@ export default async function PlanningPage({
     taskCode: e.taskCode,
     absenceCode: e.absenceCode,
     notes: e.notes,
+    fromOpenShift: e.fromOpenShift,
   }));
 
   const employeesDTO: EmployeeDTO[] = employees;

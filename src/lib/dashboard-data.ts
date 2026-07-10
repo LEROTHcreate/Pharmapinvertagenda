@@ -176,6 +176,7 @@ export const getCachedWeekEntries = (
           taskCode: true,
           absenceCode: true,
           notes: true,
+          fromOpenShift: true,
         },
       });
     },

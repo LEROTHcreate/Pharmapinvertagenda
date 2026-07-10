@@ -37,6 +37,10 @@ type OpenShift = {
   status: "OPEN" | "FILLED" | "CANCELLED";
   assignedEmployee: EmployeeRef | null;
   volunteers: EmployeeRef[];
+  /** Le collaborateur courant travaille-t-il déjà ce jour-là ? (bloque le vote) */
+  iWorkThatDay: boolean;
+  /** IDs des employés qui travaillent déjà ce jour-là (flag menu, responsables). */
+  workingEmployeeIds: string[] | null;
 };
 
 const END_SLOTS = [...TIME_SLOTS.slice(1), "20:00"];
@@ -408,25 +412,31 @@ function ShiftCard({
       {/* Actions */}
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
         {isOpen && myEmployeeId && (
-          <button
-            onClick={onVolunteer}
-            disabled={busy}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors disabled:opacity-60",
-              iAmIn
-                ? "border border-border text-muted-foreground hover:bg-muted/50"
-                : "bg-emerald-600 text-white hover:bg-emerald-700"
-            )}
-          >
-            {busy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : iAmIn ? (
-              <X className="h-3.5 w-3.5" />
-            ) : (
-              <Hand className="h-3.5 w-3.5" />
-            )}
-            {iAmIn ? "Me retirer" : "Je me positionne"}
-          </button>
+          s.iWorkThatDay && !iAmIn ? (
+            <p className="rounded-lg bg-muted/60 px-3 py-1.5 text-[12px] text-muted-foreground">
+              Tu travailles déjà ce jour-là.
+            </p>
+          ) : (
+            <button
+              onClick={onVolunteer}
+              disabled={busy}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors disabled:opacity-60",
+                iAmIn
+                  ? "border border-border text-muted-foreground hover:bg-muted/50"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+              )}
+            >
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : iAmIn ? (
+                <X className="h-3.5 w-3.5" />
+              ) : (
+                <Hand className="h-3.5 w-3.5" />
+              )}
+              {iAmIn ? "Me retirer" : "Je me positionne"}
+            </button>
+          )
         )}
 
         {canManage && isOpen && (
@@ -437,12 +447,16 @@ function ShiftCard({
               className="min-w-0 flex-1 rounded-lg border border-input bg-card px-2 py-1.5 text-[12.5px]"
             >
               <option value="">Assigner à…</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {fullName(e)}
-                  {s.volunteers.some((v) => v.id === e.id) ? " ✋" : ""}
-                </option>
-              ))}
+              {employees.map((e) => {
+                const worksThatDay = s.workingEmployeeIds?.includes(e.id);
+                return (
+                  <option key={e.id} value={e.id}>
+                    {fullName(e)}
+                    {s.volunteers.some((v) => v.id === e.id) ? " ✋" : ""}
+                    {worksThatDay ? " · travaille déjà" : ""}
+                  </option>
+                );
+              })}
             </select>
             <button
               onClick={() => onAssign(pick)}

@@ -1118,6 +1118,23 @@ function CellView({
   // l'œil identifie immédiatement la zone "hors contrat".
   const overtimeWash = "rgba(239, 68, 68, 0.14)";
 
+  // Cadre « Créneau à couvrir » (violet) — encadre le bloc issu de l'assignation
+  // depuis la page /creneaux, pour montrer d'un coup d'œil son origine. Même
+  // technique que le cadre HS : latéraux partout, haut/bas seulement aux
+  // extrémités du bloc contigu.
+  const isFromOpenShift = !!entry.fromOpenShift;
+  const openShiftFrame = (() => {
+    if (!isFromOpenShift) return undefined;
+    const V = "rgb(139 92 246)"; // violet-500
+    const prevFrom = !!prevEntry?.fromOpenShift;
+    const nextFrom = !!nextEntry?.fromOpenShift;
+    const parts = [`inset 2px 0 0 ${V}`, `inset -2px 0 0 ${V}`];
+    if (!prevFrom) parts.push(`inset 0 2px 0 ${V}`);
+    if (!nextFrom) parts.push(`inset 0 -2px 0 ${V}`);
+    return parts.join(", ");
+  })();
+  const openShiftWash = "rgba(139, 92, 246, 0.14)";
+
   // Tâche : bloc unifié, label uniquement au début du bloc
   if (entry.type === "TASK" && entry.taskCode) {
     const c = TASK_COLORS[entry.taskCode];
@@ -1133,6 +1150,7 @@ function CellView({
       );
     }
     if (isOvertime) overlays.push(`linear-gradient(${overtimeWash}, ${overtimeWash})`);
+    if (isFromOpenShift) overlays.push(`linear-gradient(${openShiftWash}, ${openShiftWash})`);
     if (isMyColumn) overlays.push(`linear-gradient(${myColumnWash}, ${myColumnWash})`);
     const background =
       overlays.length > 0 ? `${overlays.join(", ")}, ${c.bg}` : c.bg;
@@ -1162,6 +1180,7 @@ function CellView({
             [
               isInActiveBlock ? ACTIVE_RING : isSelected ? SELECT_RING : null,
               overtimeBorders,
+              openShiftFrame,
               isLastOfBlock && BLOCK_END_LINE,
               isCurrentRow && CURRENT_TIME_LINE,
             ]
@@ -1169,9 +1188,13 @@ function CellView({
               .join(", ") || undefined,
         }}
         title={
-          isOvertime
-            ? `${TASK_LABELS[entry.taskCode]} · heure supp.`
-            : TASK_LABELS[entry.taskCode]
+          [
+            TASK_LABELS[entry.taskCode],
+            isOvertime ? "heure supp." : null,
+            isFromOpenShift ? "ajouté depuis Créneaux à couvrir" : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
         }
       >
         {!isContinuation && (
@@ -1180,6 +1203,13 @@ function CellView({
             {/* Indicateur "+xh" affiché uniquement sur la 1re case HS */}
             {isOvertime && !isPrevOvertime && (
               <span className="text-[9px] font-bold text-red-700">+sup</span>
+            )}
+            {/* Pastille origine « Créneau à couvrir » sur la 1re case du bloc */}
+            {isFromOpenShift && !prevEntry?.fromOpenShift && (
+              <span
+                className="ml-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-violet-600 ring-1 ring-white/70"
+                title="Ajouté depuis Créneaux à couvrir"
+              />
             )}
           </span>
         )}

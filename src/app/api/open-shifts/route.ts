@@ -35,6 +35,8 @@ async function GET__impl() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  const canManage = canEditPlanning(session.user.role);
+  const myEmployeeId = session.user.employeeId ?? null;
   const todayIso = toIsoDate(new Date());
   const shifts = await prisma.openShift.findMany({
     where: {
@@ -54,18 +56,47 @@ async function GET__impl() {
     },
   });
 
+  // Qui travaille (a un poste) sur les dates concernées → sert à l'éligibilité :
+  // seuls ceux qui NE travaillent PAS ce jour-là peuvent se positionner.
+  const shiftDates = Array.from(new Set(shifts.map((s) => s.date.getTime()))).map((t) => new Date(t));
+  const worksByDate = new Map<string, Set<string>>(); // isoDate → employeeIds qui bossent
+  if (shiftDates.length > 0) {
+    const workEntries = await prisma.scheduleEntry.findMany({
+      where: {
+        pharmacyId: session.user.pharmacyId,
+        type: "TASK",
+        date: { in: shiftDates },
+      },
+      select: { employeeId: true, date: true },
+    });
+    for (const e of workEntries) {
+      const iso = toIsoDate(e.date);
+      const set = worksByDate.get(iso) ?? new Set<string>();
+      set.add(e.employeeId);
+      worksByDate.set(iso, set);
+    }
+  }
+
   return NextResponse.json({
-    shifts: shifts.map((s) => ({
-      id: s.id,
-      date: toIsoDate(s.date),
-      startSlot: s.startSlot,
-      endSlot: s.endSlot,
-      taskCode: s.taskCode,
-      note: s.note,
-      status: s.status,
-      assignedEmployee: s.assignedEmployee,
-      volunteers: s.volunteers.map((v) => v.employee),
-    })),
+    shifts: shifts.map((s) => {
+      const iso = toIsoDate(s.date);
+      const workers = worksByDate.get(iso) ?? new Set<string>();
+      return {
+        id: s.id,
+        date: iso,
+        startSlot: s.startSlot,
+        endSlot: s.endSlot,
+        taskCode: s.taskCode,
+        note: s.note,
+        status: s.status,
+        assignedEmployee: s.assignedEmployee,
+        volunteers: s.volunteers.map((v) => v.employee),
+        // Le collaborateur courant travaille-t-il déjà ce jour-là ?
+        iWorkThatDay: myEmployeeId ? workers.has(myEmployeeId) : false,
+        // Pour le menu d'assignation (responsables) : qui bosse déjà ce jour-là.
+        workingEmployeeIds: canManage ? [...workers] : null,
+      };
+    }),
   });
 }
 

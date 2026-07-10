@@ -49,6 +49,7 @@ async function getPlanning(req: Request) {
     taskCode: e.taskCode,
     absenceCode: e.absenceCode,
     notes: e.notes,
+    fromOpenShift: e.fromOpenShift,
   }));
 
   return NextResponse.json({ entries: dto });
