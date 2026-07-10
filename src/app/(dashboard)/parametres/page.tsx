@@ -78,66 +78,78 @@ export default async function ParametresPage() {
       : "NATIONAL";
 
   return (
-    <div className="p-3 md:p-4 max-w-2xl space-y-5">
-      <header>
-        <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-          Paramètres
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Informations générales et règles d'affichage du planning
-        </p>
-      </header>
-
-      {!canEdit && (
-        <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            Lecture seule — seul un titulaire peut modifier les paramètres de
-            l&apos;officine.
+    <div className="p-4 md:p-6 lg:p-8">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6">
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+            Paramètres
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Informations générales, écran vitrine et règles d&apos;affichage du
+            planning
           </p>
+        </header>
+
+        {!canEdit && (
+          <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Lecture seule — seul un titulaire peut modifier les paramètres de
+              l&apos;officine.
+            </p>
+          </div>
+        )}
+
+        {/* Plein écran : 2 colonnes équilibrées sur grand écran, empilées sur
+            mobile/tablette. Gauche = identité + rémunération ; droite = écran
+            vitrine (plus large à cause de l'éditeur d'horaires). */}
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
+          <div className="space-y-5">
+            <PharmacyLogoForm
+              initialLogoUrl={pharmacy.logoUrl ?? null}
+              pharmacyName={pharmacy.name}
+              canEdit={canEdit}
+            />
+
+            <ParametresForm
+              initial={{
+                name: pharmacy.name,
+                address: pharmacy.address ?? "",
+                phone: pharmacy.phone ?? "",
+                siret: pharmacy.siret ?? "",
+                minStaff: pharmacy.minStaff,
+              }}
+              canEdit={canEdit}
+              canEditSiret={canEditSiret}
+            />
+
+            {canSeePayrollSettings && (
+              <PayrollSettingsForm
+                initial={{
+                  region: payrollRegion,
+                  contribEmployeePct:
+                    pharmacy.payrollContribEmployee != null
+                      ? Math.round(pharmacy.payrollContribEmployee * 1000) / 10
+                      : null,
+                  contribEmployerPct:
+                    pharmacy.payrollContribEmployer != null
+                      ? Math.round(pharmacy.payrollContribEmployer * 1000) / 10
+                      : null,
+                  annualBudget: pharmacy.payrollAnnualBudget ?? null,
+                }}
+              />
+            )}
+          </div>
+
+          <div className="space-y-5">
+            <VitrineSettings
+              vitrinePath={vitrinePath(pharmacy.id)}
+              initialHours={parseWeekHours(pharmacy.openingHours)}
+              canEdit={canEdit}
+            />
+          </div>
         </div>
-      )}
-
-      <PharmacyLogoForm
-        initialLogoUrl={pharmacy.logoUrl ?? null}
-        pharmacyName={pharmacy.name}
-        canEdit={canEdit}
-      />
-
-      <ParametresForm
-        initial={{
-          name: pharmacy.name,
-          address: pharmacy.address ?? "",
-          phone: pharmacy.phone ?? "",
-          siret: pharmacy.siret ?? "",
-          minStaff: pharmacy.minStaff,
-        }}
-        canEdit={canEdit}
-        canEditSiret={canEditSiret}
-      />
-
-      <VitrineSettings
-        vitrinePath={vitrinePath(pharmacy.id)}
-        initialHours={parseWeekHours(pharmacy.openingHours)}
-        canEdit={canEdit}
-      />
-
-      {canSeePayrollSettings && (
-        <PayrollSettingsForm
-          initial={{
-            region: payrollRegion,
-            contribEmployeePct:
-              pharmacy.payrollContribEmployee != null
-                ? Math.round(pharmacy.payrollContribEmployee * 1000) / 10
-                : null,
-            contribEmployerPct:
-              pharmacy.payrollContribEmployer != null
-                ? Math.round(pharmacy.payrollContribEmployer * 1000) / 10
-                : null,
-            annualBudget: pharmacy.payrollAnnualBudget ?? null,
-          }}
-        />
-      )}
+      </div>
     </div>
   );
 }

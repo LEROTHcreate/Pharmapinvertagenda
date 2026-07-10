@@ -25,30 +25,43 @@ async function GET__impl() {
   const canManage = canEditPlanning(session.user.role);
   const myEmployeeId = session.user.employeeId ?? null;
 
-  const polls = await prisma.poll.findMany({
-    where: { pharmacyId: session.user.pharmacyId },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-    take: 40,
-    include: {
-      votes: {
-        include: {
-          employee: { select: { id: true, firstName: true, lastName: true, displayColor: true } },
+  const [polls, activeEmployees] = await Promise.all([
+    prisma.poll.findMany({
+      where: { pharmacyId: session.user.pharmacyId },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: 40,
+      include: {
+        votes: {
+          include: {
+            employee: { select: { id: true, firstName: true, lastName: true, displayColor: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    // Roster actif — pour la participation (X/N) et la relance des non-votants.
+    prisma.employee.findMany({
+      where: { pharmacyId: session.user.pharmacyId, isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { lastName: "asc" }],
+      select: { id: true, firstName: true, lastName: true, displayColor: true },
+    }),
+  ]);
+
+  const teamSize = activeEmployees.length;
 
   return NextResponse.json({
     canManage,
+    teamSize,
     polls: polls.map((p) => {
       const counts: Record<string, number> = {};
       for (const o of p.options) counts[o] = 0;
       const voters: Record<string, Array<{ id: string; name: string; color: string }>> = {};
       for (const o of p.options) voters[o] = [];
       let myChoice: string | null = null;
+      const votedIds = new Set<string>();
       for (const v of p.votes) {
         if (counts[v.choice] === undefined) counts[v.choice] = 0;
         counts[v.choice]++;
+        votedIds.add(v.employeeId);
         (voters[v.choice] ??= []).push({
           id: v.employee.id,
           name: `${v.employee.firstName} ${v.employee.lastName}`.trim(),
@@ -56,6 +69,14 @@ async function GET__impl() {
         });
         if (myEmployeeId && v.employeeId === myEmployeeId) myChoice = v.choice;
       }
+      // Non-votants (roster actif − votants) — pour la relance (responsables).
+      const nonVoters = activeEmployees
+        .filter((e) => !votedIds.has(e.id))
+        .map((e) => ({
+          id: e.id,
+          name: `${e.firstName} ${e.lastName}`.trim(),
+          color: e.displayColor,
+        }));
       return {
         id: p.id,
         question: p.question,
@@ -67,6 +88,7 @@ async function GET__impl() {
         counts,
         // Les noms ne sont exposés qu'aux responsables (résultat détaillé).
         voters: canManage ? voters : null,
+        nonVoters: canManage ? nonVoters : null,
         myChoice,
       };
     }),

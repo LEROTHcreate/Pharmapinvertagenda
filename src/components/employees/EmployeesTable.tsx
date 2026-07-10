@@ -110,13 +110,13 @@ export function EmployeesTable({
 }) {
   const router = useRouter();
   const [dialog, setDialog] = React.useState<DialogState>(null);
+  // Collaborateur dont on consulte les formations / DPC (null = dialog fermé).
+  const [trainingsFor, setTrainingsFor] =
+    React.useState<EmployeeRowData | null>(null);
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
   const [deleteTarget, setDeleteTarget] =
-    React.useState<EmployeeRowData | null>(null);
-  // Collaborateur dont on consulte les formations / DPC (null = dialog fermé).
-  const [trainingsFor, setTrainingsFor] =
     React.useState<EmployeeRowData | null>(null);
   // Rôles que l'utilisateur courant a le droit d'attribuer (jamais CREATEUR).
   const assignable = React.useMemo(
@@ -320,13 +320,13 @@ export function EmployeesTable({
                             <Pencil className="h-4 w-4" />
                             Modifier
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => handleToggle(e)}>
-                            <Power className="h-4 w-4" />
-                            {e.isActive ? "Désactiver" : "Réactiver"}
-                          </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => setTrainingsFor(e)}>
                             <GraduationCap className="h-4 w-4" />
                             Formations & DPC
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleToggle(e)}>
+                            <Power className="h-4 w-4" />
+                            {e.isActive ? "Désactiver" : "Réactiver"}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
