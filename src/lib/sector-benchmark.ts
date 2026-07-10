@@ -86,6 +86,55 @@ export const SECTOR_BANDS = {
 
 export type SectorKey = keyof typeof SECTOR_BANDS;
 
+/* ─── Taille d'officine (comparaison à CA similaire) ────────────────── */
+export type OfficineSize = "PETITE" | "MOYENNE" | "GRANDE";
+
+export const SIZE_LABELS: Record<OfficineSize, string> = {
+  PETITE: "petite officine",
+  MOYENNE: "officine moyenne",
+  GRANDE: "grande officine",
+};
+
+/** Tranche de taille à partir du CA HT annuel (ordres de grandeur France). */
+export function officineSizeFromAnnualRevenue(
+  annualHT: number | null | undefined
+): OfficineSize | null {
+  if (annualHT == null || annualHT <= 0) return null;
+  if (annualHT < 1_300_000) return "PETITE";
+  if (annualHT <= 2_200_000) return "MOYENNE";
+  return "GRANDE";
+}
+
+/**
+ * Ajustements de seuils par taille — seulement pour les indicateurs qui varient
+ * réellement avec la taille : les grosses officines ont une meilleure
+ * productivité par ETP et un poids de la masse salariale un peu plus faible
+ * (effet d'échelle). Absentéisme & intensité des heures sup : peu liés à la
+ * taille → on garde le repère national.
+ */
+const SIZE_OVERRIDES: Partial<
+  Record<SectorKey, Record<OfficineSize, Partial<SectorBand>>>
+> = {
+  payrollToRevenue: {
+    PETITE: { median: 0.14, favorableAt: 0.125, alertAt: 0.16 },
+    MOYENNE: { median: 0.13, favorableAt: 0.115, alertAt: 0.15 },
+    GRANDE: { median: 0.12, favorableAt: 0.105, alertAt: 0.14 },
+  },
+  revenuePerFte: {
+    PETITE: { median: 200_000, favorableAt: 240_000, alertAt: 160_000 },
+    MOYENNE: { median: 240_000, favorableAt: 285_000, alertAt: 190_000 },
+    GRANDE: { median: 290_000, favorableAt: 340_000, alertAt: 230_000 },
+  },
+};
+
+/** Repère applicable pour un indicateur, ajusté à la taille si pertinent. */
+export function bandForSize(key: SectorKey, size: OfficineSize | null): SectorBand {
+  const base = SECTOR_BANDS[key];
+  if (!size) return base;
+  const ov = SIZE_OVERRIDES[key]?.[size];
+  return ov ? { ...base, ...ov } : base;
+}
+
 export type BenchVerdict = "good" | "normal" | "watch";
 
 export type BenchResult = {
@@ -102,8 +151,12 @@ export type BenchResult = {
  * - lower-is-better : ≤ favorableAt = bien placé ; ≥ alertAt = à surveiller.
  * - higher-is-better : ≥ favorableAt = bien placé ; ≤ alertAt = à surveiller.
  */
-export function classifySector(value: number, key: SectorKey): BenchResult {
-  const band = SECTOR_BANDS[key];
+export function classifySector(
+  value: number,
+  key: SectorKey,
+  size: OfficineSize | null = null
+): BenchResult {
+  const band = bandForSize(key, size);
   let verdict: BenchVerdict = "normal";
   if (band.direction === "lower-is-better") {
     if (value <= band.favorableAt) verdict = "good";

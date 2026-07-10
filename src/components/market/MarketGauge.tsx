@@ -1,6 +1,7 @@
 import {
+  bandForSize,
   classifySector,
-  SECTOR_BANDS,
+  type OfficineSize,
   type SectorKey,
 } from "@/lib/sector-benchmark";
 import { cn } from "@/lib/utils";
@@ -28,15 +29,18 @@ const VERDICT_CHIP: Record<string, string> = {
 export function MarketGauge({
   sectorKey,
   value,
+  size = null,
   className,
 }: {
   sectorKey: SectorKey;
   /** Valeur de l'officine (même unité que le repère). */
   value: number;
+  /** Taille d'officine → ajuste le repère à des pharmacies de CA similaire. */
+  size?: OfficineSize | null;
   className?: string;
 }) {
-  const band = SECTOR_BANDS[sectorKey];
-  const res = classifySector(value, sectorKey);
+  const band = bandForSize(sectorKey, size);
+  const res = classifySector(value, sectorKey, size);
   const lower = band.direction === "lower-is-better";
 
   // Échelle : on couvre confortablement la médiane, les seuils et la valeur.
