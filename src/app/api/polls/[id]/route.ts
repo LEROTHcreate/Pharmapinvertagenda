@@ -4,6 +4,7 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditPlanning } from "@/lib/permissions";
+import { sendPushToUsers } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("vote"), choice: z.string().min(1) }),
   z.object({ action: z.literal("close") }),
   z.object({ action: z.literal("reopen") }),
+  z.object({ action: z.literal("remind") }),
 ]);
 
 type Ctx = { params: { id: string } };
@@ -28,7 +30,7 @@ async function PATCH__impl(req: Request, { params }: Ctx) {
 
   const poll = await prisma.poll.findFirst({
     where: { id: params.id, pharmacyId: session.user.pharmacyId },
-    select: { id: true, status: true, options: true },
+    select: { id: true, status: true, options: true, question: true },
   });
   if (!poll) return NextResponse.json({ error: "not found" }, { status: 404 });
 
@@ -58,10 +60,38 @@ async function PATCH__impl(req: Request, { params }: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
-  // close / reopen → manageur+
+  // close / reopen / remind → manageur+
   if (!canEditPlanning(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  // Relance : notifie (push) les collaborateurs actifs qui n'ont PAS voté.
+  if (body.action === "remind") {
+    const votes = await prisma.pollVote.findMany({
+      where: { pollId: poll.id },
+      select: { employeeId: true },
+    });
+    const votedEmp = votes.map((v) => v.employeeId);
+    const nonVoters = await prisma.employee.findMany({
+      where: {
+        pharmacyId: session.user.pharmacyId,
+        isActive: true,
+        id: { notIn: votedEmp },
+      },
+      select: { user: { select: { id: true } } },
+    });
+    const nonVoterUserIds = nonVoters
+      .map((e) => e.user?.id)
+      .filter((v): v is string => !!v);
+    const { sent } = await sendPushToUsers(nonVoterUserIds, {
+      title: "🗳️ Un sondage attend ta réponse",
+      body: poll.question,
+      url: "/sondages",
+      tag: `poll-${poll.id}`,
+    });
+    return NextResponse.json({ ok: true, reminded: nonVoterUserIds.length, sent });
+  }
+
   await prisma.poll.update({
     where: { id: poll.id },
     data: { status: body.action === "close" ? "CLOSED" : "OPEN" },

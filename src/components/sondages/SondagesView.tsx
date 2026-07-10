@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart2,
   Plus,
@@ -11,11 +11,14 @@ import {
   Unlock,
   X,
   Users,
+  BellRing,
+  Trophy,
+  ChevronDown,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-type Voter = { id: string; name: string; color: string };
+type Person = { id: string; name: string; color: string };
 
 type Poll = {
   id: string;
@@ -26,7 +29,8 @@ type Poll = {
   closesAt: string | null;
   totalVotes: number;
   counts: Record<string, number>;
-  voters: Record<string, Voter[]> | null;
+  voters: Record<string, Person[]> | null;
+  nonVoters: Person[] | null;
   myChoice: string | null;
 };
 
@@ -39,6 +43,7 @@ export function SondagesView({
 }) {
   const { toast } = useToast();
   const [polls, setPolls] = useState<Poll[] | null>(null);
+  const [teamSize, setTeamSize] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -46,7 +51,10 @@ export function SondagesView({
     try {
       const res = await fetch("/api/polls");
       const d = await res.json();
-      setPolls(res.ok ? d.polls ?? [] : []);
+      if (res.ok) {
+        setPolls(d.polls ?? []);
+        setTeamSize(d.teamSize ?? 0);
+      } else setPolls([]);
     } catch {
       setPolls([]);
     }
@@ -55,13 +63,15 @@ export function SondagesView({
     load();
   }, []);
 
+  const open = useMemo(() => (polls ?? []).filter((p) => p.status === "OPEN"), [polls]);
+  const closed = useMemo(() => (polls ?? []).filter((p) => p.status !== "OPEN"), [polls]);
+
   async function vote(p: Poll, choice: string) {
     if (!canVote) {
       toast({ tone: "error", title: "Vote impossible", description: "Ton compte n'est pas rattaché à un profil de l'équipe." });
       return;
     }
     setBusyId(p.id);
-    // Optimiste : maj immédiate de mon choix + compteurs.
     setPolls((prev) =>
       prev?.map((x) => {
         if (x.id !== p.id) return x;
@@ -102,6 +112,32 @@ export function SondagesView({
     }
   }
 
+  async function remind(p: Poll) {
+    setBusyId(p.id);
+    try {
+      const res = await fetch(`/api/polls/${p.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "remind" }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast({
+          tone: "success",
+          title: "Relance envoyée",
+          description:
+            d.sent > 0
+              ? `${d.sent} notification${d.sent > 1 ? "s" : ""} poussée${d.sent > 1 ? "s" : ""}.`
+              : `${d.reminded ?? 0} personne(s) à relancer (aucune n'a activé les notifications).`,
+        });
+      } else {
+        toast({ tone: "error", title: "Relance impossible", description: d.error ?? "Réessaie." });
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(p: Poll) {
     setBusyId(p.id);
     try {
@@ -112,19 +148,35 @@ export function SondagesView({
     }
   }
 
+  const cardProps = (p: Poll) => ({
+    poll: p,
+    teamSize,
+    canManage,
+    canVote,
+    busy: busyId === p.id,
+    onVote: (c: string) => vote(p, c),
+    onClose: () => act(p, "close"),
+    onReopen: () => act(p, "reopen"),
+    onRemind: () => remind(p),
+    onRemove: () => remove(p),
+  });
+
   return (
-    <div className="w-full p-3 md:p-4 lg:p-6 pb-16 max-w-3xl mx-auto">
-      <header className="mb-5 flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
-          <BarChart2 className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">Sondages express</h1>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            {canManage
-              ? "Posez une question à l'équipe, chacun répond en un tap."
-              : "Répondez aux questions de l'équipe en un tap."}
-          </p>
+    <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-6">
+      {/* En-tête pleine largeur */}
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
+            <BarChart2 className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Sondages express</h1>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              {canManage
+                ? "Posez une question à l'équipe — chacun répond en un tap, vous suivez la participation en direct."
+                : "Répondez aux questions de l'équipe en un tap."}
+            </p>
+          </div>
         </div>
         {canManage && (
           <button
@@ -146,35 +198,78 @@ export function SondagesView({
       )}
 
       {polls === null ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : polls.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center">
-          <BarChart2 className="mx-auto h-8 w-8 text-muted-foreground/50" />
-          <p className="mt-3 text-[14px] font-medium text-foreground">Aucun sondage</p>
-          <p className="mx-auto mt-1 max-w-sm text-[13px] text-muted-foreground">
-            {canManage
-              ? "Lancez un sondage : « Qui peut venir samedi ? », « Repas d'équipe jeudi ou vendredi ? »…"
-              : "Rien à voter pour l'instant."}
-          </p>
-        </div>
+        <EmptyState canManage={canManage} onCreate={() => setCreating(true)} />
       ) : (
-        <ul className="space-y-3">
-          {polls.map((p) => (
-            <PollCard
-              key={p.id}
-              poll={p}
-              canManage={canManage}
-              canVote={canVote}
-              busy={busyId === p.id}
-              onVote={(c) => vote(p, c)}
-              onClose={() => act(p, "close")}
-              onReopen={() => act(p, "reopen")}
-              onRemove={() => remove(p)}
-            />
-          ))}
-        </ul>
+        <div className="space-y-6">
+          <Section label="En cours" count={open.length}>
+            {open.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted-foreground">
+                Aucun sondage en cours. 👌
+              </p>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {open.map((p) => (
+                  <PollCard key={p.id} {...cardProps(p)} />
+                ))}
+              </div>
+            )}
+          </Section>
+
+          {closed.length > 0 && (
+            <Section label="Clôturés" count={closed.length}>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {closed.map((p) => (
+                  <PollCard key={p.id} {...cardProps(p)} />
+                ))}
+              </div>
+            </Section>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Section({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="mb-2.5 px-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+        {label} ({count})
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function EmptyState({ canManage, onCreate }: { canManage: boolean; onCreate: () => void }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
+      <BarChart2 className="mx-auto h-9 w-9 text-muted-foreground/50" />
+      <p className="mt-3 text-[15px] font-medium text-foreground">Aucun sondage</p>
+      <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
+        {canManage
+          ? "Lancez un sondage express : « Qui peut venir samedi ? », « Repas d'équipe jeudi ou vendredi ? »… L'équipe répond en un tap."
+          : "Rien à voter pour l'instant. Repassez plus tard."}
+      </p>
+      {canManage && (
+        <button
+          onClick={onCreate}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-violet-700"
+        >
+          <Plus className="h-4 w-4" /> Créer un sondage
+        </button>
       )}
     </div>
   );
@@ -182,31 +277,38 @@ export function SondagesView({
 
 function PollCard({
   poll: p,
+  teamSize,
   canManage,
   canVote,
   busy,
   onVote,
   onClose,
   onReopen,
+  onRemind,
   onRemove,
 }: {
   poll: Poll;
+  teamSize: number;
   canManage: boolean;
   canVote: boolean;
   busy: boolean;
   onVote: (choice: string) => void;
   onClose: () => void;
   onReopen: () => void;
+  onRemind: () => void;
   onRemove: () => void;
 }) {
-  const [showVoters, setShowVoters] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const isOpen = p.status === "OPEN";
   const max = Math.max(1, ...p.options.map((o) => p.counts[o] ?? 0));
+  const winner = p.totalVotes > 0 ? p.options.reduce((a, b) => ((p.counts[b] ?? 0) > (p.counts[a] ?? 0) ? b : a)) : null;
+  const participation = teamSize > 0 ? Math.min(1, p.totalVotes / teamSize) : 0;
+  const nonVoterCount = p.nonVoters?.length ?? Math.max(0, teamSize - p.totalVotes);
 
   return (
-    <li className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-[15px] font-semibold text-foreground">{p.question}</h2>
+    <div className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-[15px] font-semibold leading-snug text-foreground">{p.question}</h3>
         <span
           className={cn(
             "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
@@ -219,113 +321,161 @@ function PollCard({
         </span>
       </div>
 
+      {/* Participation */}
+      <div className="mt-2.5">
+        <div className="mb-1 flex items-center justify-between text-[11.5px] text-muted-foreground">
+          <span>
+            <strong className="text-foreground tabular-nums">{p.totalVotes}</strong>
+            {teamSize > 0 ? ` / ${teamSize}` : ""} réponse{p.totalVotes > 1 ? "s" : ""}
+          </span>
+          {teamSize > 0 && <span className="tabular-nums">{Math.round(participation * 100)}%</span>}
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-violet-500 transition-all"
+            style={{ width: `${participation * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Résultats / vote */}
       <div className="mt-3 space-y-2">
         {p.options.map((o) => {
           const count = p.counts[o] ?? 0;
           const pctBar = (count / max) * 100;
           const pctTot = p.totalVotes > 0 ? Math.round((count / p.totalVotes) * 100) : 0;
           const mine = p.myChoice === o;
+          const isWinner = winner === o && count > 0;
           return (
-            <div key={o}>
-              <button
-                onClick={() => isOpen && canVote && onVote(o)}
-                disabled={!isOpen || !canVote || busy}
+            <button
+              key={o}
+              onClick={() => isOpen && canVote && onVote(o)}
+              disabled={!isOpen || !canVote || busy}
+              className={cn(
+                "group relative w-full overflow-hidden rounded-lg border px-3 py-2 text-left transition-colors",
+                mine ? "border-violet-400 dark:border-violet-600" : "border-border",
+                isOpen && canVote ? "cursor-pointer hover:border-violet-300" : "cursor-default"
+              )}
+            >
+              <span
+                aria-hidden
                 className={cn(
-                  "group relative w-full overflow-hidden rounded-lg border px-3 py-2 text-left transition-colors",
-                  mine
-                    ? "border-violet-400 dark:border-violet-600"
-                    : "border-border",
-                  isOpen && canVote ? "cursor-pointer hover:border-violet-300" : "cursor-default"
+                  "absolute inset-y-0 left-0 rounded-lg transition-all",
+                  isWinner
+                    ? "bg-emerald-100 dark:bg-emerald-950/40"
+                    : mine
+                      ? "bg-violet-100 dark:bg-violet-950/40"
+                      : "bg-muted/60"
                 )}
-              >
-                {/* Barre de progression (fond) */}
-                <span
-                  aria-hidden
-                  className={cn(
-                    "absolute inset-y-0 left-0 rounded-lg transition-all",
-                    mine ? "bg-violet-100 dark:bg-violet-950/40" : "bg-muted/60"
+                style={{ width: `${pctBar}%` }}
+              />
+              <span className="relative flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5 text-[13.5px] font-medium text-foreground">
+                  {mine && <Check className="h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-400" />}
+                  {isWinner && !mine && (
+                    <Trophy className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   )}
-                  style={{ width: `${pctBar}%` }}
-                />
-                <span className="relative flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-[13.5px] font-medium text-foreground">
-                    {mine && <Check className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />}
-                    {o}
-                  </span>
-                  <span className="text-[12px] tabular-nums text-muted-foreground">
-                    {count} · {pctTot}%
-                  </span>
+                  <span className="truncate">{o}</span>
                 </span>
-              </button>
-            </div>
+                <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
+                  {count} · {pctTot}%
+                </span>
+              </span>
+            </button>
           );
         })}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
-        <span>
-          {p.totalVotes} réponse{p.totalVotes > 1 ? "s" : ""}
-        </span>
+      {/* Pied de carte */}
+      <div className="mt-auto pt-3">
         {!canVote && isOpen && (
-          <span className="text-amber-600 dark:text-amber-400">
-            (profil non rattaché — vote indisponible)
-          </span>
+          <p className="mb-2 text-[11.5px] text-amber-600 dark:text-amber-400">
+            Profil non rattaché — vote indisponible.
+          </p>
         )}
-        {canManage && p.voters && (
-          <button
-            onClick={() => setShowVoters((v) => !v)}
-            className="inline-flex items-center gap-1 hover:text-foreground"
-          >
-            <Users className="h-3.5 w-3.5" /> {showVoters ? "Masquer" : "Voir qui a répondu"}
-          </button>
-        )}
-        {canManage && (
-          <div className="ml-auto flex items-center gap-1">
-            <button
-              onClick={isOpen ? onClose : onReopen}
-              disabled={busy}
-              title={isOpen ? "Clôturer" : "Rouvrir"}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60 disabled:opacity-60"
-            >
-              {isOpen ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-              {isOpen ? "Clôturer" : "Rouvrir"}
-            </button>
-            <button
-              onClick={onRemove}
-              disabled={busy}
-              title="Supprimer"
-              className="rounded-md p-1.5 hover:bg-muted/60 hover:text-red-600 disabled:opacity-60"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+        {canManage ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {isOpen && nonVoterCount > 0 && (
+              <button
+                onClick={onRemind}
+                disabled={busy}
+                className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[12px] font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-60 dark:bg-violet-950/40 dark:text-violet-300"
+                title="Notifier les non-votants"
+              >
+                <BellRing className="h-3.5 w-3.5" /> Relancer ({nonVoterCount})
+              </button>
+            )}
+            {(p.voters || p.nonVoters) && (
+              <button
+                onClick={() => setShowDetail((v) => !v)}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted/60"
+              >
+                <Users className="h-3.5 w-3.5" /> Détail
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showDetail && "rotate-180")} />
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                onClick={isOpen ? onClose : onReopen}
+                disabled={busy}
+                title={isOpen ? "Clôturer" : "Rouvrir"}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted/60 disabled:opacity-60"
+              >
+                {isOpen ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={onRemove}
+                disabled={busy}
+                title="Supprimer"
+                className="rounded-md p-1.5 text-muted-foreground/70 hover:bg-muted/60 hover:text-red-600 disabled:opacity-60"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Détail votants / non-votants (manageur+) */}
+        {canManage && showDetail && (
+          <div className="mt-3 space-y-2.5 border-t border-border/60 pt-3">
+            {p.options.map((o) => (
+              <div key={o} className="flex flex-wrap items-center gap-1.5">
+                <span className="min-w-[76px] text-[12px] font-medium text-muted-foreground">{o}</span>
+                {(p.voters?.[o] ?? []).length === 0 ? (
+                  <span className="text-[12px] text-muted-foreground/50">—</span>
+                ) : (
+                  (p.voters?.[o] ?? []).map((v) => <Chip key={v.id} person={v} />)
+                )}
+              </div>
+            ))}
+            {p.nonVoters && p.nonVoters.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-dashed border-border/60 pt-2">
+                <span className="min-w-[76px] text-[12px] font-medium text-muted-foreground/70">
+                  N'ont pas voté
+                </span>
+                {p.nonVoters.map((v) => (
+                  <Chip key={v.id} person={v} muted />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Détail des votants (manageur+) */}
-      {canManage && p.voters && showVoters && (
-        <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
-          {p.options.map((o) => (
-            <div key={o} className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[12px] font-medium text-muted-foreground min-w-[80px]">{o}</span>
-              {(p.voters?.[o] ?? []).length === 0 ? (
-                <span className="text-[12px] text-muted-foreground/60">—</span>
-              ) : (
-                (p.voters?.[o] ?? []).map((v) => (
-                  <span
-                    key={v.id}
-                    className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[12px]"
-                  >
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: v.color }} />
-                    {v.name}
-                  </span>
-                ))
-              )}
-            </div>
-          ))}
-        </div>
+function Chip({ person, muted }: { person: Person; muted?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px]",
+        muted ? "border-dashed border-border bg-transparent text-muted-foreground" : "border-border bg-muted/40"
       )}
-    </li>
+    >
+      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: person.color }} />
+      {person.name}
+    </span>
   );
 }
 
@@ -340,15 +490,9 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   const [options, setOptions] = useState<string[]>(["Oui", "Non", "Peut-être"]);
   const [busy, setBusy] = useState(false);
 
-  function setOpt(i: number, v: string) {
-    setOptions((prev) => prev.map((o, k) => (k === i ? v : o)));
-  }
-  function addOpt() {
-    if (options.length < 6) setOptions((prev) => [...prev, ""]);
-  }
-  function removeOpt(i: number) {
-    if (options.length > 2) setOptions((prev) => prev.filter((_, k) => k !== i));
-  }
+  const setOpt = (i: number, v: string) => setOptions((prev) => prev.map((o, k) => (k === i ? v : o)));
+  const addOpt = () => options.length < 6 && setOptions((prev) => [...prev, ""]);
+  const removeOpt = (i: number) => options.length > 2 && setOptions((prev) => prev.filter((_, k) => k !== i));
 
   async function submit() {
     const clean = options.map((o) => o.trim()).filter(Boolean);
@@ -368,9 +512,8 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         body: JSON.stringify({ question: question.trim(), options: clean }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ tone: "error", title: "Création impossible", description: d.error ?? "Réessaie." });
-      } else {
+      if (!res.ok) toast({ tone: "error", title: "Création impossible", description: d.error ?? "Réessaie." });
+      else {
         setQuestion("");
         setOptions(["Oui", "Non", "Peut-être"]);
         onDone();
@@ -381,65 +524,67 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="mb-5 rounded-2xl border border-violet-200/70 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-950/10">
-      <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
-        Question
-        <input
-          type="text"
-          value={question}
-          maxLength={200}
-          placeholder="Ex. Qui peut venir samedi matin ?"
-          onChange={(e) => setQuestion(e.target.value)}
-          className="rounded-lg border border-input bg-card px-2.5 py-2 text-[14px] text-foreground"
-        />
-      </label>
+    <div className="rounded-2xl border border-violet-200/70 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-950/10">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
+          Question
+          <input
+            type="text"
+            value={question}
+            maxLength={200}
+            placeholder="Ex. Qui peut venir samedi matin ?"
+            onChange={(e) => setQuestion(e.target.value)}
+            className="rounded-lg border border-input bg-card px-3 py-2 text-[14px] text-foreground"
+          />
+        </label>
 
-      <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-[12px] font-medium text-muted-foreground">Choix</span>
-          <div className="flex gap-1">
-            {PRESETS.map((p) => (
-              <button
-                key={p.label}
-                onClick={() => setOptions(p.options)}
-                className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50"
-              >
-                {p.label}
-              </button>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[12px] font-medium text-muted-foreground">Choix</span>
+            <div className="flex flex-wrap gap-1">
+              {PRESETS.map((pr) => (
+                <button
+                  key={pr.label}
+                  onClick={() => setOptions(pr.options)}
+                  className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50"
+                >
+                  {pr.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {options.map((o, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={o}
+                  maxLength={60}
+                  placeholder={`Choix ${i + 1}`}
+                  onChange={(e) => setOpt(i, e.target.value)}
+                  className="flex-1 rounded-lg border border-input bg-card px-2.5 py-1.5 text-[13px] text-foreground"
+                />
+                {options.length > 2 && (
+                  <button
+                    onClick={() => removeOpt(i)}
+                    title="Retirer"
+                    className="rounded-md p-1.5 text-muted-foreground/60 hover:bg-muted/50 hover:text-red-600"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
+          {options.length < 6 && (
+            <button
+              onClick={addOpt}
+              className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
+            >
+              <Plus className="h-3.5 w-3.5" /> Ajouter un choix
+            </button>
+          )}
         </div>
-        <div className="space-y-1.5">
-          {options.map((o, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={o}
-                maxLength={60}
-                placeholder={`Choix ${i + 1}`}
-                onChange={(e) => setOpt(i, e.target.value)}
-                className="flex-1 rounded-lg border border-input bg-card px-2.5 py-1.5 text-[13px] text-foreground"
-              />
-              {options.length > 2 && (
-                <button
-                  onClick={() => removeOpt(i)}
-                  title="Retirer"
-                  className="rounded-md p-1.5 text-muted-foreground/60 hover:bg-muted/50 hover:text-red-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {options.length < 6 && (
-          <button
-            onClick={addOpt}
-            className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
-          >
-            <Plus className="h-3.5 w-3.5" /> Ajouter un choix
-          </button>
-        )}
       </div>
 
       <div className="mt-3 flex items-center gap-2">
