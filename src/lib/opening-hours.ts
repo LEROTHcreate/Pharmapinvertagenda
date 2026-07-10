@@ -96,6 +96,22 @@ export function openStateAt(w: WeekHours, now: Date): OpenState {
   return { open: false, nextChange: null, nextKind: null, todayRanges: ranges };
 }
 
+/**
+ * Créneaux (parmi `allSlots`, format "HH:MM") où l'officine est OUVERTE pour un
+ * jour donné (ses plages horaires). Un créneau est ouvert s'il tombe dans une
+ * plage [open, close[ (l'heure de fermeture exacte n'est plus ouverte).
+ * Jour sans plage → tableau vide (fermé).
+ */
+export function openSlotsForRanges(
+  ranges: HourRange[],
+  allSlots: readonly string[]
+): string[] {
+  if (ranges.length === 0) return [];
+  return allSlots.filter((slot) =>
+    ranges.some((r) => slot >= r.open && slot < r.close)
+  );
+}
+
 export function formatRange(r: HourRange): string {
   return `${r.open.replace(":", "h")} – ${r.close.replace(":", "h")}`;
 }

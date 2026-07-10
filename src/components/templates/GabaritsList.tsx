@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   CalendarDays,
   CalendarPlus,
   Check,
@@ -75,7 +76,11 @@ export type GabaritRow = {
   understaffedSlots: number;
   /** Niveau de couleur du staffingMin vs seuil (ok/warning/critical). */
   staffingLevel: "ok" | "warning" | "critical" | null;
+  /** Jours (0=Lun..5=Sam) avec des créneaux sous le seuil (santé du gabarit). */
+  understaffedByDay: { day: number; count: number }[];
 };
+
+const DAY_SHORT = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 const TYPES: WeekType[] = ["S1", "S2"];
 const UNCATEGORIZED = "__none__";
@@ -620,6 +625,18 @@ function GabaritCard({
                   </span>
                 )}
               </div>
+              {/* Santé du gabarit : jours ayant des créneaux comptoir sous le seuil. */}
+              {row.understaffedByDay.length > 0 && (
+                <p className="mt-1 flex items-start gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>
+                    Sous le seuil :{" "}
+                    {row.understaffedByDay
+                      .map((u) => `${DAY_SHORT[u.day]} (${u.count})`)
+                      .join(" · ")}
+                  </span>
+                </p>
+              )}
               <p className="mt-1 text-[10.5px] text-muted-foreground/70">
                 modifié le {formatDate(row.updatedAt)}
               </p>

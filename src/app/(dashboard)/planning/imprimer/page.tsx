@@ -37,7 +37,7 @@ export default async function PrintTeamPage({
   const [pharmacy, employees, entries] = await Promise.all([
     prisma.pharmacy.findUnique({
       where: { id: session.user.pharmacyId },
-      select: { name: true },
+      select: { name: true, minStaff: true },
     }),
     prisma.employee.findMany({
       where: { pharmacyId: session.user.pharmacyId, isActive: true },
@@ -80,6 +80,7 @@ export default async function PrintTeamPage({
       dayDates={days.map(toIsoDate)}
       employees={employees}
       entries={entriesDTO}
+      minStaff={pharmacy?.minStaff ?? 4}
     />
   );
 }

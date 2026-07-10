@@ -15,6 +15,7 @@ import {
   ShieldPlus,
   Phone,
   MapPin,
+  Lightbulb,
   type LucideIcon,
 } from "lucide-react";
 import type { PharmacyWeather, WeatherCondition } from "@/lib/weather";
@@ -39,6 +40,18 @@ const WEATHER_ICONS: Record<WeatherCondition, LucideIcon> = {
 };
 
 type GardeInfo = { name: string; typeLabel: string; dateIso: string };
+
+/** Conseils santé neutres, en rotation en bas de l'écran (aucune reco médicale
+ *  ciblée — messages de prévention grand public). */
+const HEALTH_TIPS = [
+  "Pensez à bien vous hydrater tout au long de la journée.",
+  "Un doute sur un médicament ? Demandez conseil à votre pharmacien.",
+  "Signalez toujours vos traitements en cours avant une automédication.",
+  "Rapportez vos médicaments non utilisés à la pharmacie (Cyclamed).",
+  "Conservez vos médicaments à l'abri de la chaleur et de l'humidité.",
+  "Ordonnance à renouveler ? Anticipez pour éviter la rupture.",
+  "Vaccination : parlez-en à l'équipe de la pharmacie.",
+];
 
 /**
  * Écran vitrine / salle d'attente — plein écran, sombre, gros caractères, pour
@@ -82,6 +95,25 @@ export function VitrineScreen({
     const t = setInterval(() => router.refresh(), 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [router]);
+
+  // Conseil santé en rotation (change toutes les 8 s, avec fondu).
+  const [tipIdx, setTipIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(
+      () => setTipIdx((i) => (i + 1) % HEALTH_TIPS.length),
+      8000
+    );
+    return () => clearInterval(t);
+  }, []);
+
+  // QR « nous trouver » → itinéraire Google Maps vers l'officine (image générée
+  // par un service externe ; masquée en cas d'échec de chargement).
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    address ? `${pharmacyName} ${address}` : pharmacyName
+  )}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=${encodeURIComponent(
+    mapsUrl
+  )}`;
 
   const openState = useMemo(
     () => (now ? openStateAt(weekHours, now) : null),
@@ -239,6 +271,42 @@ export function VitrineScreen({
             )}
           </Panel>
         </div>
+
+        {/* ─── Bandeau bas : conseil santé en rotation + QR « nous trouver » ─── */}
+        <footer className="flex items-center justify-between gap-6 rounded-3xl bg-white/[0.04] px-6 py-4 ring-1 ring-white/10 md:px-8">
+          <style>{`@keyframes vitrineFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.vitrine-fade{animation:vitrineFade .6s ease}`}</style>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/25">
+              <Lightbulb className="h-5 w-5" />
+            </span>
+            <p
+              key={tipIdx}
+              className="vitrine-fade min-w-0 text-lg text-white/85 md:text-2xl"
+            >
+              {HEALTH_TIPS[tipIdx]}
+            </p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                Nous trouver
+              </p>
+              <p className="text-sm text-white/70">Scannez pour l&apos;itinéraire</p>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={qrUrl}
+              alt="QR itinéraire vers la pharmacie"
+              width={80}
+              height={80}
+              className="h-16 w-16 rounded-lg bg-white p-1 md:h-20 md:w-20"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          </div>
+        </footer>
       </div>
     </div>
   );

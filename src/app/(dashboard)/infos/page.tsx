@@ -9,6 +9,11 @@ import {
 import { GARDE_TYPE_LABELS } from "@/lib/gardes";
 import { isAdminLevel } from "@/lib/permissions";
 import {
+  parseWeekHours,
+  hasAnyHours,
+  openSlotsForRanges,
+} from "@/lib/opening-hours";
+import {
   getCachedWeekEntries,
   getPendingAbsencesCount,
   getPendingUsersCount,
@@ -142,7 +147,7 @@ export default async function InfosPage({
       getCachedWeekEntries(pharmacyId, weekStartIso),
       prisma.pharmacy.findUnique({
         where: { id: pharmacyId },
-        select: { minStaff: true },
+        select: { minStaff: true, openingHours: true },
       }),
       isAdmin ? getPendingAbsencesCount(pharmacyId) : Promise.resolve(0),
       isAdmin ? getPendingUsersCount(pharmacyId) : Promise.resolve(0),
@@ -192,9 +197,30 @@ export default async function InfosPage({
   const minStaff = pharmacy?.minStaff ?? 4;
 
   // ─── Manquements de couverture (admin uniquement) ────────────────
-  const openSlots = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
+  // Créneaux "ouverts" = horaires RÉELS de l'officine si configurés (par jour :
+  // un jour fermé n'est pas analysé, un créneau de prépa avant ouverture n'est
+  // plus compté comme sous-effectif). À défaut, plage par défaut 08h30 → 20h.
+  const weekHours = parseWeekHours(pharmacy?.openingHours);
+  const hoursConfigured = hasAnyHours(weekHours);
+  const defaultOpenSlots = TIME_SLOTS.filter((s) => s >= "08:30" && s < "20:00");
+  // weekDates est ordonné Lundi..Samedi → l'index i correspond au jour i de
+  // weekHours (0=Lundi). On mappe chaque date à ses créneaux ouverts.
+  const openSlotsByDate = new Map<string, string[]>(
+    weekDates.map((d, i) => [
+      d,
+      hoursConfigured
+        ? openSlotsForRanges(weekHours[i] ?? [], TIME_SLOTS)
+        : defaultOpenSlots,
+    ])
+  );
   const coverageWarnings = isAdmin
-    ? analyzeCoverage(employeesDTO, weekDates, index, openSlots, minStaff)
+    ? analyzeCoverage(
+        employeesDTO,
+        weekDates,
+        index,
+        (date) => openSlotsByDate.get(date) ?? defaultOpenSlots,
+        minStaff
+      )
     : [];
 
   // ─── Conformité Convention collective (admin uniquement) ─────────

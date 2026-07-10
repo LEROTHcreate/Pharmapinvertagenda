@@ -12,6 +12,8 @@ import {
 import {
   dailyTaskHours,
   indexEntriesByEmployee,
+  staffingForSlot,
+  staffingLevel,
   type EmployeeDayMap,
 } from "@/lib/planning-utils";
 
@@ -22,6 +24,50 @@ type EmployeeRef = {
   status: keyof typeof STATUS_LABELS;
   weeklyHours: number;
 };
+
+const COUNTER_ROLES = ["PHARMACIEN", "PREPARATEUR", "ETUDIANT"];
+
+// Couleurs de l'effectif (hex explicites → fiables à l'impression).
+const STAFF_BG: Record<"ok" | "warning" | "critical", string> = {
+  ok: "#ecfdf5",
+  warning: "#fef3c7",
+  critical: "#fee2e2",
+};
+const STAFF_TEXT: Record<"ok" | "warning" | "critical", string> = {
+  ok: "#047857",
+  warning: "#92400e",
+  critical: "#b91c1c",
+};
+
+/**
+ * Effectif comptoir MINIMUM d'une journée (règles planning : pharmaciens/
+ * préparateurs/étudiants sur une vraie tâche, REMPLACEMENT compté, ECHANGE &
+ * COMMANDE exclus), calculé sur la fenêtre de présence comptoir (1er → dernier
+ * créneau avec effectif > 0) pour ne pas compter les créneaux de prépa avant
+ * ouverture. Renvoie null si aucune présence comptoir ce jour.
+ */
+function dayMinStaffing(
+  date: string,
+  counterIds: string[],
+  allIds: string[],
+  index: Map<string, EmployeeDayMap>
+): number | null {
+  const perSlot = TIME_SLOTS.map((slot) =>
+    staffingForSlot(date, slot, counterIds, index, allIds)
+  );
+  let first = -1;
+  let last = -1;
+  perSlot.forEach((n, i) => {
+    if (n > 0) {
+      if (first < 0) first = i;
+      last = i;
+    }
+  });
+  if (first < 0) return null;
+  let min = Infinity;
+  for (let i = first; i <= last; i++) min = Math.min(min, perSlot[i]);
+  return isFinite(min) ? min : null;
+}
 
 const DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
@@ -103,6 +149,7 @@ export function TeamWeekPrintSheet({
   dayDates,
   employees,
   entries,
+  minStaff = 4,
 }: {
   pharmacyName: string;
   weekNumber: number;
@@ -110,6 +157,8 @@ export function TeamWeekPrintSheet({
   dayDates: string[];
   employees: EmployeeRef[];
   entries: ScheduleEntryDTO[];
+  /** Seuil d'effectif minimum de l'officine (ligne effectif comptoir). */
+  minStaff?: number;
 }) {
   useEffect(() => {
     const id = setTimeout(() => window.print(), 300);
@@ -117,6 +166,15 @@ export function TeamWeekPrintSheet({
   }, []);
 
   const index = useMemo(() => indexEntriesByEmployee(entries), [entries]);
+
+  // Effectif comptoir minimum par jour (règles planning).
+  const dayStaffing = useMemo(() => {
+    const counterIds = employees
+      .filter((e) => COUNTER_ROLES.includes(e.status))
+      .map((e) => e.id);
+    const allIds = employees.map((e) => e.id);
+    return dayDates.map((d) => dayMinStaffing(d, counterIds, allIds, index));
+  }, [employees, dayDates, index]);
 
   const rows = useMemo(
     () =>
@@ -233,6 +291,29 @@ export function TeamWeekPrintSheet({
               </td>
             </tr>
           ))}
+          {/* Effectif comptoir minimum par jour (règles du planning). */}
+          <tr className="bg-zinc-50">
+            <td className="border border-zinc-300 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
+              Effectif comptoir (min)
+            </td>
+            {dayStaffing.map((n, i) => {
+              const lvl = n === null ? null : staffingLevel(n, minStaff);
+              return (
+                <td
+                  key={i}
+                  className="border border-zinc-300 px-1.5 py-1.5 text-center font-bold tabular-nums"
+                  style={
+                    lvl
+                      ? { backgroundColor: STAFF_BG[lvl], color: STAFF_TEXT[lvl] }
+                      : undefined
+                  }
+                >
+                  {n === null ? <span className="text-zinc-300">—</span> : n}
+                </td>
+              );
+            })}
+            <td className="border border-zinc-300 bg-zinc-100" />
+          </tr>
         </tbody>
       </table>
 

@@ -37,8 +37,13 @@ export function analyzeCoverage(
   employees: EmployeeDTO[],
   dates: string[],
   index: Map<string, EmployeeDayMap>,
-  /** Créneaux à considérer comme "ouverts" — typiquement 08:30 → 19:00 */
-  workingSlots: string[],
+  /**
+   * Créneaux "ouverts" à analyser. Soit un tableau fixe (typiquement
+   * 08:30 → 19:00), soit une fonction `date → créneaux` pour tenir compte des
+   * horaires d'ouverture réels de l'officine (jour fermé → tableau vide, aucune
+   * alerte). Un tableau vide pour un jour = officine fermée → jour ignoré.
+   */
+  workingSlots: string[] | ((date: string) => string[]),
   /**
    * Seuil d'effectif minimum de l'officine (param pharmacie). Si fourni (>0),
    * on signale les "grosses journées" (lundi, samedi, lendemain de férié,
@@ -53,6 +58,12 @@ export function analyzeCoverage(
   const livreurs = employees.filter((e) => e.status === "LIVREUR");
 
   for (const date of dates) {
+    // Créneaux ouverts de CE jour (horaires réels si fournis). Jour fermé
+    // (aucun créneau) → pas d'analyse : évite tout faux "sous-effectif".
+    const slots =
+      typeof workingSlots === "function" ? workingSlots(date) : workingSlots;
+    if (slots.length === 0) continue;
+
     // ─── Vérification livreur ───
     for (const liv of livreurs) {
       const day = index.get(liv.id)?.get(date);
@@ -74,7 +85,7 @@ export function analyzeCoverage(
 
     // ─── Vérification pharmacien (≥ 1 sur chaque créneau ouvert) ───
     const noPharmSlots: string[] = [];
-    for (const slot of workingSlots) {
+    for (const slot of slots) {
       let active = 0;
       for (const ph of pharmacists) {
         const e = index.get(ph.id)?.get(date)?.get(slot);
@@ -93,7 +104,7 @@ export function analyzeCoverage(
     // ─── Vérification préparateurs (≥ 2 sur chaque créneau ouvert) ───
     const fewPrepSlots: string[] = [];
     let dayMin = Infinity;
-    for (const slot of workingSlots) {
+    for (const slot of slots) {
       let active = 0;
       for (const pr of preparers) {
         const e = index.get(pr.id)?.get(date)?.get(slot);
@@ -121,7 +132,7 @@ export function analyzeCoverage(
       const heavy = isHeavyDay(date);
       if (heavy) {
         let trough = Infinity;
-        for (const slot of workingSlots) {
+        for (const slot of slots) {
           let active = 0;
           for (const emp of employees) {
             const e = index.get(emp.id)?.get(date)?.get(slot);

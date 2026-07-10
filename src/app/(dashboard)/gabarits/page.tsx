@@ -103,6 +103,8 @@ function computeTemplateStaffing(
   staffingPeak: number;
   understaffedSlots: number;
   staffingLevel: StaffingLevel | null;
+  /** Détail des jours (0=Lun..5=Sam) ayant des créneaux sous le seuil. */
+  understaffedByDay: { day: number; count: number }[];
 } {
   const allIds = Array.from(statusById.keys());
   const counterIds = allIds.filter((id) => {
@@ -125,6 +127,7 @@ function computeTemplateStaffing(
   let staffingMin: number | null = null;
   let staffingPeak = 0;
   let understaffed = 0;
+  const understaffedByDay: { day: number; count: number }[] = [];
   for (let day = 0; day <= 5; day++) {
     const perSlot = TIME_SLOTS.map((slot) =>
       staffingForSlot(String(day), slot, counterIds, index, allIds)
@@ -138,17 +141,23 @@ function computeTemplateStaffing(
       }
     });
     if (first < 0) continue; // Aucune présence comptoir ce jour → ignoré.
+    let dayUnder = 0;
     for (let i = first; i <= last; i++) {
       const n = perSlot[i];
       if (n > staffingPeak) staffingPeak = n;
       if (staffingMin === null || n < staffingMin) staffingMin = n;
-      if (n < minStaff) understaffed++;
+      if (n < minStaff) {
+        understaffed++;
+        dayUnder++;
+      }
     }
+    if (dayUnder > 0) understaffedByDay.push({ day, count: dayUnder });
   }
   return {
     staffingMin,
     staffingPeak,
     understaffedSlots: understaffed,
+    understaffedByDay,
     staffingLevel: staffingMin === null ? null : staffingLevel(staffingMin, minStaff),
   };
 }
@@ -228,6 +237,7 @@ export default async function GabaritsPage() {
       staffingMin: staffing.staffingMin,
       staffingPeak: staffing.staffingPeak,
       understaffedSlots: staffing.understaffedSlots,
+      understaffedByDay: staffing.understaffedByDay,
       staffingLevel: staffing.staffingLevel,
     };
   });

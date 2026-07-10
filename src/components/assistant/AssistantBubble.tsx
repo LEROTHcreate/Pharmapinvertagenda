@@ -714,30 +714,43 @@ function MedicamentSearch() {
   }
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        openBdpm();
-      }}
-      className="flex items-center gap-1.5 border-b border-border bg-muted/40 px-3 py-2"
-    >
-      <Pill className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Rechercher un médicament (base publique)…"
-        aria-label="Rechercher un médicament sur la base de données publique"
-        className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-muted-foreground"
-      />
-      <button
-        type="submit"
-        disabled={!term}
-        title="Ouvrir la fiche sur la base publique des médicaments (ANSM)"
-        className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[11.5px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
+    <div className="border-b border-border bg-muted/40">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          openBdpm();
+        }}
+        className="flex items-center gap-1.5 px-3 pt-2"
       >
-        <ExternalLink className="h-3 w-3" aria-hidden /> Ouvrir
-      </button>
-    </form>
+        <Pill className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Rechercher un médicament (base publique)…"
+          aria-label="Rechercher un médicament sur la base de données publique"
+          className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-muted-foreground"
+        />
+        <button
+          type="submit"
+          disabled={!term}
+          title="Ouvrir la fiche sur la base publique des médicaments (ANSM)"
+          className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[11.5px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
+        >
+          <ExternalLink className="h-3 w-3" aria-hidden /> Ouvrir
+        </button>
+      </form>
+      {/* Vérificateur d'interactions : lien vers l'outil de référence ANSM. */}
+      <a
+        href="https://ansm.sante.fr/documents/reference/thesaurus-des-interactions-medicamenteuses-1"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Thésaurus des interactions médicamenteuses (ANSM) — référence officielle"
+        className="flex items-center gap-1 px-3 pb-2 pt-1 text-[11px] font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+      >
+        <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+        Vérifier une interaction (Thésaurus ANSM)
+      </a>
+    </div>
   );
 }
 
