@@ -19,7 +19,7 @@ import { TASK_LABELS, TIME_SLOTS } from "@/types";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-type EmployeeRef = {
+export type EmployeeRef = {
   id: string;
   firstName: string;
   lastName: string;

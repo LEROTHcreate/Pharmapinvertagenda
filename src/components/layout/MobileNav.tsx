@@ -17,7 +17,6 @@ import {
   Settings,
   StickyNote,
   ShieldCheck,
-  ClipboardList,
   TrendingUp,
   Vote,
   FileSpreadsheet,
@@ -71,8 +70,7 @@ const NAV: NavItem[] = [
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true, manager: true },
   // Équipe : visible par TOUS (lecture) ; édition réservée aux titulaires.
   { key: "employes", href: "/employes", label: "Équipe", icon: Users },
-  { key: "absences", href: "/absences", label: "Absences & dispos", icon: CalendarOff },
-  { key: "creneaux", href: "/creneaux", label: "Créneaux à couvrir", icon: ClipboardList },
+  { key: "absences", href: "/absences", label: "Absences & remplacements", icon: CalendarOff },
   { key: "sondages", href: "/sondages", label: "Sondages", icon: Vote },
   { key: "messages", href: "/messages", label: "Messages", icon: MessageCircle },
   { key: "notes", href: "/notes", label: "Notes", icon: StickyNote },

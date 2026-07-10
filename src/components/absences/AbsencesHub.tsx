@@ -1,51 +1,77 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck, CalendarOff } from "lucide-react";
+import { CalendarCheck, CalendarOff, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
 import { isAdminLevel } from "@/lib/permissions";
 import { AbsencesView } from "@/components/absences/AbsencesView";
 import { AvailabilityWishesView } from "@/components/disponibilites/AvailabilityWishesView";
+import {
+  CreneauxView,
+  type EmployeeRef,
+} from "@/components/creneaux/CreneauxView";
 
-type Tab = "absences" | "disponibilites";
+export type AbsencesHubTab = "absences" | "disponibilites" | "creneaux";
 
 type Props = {
   currentUser: { role: UserRole; employeeId: string | null };
-  initialTab?: Tab;
+  initialTab?: AbsencesHubTab;
+  /** Manageur+ : peut créer / assigner des créneaux à couvrir. */
+  canManage: boolean;
+  /** Collaborateurs actifs (pour l'onglet Créneaux à couvrir). */
+  employees: EmployeeRef[];
 };
 
 /**
- * Regroupe Absences (demandes/validations) et Disponibilités (souhaits) dans
- * une même page à onglets — deux facettes de « qui est là / pas là » utiles
- * au moment de bâtir le planning.
+ * Regroupe les trois facettes de « qui est là / pas là / à remplacer » dans une
+ * même page à onglets :
+ *  · Absences — demandes & validations ;
+ *  · Disponibilités — souhaits / indisponibilités ;
+ *  · Créneaux à couvrir — trous de planning à pourvoir (volontariat + assignation).
+ * Enchaînement naturel : une absence crée un trou → on le comble selon les dispos.
  */
-export function AbsencesHub({ currentUser, initialTab = "absences" }: Props) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+export function AbsencesHub({
+  currentUser,
+  initialTab = "absences",
+  canManage,
+  employees,
+}: Props) {
+  const [tab, setTab] = useState<AbsencesHubTab>(initialTab);
   const isAdmin = isAdminLevel(currentUser.role);
 
-  const tabs: { key: Tab; label: string; icon: typeof CalendarOff }[] = [
+  const tabs: {
+    key: AbsencesHubTab;
+    label: string;
+    icon: typeof CalendarOff;
+  }[] = [
     { key: "absences", label: "Absences", icon: CalendarOff },
     { key: "disponibilites", label: "Disponibilités", icon: CalendarCheck },
+    { key: "creneaux", label: "Créneaux à couvrir", icon: ClipboardList },
   ];
+
+  const subtitle =
+    tab === "absences"
+      ? isAdmin
+        ? "Validez ou refusez les demandes des collaborateurs"
+        : "Vos demandes d'absence et leur statut"
+      : tab === "disponibilites"
+        ? "Indisponibilités et préférences à prendre en compte dans le planning"
+        : canManage
+          ? "Signalez les trous à pourvoir et assignez les volontaires"
+          : "Positionnez-vous sur les créneaux à couvrir";
 
   return (
     <div className="p-3 md:p-4 space-y-4">
       <header>
         <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-          Absences &amp; disponibilités
+          Absences &amp; remplacements
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {tab === "absences"
-            ? isAdmin
-              ? "Validez ou refusez les demandes des collaborateurs"
-              : "Vos demandes d'absence et leur statut"
-            : "Indisponibilités et préférences à prendre en compte dans le planning"}
-        </p>
+        <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
       </header>
 
       {/* Onglets */}
-      <div className="inline-flex rounded-full border border-border bg-card p-0.5">
+      <div className="inline-flex flex-wrap rounded-full border border-border bg-card p-0.5">
         {tabs.map((t) => {
           const active = tab === t.key;
           const Icon = t.icon;
@@ -70,10 +96,16 @@ export function AbsencesHub({ currentUser, initialTab = "absences" }: Props) {
       {/* Contenu de l'onglet actif */}
       {tab === "absences" ? (
         <AbsencesView currentUser={currentUser} embedded />
-      ) : (
+      ) : tab === "disponibilites" ? (
         <AvailabilityWishesView
           isAdmin={isAdmin}
           hasEmployee={!!currentUser.employeeId}
+        />
+      ) : (
+        <CreneauxView
+          canManage={canManage}
+          myEmployeeId={currentUser.employeeId}
+          employees={employees}
         />
       )}
     </div>
