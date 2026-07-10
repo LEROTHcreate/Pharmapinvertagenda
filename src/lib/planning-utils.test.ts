@@ -147,5 +147,15 @@ describe("planning-utils", () => {
       ]);
       expect(staffingForSlot(DATE, SLOT, counterIds, index, allIds)).toBe(1);
     });
+
+    it("ne compte pas COMMANDE (back-office) même pour un rôle comptoir", () => {
+      const counter = ["ph1", "prep1"];
+      const all = ["ph1", "prep1"];
+      const index = indexEntriesByEmployee([
+        task("ph1", "COMPTOIR"),
+        task("prep1", "COMMANDE"), // préparateur qui gère les commandes → hors comptoir
+      ]);
+      expect(staffingForSlot(DATE, SLOT, counter, index, all)).toBe(1);
+    });
   });
 });
