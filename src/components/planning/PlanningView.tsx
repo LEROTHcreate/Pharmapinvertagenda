@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { CalendarDays, ChevronLeft, ChevronRight, X, Layers, Eye, Lock, Unlock, Trash2, ClipboardCopy, ClipboardPaste, PartyPopper } from "lucide-react";
-import type { AbsenceCode, TaskCode, UserRole } from "@prisma/client";
+import type { AbsenceCode, TaskCode, UserRole, WishKind } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
@@ -272,6 +272,44 @@ export function PlanningView({
   const [multiSelection, setMultiSelection] = useState<Set<CellKey>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [recentlySaved, setRecentlySaved] = useState<Set<CellKey>>(new Set());
+  // Souhaits de disponibilité de l'équipe (admin) — indexés par `empId|dateIso`.
+  // Affichés en surimpression sur l'en-tête de colonne de la grille pour que
+  // l'admin voie les indispos/préférences en construisant le planning.
+  const [wishes, setWishes] = useState<
+    Map<string, { kind: WishKind; note: string | null }>
+  >(new Map());
+  // Charge les souhaits de l'équipe (admin only). Best-effort : la surimpression
+  // est un bonus, un échec réseau ne casse rien. Rechargé au changement de
+  // semaine (les souhaits sont « à venir » → un seul appel couvre la semaine).
+  useEffect(() => {
+    if (!canEditPlanning(role)) return;
+    let cancelled = false;
+    fetch("/api/availability-wishes?scope=all")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(
+        (data: {
+          wishes?: Array<{
+            employeeId: string;
+            date: string;
+            kind: WishKind;
+            note: string | null;
+          }>;
+        }) => {
+          if (cancelled) return;
+          const m = new Map<string, { kind: WishKind; note: string | null }>();
+          for (const w of data.wishes ?? []) {
+            m.set(`${w.employeeId}|${w.date}`, { kind: w.kind, note: w.note });
+          }
+          setWishes(m);
+        }
+      )
+      .catch(() => {
+        /* silencieux : la surimpression dispos est optionnelle */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [role, weekStart]);
   // Piles undo/redo (Ctrl+Z / Ctrl+Y) : gérées dans le store Zustand. Lues via
   // getState() dans les handlers ; aucun rendu ne dépend de leur contenu
   // (undo/redo sont clavier-seul) → pas de souscription, pas de re-render.
@@ -664,6 +702,17 @@ export function PlanningView({
     dayDatesRef.current = dayDates;
   }, [dayDates]);
   const selectedDay = dayDates[dayIndex];
+
+  // Souhaits de dispo du JOUR AFFICHÉ, ré-indexés par employeeId (la grille
+  // affiche un seul jour → un souhait par colonne). Passé à PlanningGrid.
+  const dayWishes = useMemo(() => {
+    const m = new Map<string, { kind: WishKind; note: string | null }>();
+    const suffix = `|${selectedDay}`;
+    for (const [key, w] of wishes) {
+      if (key.endsWith(suffix)) m.set(key.slice(0, -suffix.length), w);
+    }
+    return m;
+  }, [wishes, selectedDay]);
 
   // Événements d'équipe indexés par date (ISO) → on décore le jour concerné
   // dans l'agenda (onglets + pastille en tête du jour sélectionné).
@@ -2081,6 +2130,7 @@ export function PlanningView({
             onReorderColumns={effectiveCanEdit ? handleReorderColumns : undefined}
             fitHeight={fit?.maxHeight}
             fitRowHeight={fit?.rowHeight}
+            availabilityWishes={dayWishes}
           />
         </div>
       )}

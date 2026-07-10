@@ -31,7 +31,7 @@ import {
   weeklyTaskHours,
   type EmployeeDayMap,
 } from "@/lib/planning-utils";
-import { ScheduleType, type TaskCode } from "@prisma/client";
+import { ScheduleType, type TaskCode, type WishKind } from "@prisma/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   makeCellKey,
@@ -84,6 +84,31 @@ function breakdownLabel(
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
+/**
+ * Souhaits de disponibilité — style de la pastille (surimpression) affichée sur
+ * l'en-tête de colonne selon le souhait du collaborateur pour le jour affiché.
+ */
+const WISH_STYLE: Record<
+  WishKind,
+  { label: string; chip: string; wash: string }
+> = {
+  UNAVAILABLE: {
+    label: "Indispo",
+    chip: "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+    wash: "bg-gradient-to-b from-rose-100/80 via-rose-50/40 to-transparent dark:from-rose-950/40 dark:via-rose-950/20",
+  },
+  PREFER_OFF: {
+    label: "Préf. repos",
+    chip: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+    wash: "bg-gradient-to-b from-amber-100/70 via-amber-50/40 to-transparent dark:from-amber-950/40 dark:via-amber-950/20",
+  },
+  PREFER_WORK: {
+    label: "Préf. travail",
+    chip: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+    wash: "bg-gradient-to-b from-emerald-100/70 via-emerald-50/40 to-transparent dark:from-emerald-950/40 dark:via-emerald-950/20",
+  },
+};
+
 type Props = {
   employees: EmployeeDTO[];
   date: string;
@@ -134,6 +159,13 @@ type Props = {
    */
   fitHeight?: number;
   fitRowHeight?: number;
+  /**
+   * Souhaits de disponibilité du JOUR AFFICHÉ, par collaborateur (indispo /
+   * préfère off / préfère travailler). Affichés en surimpression sur l'en-tête
+   * de chaque colonne → l'admin voit d'un coup d'œil qui a un souhait ce jour
+   * en construisant le planning. Admin uniquement (vide sinon).
+   */
+  availabilityWishes?: Map<string, { kind: WishKind; note: string | null }>;
 };
 
 export const PlanningGrid = memo(function PlanningGrid({
@@ -155,6 +187,7 @@ export const PlanningGrid = memo(function PlanningGrid({
   density = "compact",
   fitHeight,
   fitRowHeight,
+  availabilityWishes,
 }: Props) {
   const dndEnabled = canEdit && !!onMoveTask;
   // Réordonnancement de colonnes : desktop uniquement (sur tactile, l'écran
@@ -657,6 +690,7 @@ export const PlanningGrid = memo(function PlanningGrid({
                     weekStartDate={weekStartDate}
                     colReorderEnabled={colReorderEnabled}
                     isDragging={draggingColId === e.id}
+                    wish={availabilityWishes?.get(e.id)}
                   />
                 );
               })}
@@ -1348,6 +1382,7 @@ const HeaderCell = memo(function HeaderCell({
   weekStartDate,
   colReorderEnabled,
   isDragging,
+  wish,
 }: {
   employee: EmployeeDTO;
   dailyH: number;
@@ -1357,7 +1392,9 @@ const HeaderCell = memo(function HeaderCell({
   weekStartDate: string;
   colReorderEnabled: boolean;
   isDragging: boolean;
+  wish?: { kind: WishKind; note: string | null };
 }) {
+  const wishStyle = wish ? WISH_STYLE[wish.kind] : null;
   const draggable = useDraggable({
     id: colId(employee.id),
     disabled: !colReorderEnabled,
@@ -1382,15 +1419,21 @@ const HeaderCell = memo(function HeaderCell({
       ref={setNodeRef}
       className={cn(
         "px-1 pt-2.5 pb-2 align-top overflow-hidden relative group/col transition-all",
-        // Lane "ma colonne" — cream warm très subtil, façon Apple Notes
-        isMe &&
+        // Surimpression souhait de dispo (prioritaire sur le wash "ma colonne")
+        // → l'admin repère le souhait du jour en construisant le planning.
+        wishStyle ? wishStyle.wash : isMe &&
           "bg-gradient-to-b from-amber-50/70 via-amber-50/40 to-transparent",
         // Source en cours de drag → semi-transparente
         isDragging && "opacity-40",
         // Cible survolée → rail violet à gauche pour signaler l'insertion
         isDropTarget && "ring-2 ring-violet-500/70 ring-inset bg-violet-50/60"
       )}
-      title={`Contrat ${employee.weeklyHours}h · Aujourd'hui ${dailyH.toFixed(1)}h · Semaine ${weeklyH.toFixed(1)}h · Heures sup ${Math.max(0, delta).toFixed(1)}h`}
+      title={
+        `Contrat ${employee.weeklyHours}h · Aujourd'hui ${dailyH.toFixed(1)}h · Semaine ${weeklyH.toFixed(1)}h · Heures sup ${Math.max(0, delta).toFixed(1)}h` +
+        (wish
+          ? `\n${WISH_STYLE[wish.kind].label}${wish.note ? ` — ${wish.note}` : ""}`
+          : "")
+      }
     >
       {/* Poignée de drag — visible uniquement au hover, et seulement si
           le réordonnancement est activé. Position absolute pour ne pas
@@ -1441,6 +1484,18 @@ const HeaderCell = memo(function HeaderCell({
         <span className="text-[9px] uppercase tracking-[0.04em] text-muted-foreground/70 font-medium text-center truncate">
           {STATUS_LABELS[employee.status]}
         </span>
+        {/* Souhait de dispo du jour (surimpression) — pastille compacte, seule
+            colonne concernée affichée. Le détail (note) est dans l'infobulle. */}
+        {wishStyle && (
+          <span
+            className={cn(
+              "mx-auto mt-0.5 inline-block max-w-full truncate rounded px-1 py-px text-center text-[8.5px] font-semibold leading-tight",
+              wishStyle.chip
+            )}
+          >
+            {wishStyle.label}
+          </span>
+        )}
         {/* Heures faites cette semaine — un seul chiffre, coloré :
             noir = pile le contrat · rouge = au-dessus · vert = en dessous.
             (Le détail jour + écart reste dans l'infobulle au survol.) */}
