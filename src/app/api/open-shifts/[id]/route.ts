@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditPlanning } from "@/lib/permissions";
 import { isTaskAllowed } from "@/lib/role-task-rules";
+import { sendPushToPharmacy } from "@/lib/push";
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { TIME_SLOTS } from "@/types";
 
@@ -16,6 +17,7 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("volunteer") }),
   z.object({ action: z.literal("assign"), employeeId: z.string().min(1) }),
   z.object({ action: z.literal("cancel") }),
+  z.object({ action: z.literal("notify") }),
 ]);
 
 type Ctx = { params: { id: string } };
@@ -71,6 +73,29 @@ async function PATCH__impl(req: Request, { params }: Ctx) {
   // ── Actions réservées au manageur+ ──
   if (!canEditPlanning(session.user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // ── Prévenir l'équipe (push) qu'un créneau est à pourvoir ──
+  if (body.action === "notify") {
+    if (shift.status !== "OPEN") {
+      return NextResponse.json({ error: "Ce créneau n'est plus ouvert." }, { status: 409 });
+    }
+    const dLabel = new Date(shift.date).toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    const { sent } = await sendPushToPharmacy(
+      session.user.pharmacyId,
+      {
+        title: "🙋 Un créneau à couvrir",
+        body: `${dLabel} · ${shift.startSlot}–${shift.endSlot} — positionne-toi si tu peux`,
+        url: "/creneaux",
+        tag: `open-shift-${shift.id}`,
+      },
+      session.user.id
+    );
+    return NextResponse.json({ ok: true, sent });
   }
 
   if (body.action === "cancel") {

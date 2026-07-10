@@ -11,6 +11,8 @@ import {
   Loader2,
   Hand,
   UserCheck,
+  BellRing,
+  CalendarDays,
 } from "lucide-react";
 import type { EmployeeStatus } from "@prisma/client";
 import { TASK_LABELS, TIME_SLOTS } from "@/types";
@@ -37,10 +39,7 @@ type OpenShift = {
   volunteers: EmployeeRef[];
 };
 
-// Fins possibles : de 08:00 à 20:00 (fermeture). Le début reste un créneau réel.
 const END_SLOTS = [...TIME_SLOTS.slice(1), "20:00"];
-
-// Postes proposés à la création (MAIL retiré de l'UI).
 const TASK_OPTIONS = (Object.keys(TASK_LABELS) as Array<keyof typeof TASK_LABELS>).filter(
   (t) => t !== "MAIL"
 );
@@ -48,13 +47,24 @@ const TASK_OPTIONS = (Object.keys(TASK_LABELS) as Array<keyof typeof TASK_LABELS
 function fullName(e: EmployeeRef) {
   return `${e.firstName} ${e.lastName}`.trim();
 }
-
 function dateLabel(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
+}
+/** "aujourd'hui / demain / dans N j" à partir de la date ISO. */
+function relDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return "passé";
+  if (days === 0) return "aujourd'hui";
+  if (days === 1) return "demain";
+  if (days <= 7) return `dans ${days} j`;
+  return "";
 }
 
 export function CreneauxView({
@@ -85,25 +95,24 @@ export function CreneauxView({
   }, []);
 
   const open = useMemo(() => (shifts ?? []).filter((s) => s.status === "OPEN"), [shifts]);
-  const done = useMemo(
-    () => (shifts ?? []).filter((s) => s.status !== "OPEN"),
-    [shifts]
-  );
+  const done = useMemo(() => (shifts ?? []).filter((s) => s.status !== "OPEN"), [shifts]);
+
+  async function patch(s: OpenShift, body: Record<string, unknown>): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+    const res = await fetch(`/api/open-shifts/${s.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, data };
+  }
 
   async function volunteer(s: OpenShift) {
     setBusyId(s.id);
     try {
-      const res = await fetch(`/api/open-shifts/${s.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "volunteer" }),
-      });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        toast({ tone: "error", title: "Action impossible", description: e.error ?? "Réessaie." });
-      } else {
-        await load();
-      }
+      const { ok, data } = await patch(s, { action: "volunteer" });
+      if (!ok) toast({ tone: "error", title: "Action impossible", description: (data.error as string) ?? "Réessaie." });
+      else await load();
     } finally {
       setBusyId(null);
     }
@@ -113,19 +122,13 @@ export function CreneauxView({
     if (!employeeId) return;
     setBusyId(s.id);
     try {
-      const res = await fetch(`/api/open-shifts/${s.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "assign", employeeId }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ tone: "error", title: "Assignation impossible", description: d.error ?? "Réessaie." });
-      } else {
+      const { ok, data } = await patch(s, { action: "assign", employeeId });
+      if (!ok) toast({ tone: "error", title: "Assignation impossible", description: (data.error as string) ?? "Réessaie." });
+      else {
         toast({
           tone: "success",
           title: "Créneau pourvu",
-          description: d.wroteEntries ? "Le planning a été rempli automatiquement." : undefined,
+          description: data.wroteEntries ? "Le planning a été rempli automatiquement." : undefined,
         });
         await load();
       }
@@ -134,15 +137,30 @@ export function CreneauxView({
     }
   }
 
+  async function notify(s: OpenShift) {
+    setBusyId(s.id);
+    try {
+      const { ok, data } = await patch(s, { action: "notify" });
+      if (ok)
+        toast({
+          tone: "success",
+          title: "Équipe prévenue",
+          description:
+            (data.sent as number) > 0
+              ? `${data.sent} notification${(data.sent as number) > 1 ? "s" : ""} envoyée${(data.sent as number) > 1 ? "s" : ""}.`
+              : "Personne n'a encore activé les notifications.",
+        });
+      else toast({ tone: "error", title: "Envoi impossible", description: (data.error as string) ?? "Réessaie." });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function cancelShift(s: OpenShift) {
     setBusyId(s.id);
     try {
-      const res = await fetch(`/api/open-shifts/${s.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "cancel" }),
-      });
-      if (res.ok) await load();
+      const { ok } = await patch(s, { action: "cancel" });
+      if (ok) await load();
     } finally {
       setBusyId(null);
     }
@@ -158,22 +176,34 @@ export function CreneauxView({
     }
   }
 
+  const cardProps = (s: OpenShift) => ({
+    shift: s,
+    canManage,
+    myEmployeeId,
+    employees,
+    busy: busyId === s.id,
+    onVolunteer: () => volunteer(s),
+    onAssign: (empId: string) => assign(s, empId),
+    onNotify: () => notify(s),
+    onCancel: () => cancelShift(s),
+    onRemove: () => remove(s),
+  });
+
   return (
-    <div className="w-full p-3 md:p-4 lg:p-6 pb-16 max-w-4xl mx-auto">
-      {/* En-tête */}
-      <header className="mb-5 flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
-          <ClipboardList className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            Créneaux à couvrir
-          </h1>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            {canManage
-              ? "Signalez un trou de planning ; l'équipe se positionne, vous assignez."
-              : "Positionnez-vous sur un créneau à pourvoir — un responsable validera."}
-          </p>
+    <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
+            <ClipboardList className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Créneaux à couvrir</h1>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              {canManage
+                ? "Signalez un trou de planning ; l'équipe se positionne, vous assignez en un clic."
+                : "Positionnez-vous sur un créneau à pourvoir — un responsable validera."}
+            </p>
+          </div>
         </div>
         {canManage && (
           <button
@@ -195,63 +225,35 @@ export function CreneauxView({
       )}
 
       {shifts === null ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : open.length === 0 && done.length === 0 ? (
-        <EmptyState canManage={canManage} />
+        <EmptyState canManage={canManage} onCreate={() => setCreating(true)} />
       ) : (
         <div className="space-y-6">
-          <section>
-            <h2 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
-              À pourvoir ({open.length})
-            </h2>
+          <Section label="À pourvoir" count={open.length}>
             {open.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted-foreground">
+              <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted-foreground">
                 Aucun créneau à pourvoir pour le moment. 👌
               </p>
             ) : (
-              <ul className="space-y-3">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {open.map((s) => (
-                  <ShiftCard
-                    key={s.id}
-                    shift={s}
-                    canManage={canManage}
-                    myEmployeeId={myEmployeeId}
-                    employees={employees}
-                    busy={busyId === s.id}
-                    onVolunteer={() => volunteer(s)}
-                    onAssign={(empId) => assign(s, empId)}
-                    onCancel={() => cancelShift(s)}
-                    onRemove={() => remove(s)}
-                  />
+                  <ShiftCard key={s.id} {...cardProps(s)} />
                 ))}
-              </ul>
+              </div>
             )}
-          </section>
+          </Section>
 
           {done.length > 0 && (
-            <section>
-              <h2 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
-                Traités
-              </h2>
-              <ul className="space-y-3">
+            <Section label="Traités" count={done.length}>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {done.map((s) => (
-                  <ShiftCard
-                    key={s.id}
-                    shift={s}
-                    canManage={canManage}
-                    myEmployeeId={myEmployeeId}
-                    employees={employees}
-                    busy={busyId === s.id}
-                    onVolunteer={() => volunteer(s)}
-                    onAssign={(empId) => assign(s, empId)}
-                    onCancel={() => cancelShift(s)}
-                    onRemove={() => remove(s)}
-                  />
+                  <ShiftCard key={s.id} {...cardProps(s)} />
                 ))}
-              </ul>
-            </section>
+              </div>
+            </Section>
           )}
         </div>
       )}
@@ -259,33 +261,43 @@ export function CreneauxView({
   );
 }
 
-function EmptyState({ canManage }: { canManage: boolean }) {
+function Section({ label, count, children }: { label: string; count: number; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center">
-      <ClipboardList className="mx-auto h-8 w-8 text-muted-foreground/50" />
-      <p className="mt-3 text-[14px] font-medium text-foreground">Aucun créneau à couvrir</p>
-      <p className="mx-auto mt-1 max-w-sm text-[13px] text-muted-foreground">
+    <section>
+      <h2 className="mb-2.5 px-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+        {label} ({count})
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function EmptyState({ canManage, onCreate }: { canManage: boolean; onCreate: () => void }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
+      <ClipboardList className="mx-auto h-9 w-9 text-muted-foreground/50" />
+      <p className="mt-3 text-[15px] font-medium text-foreground">Aucun créneau à couvrir</p>
+      <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
         {canManage
-          ? "Quand il manque quelqu'un sur un créneau, créez-le ici : l'équipe pourra se positionner."
+          ? "Quand il manque quelqu'un sur un créneau, créez-le ici : l'équipe pourra se positionner en un tap."
           : "Rien à pourvoir pour l'instant. Repassez plus tard."}
       </p>
+      {canManage && (
+        <button
+          onClick={onCreate}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-violet-700"
+        >
+          <Plus className="h-4 w-4" /> Créer un créneau
+        </button>
+      )}
     </div>
   );
 }
 
 const STATUS_BADGE: Record<OpenShift["status"], { label: string; cls: string }> = {
-  OPEN: {
-    label: "À pourvoir",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
-  },
-  FILLED: {
-    label: "Pourvu",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-  },
-  CANCELLED: {
-    label: "Annulé",
-    cls: "bg-muted text-muted-foreground",
-  },
+  OPEN: { label: "À pourvoir", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
+  FILLED: { label: "Pourvu", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
+  CANCELLED: { label: "Annulé", cls: "bg-muted text-muted-foreground" },
 };
 
 function ShiftCard({
@@ -296,6 +308,7 @@ function ShiftCard({
   busy,
   onVolunteer,
   onAssign,
+  onNotify,
   onCancel,
   onRemove,
 }: {
@@ -306,54 +319,64 @@ function ShiftCard({
   busy: boolean;
   onVolunteer: () => void;
   onAssign: (employeeId: string) => void;
+  onNotify: () => void;
   onCancel: () => void;
   onRemove: () => void;
 }) {
   const badge = STATUS_BADGE[s.status];
   const iAmIn = !!myEmployeeId && s.volunteers.some((v) => v.id === myEmployeeId);
-  // Pré-sélection de l'assignation : 1er volontaire s'il y en a.
   const [pick, setPick] = useState<string>(s.volunteers[0]?.id ?? "");
+  const rel = relDay(s.date);
+  const isOpen = s.status === "OPEN";
 
   return (
-    <li
+    <div
       className={cn(
-        "rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
+        "flex flex-col rounded-2xl border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
+        isOpen ? "border-amber-200/70 dark:border-amber-900/40" : "border-border",
         s.status === "CANCELLED" && "opacity-60"
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Date + statut */}
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold capitalize text-foreground">
+          <p className="flex items-center gap-1.5 text-[14.5px] font-semibold capitalize text-foreground">
+            <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
             {dateLabel(s.date)}
+            {rel && isOpen && (
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10.5px] font-medium normal-case text-muted-foreground">
+                {rel}
+              </span>
+            )}
           </p>
-          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">
             <Clock className="h-3.5 w-3.5" />
-            <span className="tabular-nums">
+            <span className="tabular-nums font-medium text-foreground">
               {s.startSlot} – {s.endSlot}
             </span>
             {s.taskCode && (
-              <span className="ml-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+              <span className="rounded-md bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
                 {TASK_LABELS[s.taskCode as keyof typeof TASK_LABELS] ?? s.taskCode}
               </span>
             )}
           </p>
-          {s.note && <p className="mt-1 text-[12.5px] text-foreground/70">{s.note}</p>}
         </div>
         <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold", badge.cls)}>
           {badge.label}
         </span>
       </div>
 
+      {s.note && <p className="mt-2 text-[12.5px] text-foreground/70">{s.note}</p>}
+
       {/* Assigné */}
       {s.assignedEmployee && (
-        <p className="mt-3 flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-300">
-          <UserCheck className="h-4 w-4" /> Assigné à{" "}
-          <strong>{fullName(s.assignedEmployee)}</strong>
+        <p className="mt-2.5 flex items-center gap-1.5 text-[13px] font-medium text-emerald-700 dark:text-emerald-300">
+          <UserCheck className="h-4 w-4" /> {fullName(s.assignedEmployee)}
         </p>
       )}
 
       {/* Volontaires */}
-      {s.status === "OPEN" && (
+      {isOpen && (
         <div className="mt-3">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
             {s.volunteers.length > 0
@@ -365,13 +388,16 @@ function ShiftCard({
               {s.volunteers.map((v) => (
                 <span
                   key={v.id}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[12px]"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[12px]",
+                    v.id === myEmployeeId
+                      ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300"
+                      : "border-border bg-muted/40"
+                  )}
                 >
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: v.displayColor }}
-                  />
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: v.displayColor }} />
                   {fullName(v)}
+                  {v.id === myEmployeeId && " (moi)"}
                 </span>
               ))}
             </div>
@@ -380,9 +406,8 @@ function ShiftCard({
       )}
 
       {/* Actions */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {/* Collaborateur : se positionner */}
-        {s.status === "OPEN" && myEmployeeId && (
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
+        {isOpen && myEmployeeId && (
           <button
             onClick={onVolunteer}
             disabled={busy}
@@ -404,15 +429,14 @@ function ShiftCard({
           </button>
         )}
 
-        {/* Manageur : assigner / annuler / supprimer */}
-        {canManage && s.status === "OPEN" && (
+        {canManage && isOpen && (
           <>
             <select
               value={pick}
               onChange={(e) => setPick(e.target.value)}
-              className="rounded-lg border border-input bg-card px-2 py-1.5 text-[12.5px]"
+              className="min-w-0 flex-1 rounded-lg border border-input bg-card px-2 py-1.5 text-[12.5px]"
             >
-              <option value="">Choisir un collaborateur…</option>
+              <option value="">Assigner à…</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {fullName(e)}
@@ -427,28 +451,43 @@ function ShiftCard({
             >
               <Check className="h-3.5 w-3.5" /> Assigner
             </button>
+          </>
+        )}
+      </div>
+
+      {/* Barre responsable secondaire */}
+      {canManage && (
+        <div className="mt-2 flex items-center gap-1.5 border-t border-border/60 pt-2">
+          {isOpen && (
+            <button
+              onClick={onNotify}
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[12px] font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-60 dark:bg-violet-950/40 dark:text-violet-300"
+              title="Notifier l'équipe par push"
+            >
+              <BellRing className="h-3.5 w-3.5" /> Prévenir l'équipe
+            </button>
+          )}
+          {isOpen && (
             <button
               onClick={onCancel}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-60"
+              className="inline-flex items-center rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted/60 disabled:opacity-60"
             >
               Annuler
             </button>
-          </>
-        )}
-
-        {canManage && (
+          )}
           <button
             onClick={onRemove}
             disabled={busy}
             title="Supprimer"
-            className="ml-auto inline-flex items-center rounded-lg p-1.5 text-muted-foreground/60 hover:bg-muted/50 hover:text-red-600 disabled:opacity-60"
+            className="ml-auto rounded-md p-1.5 text-muted-foreground/70 hover:bg-muted/60 hover:text-red-600 disabled:opacity-60"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
-        )}
-      </div>
-    </li>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -475,18 +514,11 @@ function CreateForm({ onDone }: { onDone: () => void }) {
       const res = await fetch("/api/open-shifts", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          date,
-          startSlot,
-          endSlot,
-          taskCode: taskCode || null,
-          note: note || null,
-        }),
+        body: JSON.stringify({ date, startSlot, endSlot, taskCode: taskCode || null, note: note || null }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ tone: "error", title: "Création impossible", description: d.error ?? "Réessaie." });
-      } else {
+      if (!res.ok) toast({ tone: "error", title: "Création impossible", description: d.error ?? "Réessaie." });
+      else {
         setDate("");
         setNote("");
         onDone();
@@ -497,47 +529,39 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="mb-5 rounded-2xl border border-violet-200/70 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-950/10">
+    <div className="rounded-2xl border border-violet-200/70 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-950/10">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
-          Date
+        <Field label="Date">
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="rounded-lg border border-input bg-card px-2.5 py-1.5 text-[13px] text-foreground"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
-          Début
+        </Field>
+        <Field label="Début">
           <select
             value={startSlot}
             onChange={(e) => setStartSlot(e.target.value)}
             className="rounded-lg border border-input bg-card px-2.5 py-1.5 text-[13px] text-foreground tabular-nums"
           >
             {TIME_SLOTS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
-        </label>
-        <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
-          Fin
+        </Field>
+        <Field label="Fin">
           <select
             value={endSlot}
             onChange={(e) => setEndSlot(e.target.value)}
             className="rounded-lg border border-input bg-card px-2.5 py-1.5 text-[13px] text-foreground tabular-nums"
           >
             {END_SLOTS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
-        </label>
-        <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
-          Poste (optionnel)
+        </Field>
+        <Field label="Poste (optionnel)">
           <select
             value={taskCode}
             onChange={(e) => setTaskCode(e.target.value)}
@@ -545,15 +569,12 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           >
             <option value="">— Peu importe —</option>
             {TASK_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {TASK_LABELS[t]}
-              </option>
+              <option key={t} value={t}>{TASK_LABELS[t]}</option>
             ))}
           </select>
-        </label>
+        </Field>
       </div>
-      <label className="mt-3 flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
-        Note (optionnel)
+      <Field label="Note (optionnel)" className="mt-3">
         <input
           type="text"
           value={note}
@@ -562,8 +583,8 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           onChange={(e) => setNote(e.target.value)}
           className="rounded-lg border border-input bg-card px-2.5 py-1.5 text-[13px] text-foreground"
         />
-      </label>
-      <div className="mt-3 flex items-center gap-2">
+      </Field>
+      <div className="mt-3">
         <button
           onClick={submit}
           disabled={busy}
@@ -574,5 +595,22 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={cn("flex flex-col gap-1 text-[12px] font-medium text-muted-foreground", className)}>
+      {label}
+      {children}
+    </label>
   );
 }
