@@ -191,6 +191,7 @@ model Pharmacy {
   openShifts         OpenShift[]
   polls              Poll[]
   trainings          Training[]
+  bilans             Bilan[]
 
   @@map("pharmacies")
 }
@@ -869,4 +870,34 @@ model PollVote {
   @@unique([pollId, employeeId])
   @@index([employeeId])
   @@map("poll_votes")
+}
+
+// ─── Bilan (aide à la décision dirigeant) ──────────────────────────
+// Un « bilan » = un jeu de données financières (compte de résultat + bilan)
+// pour une année, saisi à la main OU extrait d'un PDF importé. Plusieurs bilans
+// coexistent (années différentes, réel vs estimation) pour comparer/simuler.
+enum BilanKind {
+  REEL // Chiffres réels (bilan comptable de l'exercice)
+  ESTIMATION // Étude / prévisionnel (valeurs estimées)
+}
+
+model Bilan {
+  id          String    @id @default(cuid())
+  year        Int
+  label       String
+  kind        BilanKind @default(REEL)
+  // Toutes les valeurs financières (clé → montant €), cf. src/lib/bilan-fields.ts.
+  data        Json
+  // Analyse experte mise en cache (synthèse + recommandations) — regénérable.
+  analysis    Json?
+  sourceName  String? // Nom du document importé (info), si extraction.
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId, year])
+  @@map("bilans")
 }

@@ -20,6 +20,7 @@ import {
   ClipboardList,
   TrendingUp,
   Vote,
+  FileSpreadsheet,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
 import { PharmacyLogo } from "@/components/layout/PharmacyLogo";
@@ -52,6 +53,7 @@ type NavKey =
   | "creneaux"
   | "sondages"
   | "pilotage"
+  | "bilan"
   | "parametres";
 type NavItem = {
   key: NavKey;
@@ -77,6 +79,7 @@ const NAV: NavItem[] = [
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
   { key: "pilotage", href: "/pilotage", label: "Pilotage RH", icon: TrendingUp, adminOnly: true },
   { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
+  { key: "bilan", href: "/bilan", label: "Bilan & décisions", icon: FileSpreadsheet, adminOnly: true },
   { key: "gardes", href: "/gardes", label: "Gardes", icon: ShieldCheck, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
   // Paramètres : visible par TOUS (lecture) ; édition gatée dans la page. Cf. CLAUDE.md.
@@ -135,7 +138,7 @@ export function MobileNav({
                 // Rémunération ET Pilotage RH affichent des données de paie
                 // sensibles (coûts, budget, simulateur) → réservés aux titulaires
                 // autorisés au module paie, comme la garde de leurs pages.
-                if (n.key === "remuneration" || n.key === "pilotage")
+                if (n.key === "remuneration" || n.key === "pilotage" || n.key === "bilan")
                   return canViewPayroll;
                 return !n.adminOnly || isAdmin || (n.manager === true && isManager);
               }).map((item) => {

@@ -21,6 +21,7 @@ import {
   ClipboardList,
   TrendingUp,
   Vote,
+  FileSpreadsheet,
   ChevronRight,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
@@ -48,6 +49,7 @@ type NavKey =
   | "creneaux"
   | "sondages"
   | "pilotage"
+  | "bilan"
   | "parametres";
 type NavItem = {
   key: NavKey;
@@ -77,6 +79,7 @@ const NAV: NavItem[] = [
   { key: "stats", href: "/stats", label: "Statistiques", icon: BarChart3, adminOnly: true },
   { key: "pilotage", href: "/pilotage", label: "Pilotage RH", icon: TrendingUp, adminOnly: true },
   { key: "remuneration", href: "/remuneration", label: "Rémunération", icon: Banknote, adminOnly: true },
+  { key: "bilan", href: "/bilan", label: "Bilan & décisions", icon: FileSpreadsheet, adminOnly: true },
   { key: "gardes", href: "/gardes", label: "Gardes", icon: ShieldCheck, adminOnly: true },
   { key: "utilisateurs", href: "/utilisateurs", label: "Utilisateurs", icon: UserCog, adminOnly: true },
   // Paramètres : visible par TOUS (lecture) ; édition gatée dans la page
@@ -169,7 +172,7 @@ export function Sidebar({
           // (super-admin OU titulaire autorisé au module paie) — ils exposent
           // des données de paie (coûts, budget, simulateur). Aligné sur la garde
           // serveur de leurs pages (évite un item de menu qui redirige).
-          if (n.key === "remuneration" || n.key === "pilotage")
+          if (n.key === "remuneration" || n.key === "pilotage" || n.key === "bilan")
             return canViewPayroll;
           return !n.adminOnly || isAdmin || (n.manager === true && isManager);
         }).map((item) => {
