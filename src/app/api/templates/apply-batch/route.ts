@@ -62,8 +62,15 @@ async function applyBatch(req: Request) {
       { status: 400 }
     );
   }
-  const { s1TemplateId, s2TemplateId, weekStart, weeks, overwrite, deleteAbsences } =
-    parsed.data;
+  const {
+    s1TemplateId,
+    s2TemplateId,
+    weekStart,
+    weeks,
+    overwrite,
+    deleteAbsences,
+    fromDayOfWeek,
+  } = parsed.data;
 
   // Charge les gabarits sélectionnés (en parallèle) avec vérification d'ownership.
   const [s1Tpl, s2Tpl] = await Promise.all([
@@ -102,6 +109,14 @@ async function applyBatch(req: Request) {
   const onlyS1 = !!s1Tpl && !s2Tpl;
   const onlyS2 = !s1Tpl && !!s2Tpl;
   const both = !!s1Tpl && !!s2Tpl;
+
+  // Jour de départ par semaine cible : la SEMAINE AFFICHÉE (celle dont le lundi
+  // == baseMonday) démarre au jour affiché (fromDayOfWeek) ; toutes les autres
+  // semaines démarrent au lundi (jour 0). Sans fromDayOfWeek → 0 partout
+  // (comportement historique : semaine complète).
+  const fromDay = fromDayOfWeek ?? 0;
+  const startDayFor = (monday: Date): number =>
+    monday.getTime() === baseMonday.getTime() ? fromDay : 0;
 
   if (weeks === 1) {
     // « Cette semaine » : on applique sur la semaine AFFICHÉE, quelle que soit
@@ -211,8 +226,14 @@ async function applyBatch(req: Request) {
       d.setUTCDate(monday.getUTCDate() + i);
       return d;
     });
+    // Jour de départ de CETTE semaine (la semaine affichée peut démarrer plus
+    // tard que lundi ; les autres démarrent toujours à lundi).
+    const startDay = startDayFor(monday);
 
     for (const e of tpl.entries) {
+      // Semaine affichée appliquée « à partir du jour X » → on ignore les jours
+      // antérieurs (ex. lundi si l'admin regarde mardi).
+      if (e.dayOfWeek < startDay) continue;
       const status = activeEmpStatus.get(e.employeeId);
       if (!status) {
         skippedInactive++;
@@ -262,6 +283,12 @@ async function applyBatch(req: Request) {
         ? Array.from(new Set(data.map((d) => d.employeeId)))
         : Array.from(activeEmpStatus.keys());
     const firstMonday = targetMondays[0].monday;
+    // Borne basse RÉELLE de la plage effacée : si la 1ʳᵉ semaine démarre plus
+    // tard que lundi (jour affiché), on n'efface pas les jours antérieurs. La
+    // plage [deleteStart .. lastSaturday] est contiguë : 1ʳᵉ semaine à partir du
+    // jour affiché, semaines suivantes en entier.
+    const deleteStart = new Date(firstMonday);
+    deleteStart.setUTCDate(firstMonday.getUTCDate() + startDayFor(firstMonday));
     const lastMonday = targetMondays[targetMondays.length - 1].monday;
     const lastSaturday = new Date(lastMonday);
     lastSaturday.setUTCDate(lastMonday.getUTCDate() + 5);
@@ -276,7 +303,7 @@ async function applyBatch(req: Request) {
         where: {
           pharmacyId: session.user.pharmacyId,
           employeeId: { in: employeeIdsTouched },
-          date: { gte: firstMonday, lte: lastSaturday },
+          date: { gte: deleteStart, lte: lastSaturday },
           type: { in: typesToDelete },
         },
       });
@@ -290,7 +317,7 @@ async function applyBatch(req: Request) {
         where: {
           pharmacyId: session.user.pharmacyId,
           dateStart: { lte: lastSaturday },
-          dateEnd: { gte: firstMonday },
+          dateEnd: { gte: deleteStart },
         },
       });
     }

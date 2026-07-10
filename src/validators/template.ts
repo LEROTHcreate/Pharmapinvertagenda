@@ -104,6 +104,14 @@ export const applyBatchInput = z
      *  AbsenceRequest approuvées) sur la plage. Par défaut `false`, ce
      *  qui préserve les absences (un congé approuvé prime sur le gabarit). */
     deleteAbsences: z.boolean().default(false),
+    /**
+     * Jour de départ (0=Lun … 5=Sam) pour la SEMAINE AFFICHÉE uniquement.
+     * Depuis le planning, si l'admin regarde mardi, l'application ne touche
+     * QUE mardi→samedi de cette semaine (les jours déjà passés / faits ne sont
+     * pas réécrits). Les semaines SUIVANTES sont toujours appliquées en entier
+     * (lundi→samedi). Absent / 0 = comportement historique (semaine complète).
+     */
+    fromDayOfWeek: z.number().int().min(0).max(5).optional(),
   })
   .refine((v) => v.s1TemplateId || v.s2TemplateId, {
     message: "Au moins un gabarit (S1 ou S2) doit être sélectionné",

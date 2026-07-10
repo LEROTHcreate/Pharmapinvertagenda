@@ -46,6 +46,7 @@ export function ApplyTemplateButton({
   weekStart,
   onApplied,
   alwaysConfirm = false,
+  fromDayOfWeek,
 }: {
   weekStart: string;
   onApplied: () => void;
@@ -56,6 +57,13 @@ export function ApplyTemplateButton({
    * planning réel par surprise.
    */
   alwaysConfirm?: boolean;
+  /**
+   * Jour affiché dans le planning (0=Lun … 5=Sam). Si fourni et > 0, la SEMAINE
+   * AFFICHÉE est appliquée à partir de ce jour (les jours passés ne sont pas
+   * réécrits) ; les semaines suivantes restent complètes. Absent depuis la page
+   * Gabarits → semaine entière.
+   */
+  fromDayOfWeek?: number;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -89,6 +97,16 @@ export function ApplyTemplateButton({
     month: "long",
     year: "numeric",
   });
+
+  // Si on applique depuis le planning en regardant un jour > lundi, la semaine
+  // affichée démarrera à ce jour-là (les jours passés ne sont pas réécrits).
+  const partialFirstWeek = !!fromDayOfWeek && fromDayOfWeek > 0;
+  const fromDayLabel = (() => {
+    if (!partialFirstWeek) return null;
+    const d = new Date(`${weekStart}T12:00:00`);
+    d.setDate(d.getDate() + (fromDayOfWeek ?? 0));
+    return d.toLocaleDateString("fr-FR", { weekday: "long" });
+  })();
 
   // Toute modification des paramètres réinitialise l'étape de confirmation.
   useEffect(() => {
@@ -165,6 +183,9 @@ export function ApplyTemplateButton({
           weeks: duration,
           overwrite,
           deleteAbsences,
+          // Semaine affichée appliquée à partir du jour consulté (mardi → mardi).
+          // Seulement si > 0 (lundi = semaine complète, comportement par défaut).
+          fromDayOfWeek: fromDayOfWeek && fromDayOfWeek > 0 ? fromDayOfWeek : undefined,
         }),
       });
       const data = await res.json();
@@ -338,6 +359,17 @@ export function ApplyTemplateButton({
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
                   {durationHelp({ s1: !!s1Id, s2: !!s2Id, n: duration })}
                 </p>
+                {partialFirstWeek && (
+                  <p className="mt-1 flex items-start gap-1 text-[11px] text-violet-700 dark:text-violet-300">
+                    <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
+                    <span>
+                      Cette semaine : appliqué à partir de{" "}
+                      <strong className="capitalize">{fromDayLabel}</strong> (jour
+                      affiché) — les jours précédents ne sont pas touchés.
+                      {duration > 1 && " Les semaines suivantes sont appliquées en entier (dès le lundi)."}
+                    </span>
+                  </p>
+                )}
               </div>
 
               {/* ─── Overwrite ─── */}

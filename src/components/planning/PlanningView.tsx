@@ -1835,6 +1835,7 @@ export function PlanningView({
             {isAdmin && (
               <ApplyTemplateButton
                 weekStart={weekStart}
+                fromDayOfWeek={dayIndex}
                 onApplied={() => refetchWeek(weekStart)}
               />
             )}
