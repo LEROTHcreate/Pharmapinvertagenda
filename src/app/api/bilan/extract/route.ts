@@ -3,7 +3,8 @@ import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canViewPayroll } from "@/lib/payroll-permissions";
-import { extractBilanFigures } from "@/lib/bilan-ai";
+import { extractBilanFigures, extractBilanFiguresFromImage } from "@/lib/bilan-ai";
+import type { BilanData } from "@/lib/bilan-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,16 +46,27 @@ async function POST__impl(req: Request) {
       return NextResponse.json({ error: "Fichier trop volumineux (max 15 Mo)." }, { status: 400 });
     }
     sourceName = file.name;
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const lower = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || lower.endsWith(".pdf");
+    const isImage =
+      file.type.startsWith("image/") ||
+      /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/.test(lower);
+
+    // ── Image (photo/scan) → lecture directe par le modèle vision (OCR + extraction).
+    if (isImage) {
+      const b64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+      const mime = file.type && file.type.startsWith("image/") ? file.type : "image/jpeg";
+      const data: BilanData = await extractBilanFiguresFromImage(`data:${mime};base64,${b64}`);
+      return NextResponse.json({ data, sourceName, found: Object.keys(data).length, mode: "image" });
+    }
+
     if (!isPdf) {
       return NextResponse.json(
-        {
-          error:
-            "Seuls les PDF avec texte sont lus automatiquement. Pour une photo/scan image, colle le texte du bilan.",
-        },
+        { error: "Format non pris en charge. Dépose un PDF, une photo/scan (JPG, PNG…) ou colle le texte." },
         { status: 400 }
       );
     }
+    // ── PDF : on tente d'abord la couche texte (rapide, fiable si numérique).
     try {
       const { extractText, getDocumentProxy } = await import("unpdf");
       const buf = new Uint8Array(await file.arrayBuffer());
@@ -63,7 +75,16 @@ async function POST__impl(req: Request) {
       text = Array.isArray(t) ? t.join("\n") : t;
     } catch {
       return NextResponse.json(
-        { error: "Lecture du PDF impossible (peut-être un scan image sans texte). Colle le texte à la place." },
+        { error: "Lecture du PDF impossible. Fais une photo de la page ou colle le texte." },
+        { status: 422 }
+      );
+    }
+    if (text.trim().length < 20) {
+      return NextResponse.json(
+        {
+          error:
+            "Ce PDF ne contient pas de texte (scan image). Fais une photo/capture de la page et dépose-la comme image, ou colle le texte.",
+        },
         { status: 422 }
       );
     }
@@ -81,7 +102,7 @@ async function POST__impl(req: Request) {
   }
 
   const data = await extractBilanFigures(text);
-  return NextResponse.json({ data, sourceName, found: Object.keys(data).length });
+  return NextResponse.json({ data, sourceName, found: Object.keys(data).length, mode: "text" });
 }
 
 export const POST = withErrorHandling(POST__impl);

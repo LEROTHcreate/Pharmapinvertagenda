@@ -406,23 +406,37 @@ function ImportPanel({
   const [text, setText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File) {
+  async function handleFiles(files: File[]) {
+    if (files.length === 0) return;
     setBusy(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/bilan/extract", { method: "POST", body: form });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ tone: "error", title: "Import impossible", description: d.error ?? "Réessaie." });
-        return;
+      let total = 0;
+      let firstError = "";
+      for (const file of files) {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/bilan/extract", { method: "POST", body: form });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (!firstError) firstError = d.error ?? "Import impossible.";
+          continue;
+        }
+        onExtracted(d.data ?? {}, d.sourceName ?? file.name);
+        total += d.found ?? 0;
       }
-      onExtracted(d.data ?? {}, d.sourceName ?? file.name);
-      toast({
-        tone: d.found > 0 ? "success" : "info",
-        title: d.found > 0 ? `${d.found} valeur(s) détectée(s)` : "Aucune valeur détectée",
-        description: d.found > 0 ? "Vérifie et corrige si besoin." : "Colle le texte du bilan à la place.",
-      });
+      if (total > 0) {
+        toast({
+          tone: "success",
+          title: `${total} valeur(s) détectée(s)`,
+          description: files.length > 1 ? "Fusionnées depuis tes documents — vérifie et corrige." : "Vérifie et corrige si besoin.",
+        });
+      } else {
+        toast({
+          tone: firstError ? "error" : "info",
+          title: firstError ? "Import impossible" : "Aucune valeur détectée",
+          description: firstError || "Essaie une image plus nette, ou colle le texte du bilan.",
+        });
+      }
     } finally {
       setBusy(false);
     }
@@ -476,8 +490,7 @@ function ImportPanel({
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              const f = e.dataTransfer.files?.[0];
-              if (f) handleFile(f);
+              handleFiles(Array.from(e.dataTransfer.files ?? []));
             }}
             className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-violet-300 bg-card/50 px-4 py-6 text-center hover:border-violet-400 dark:border-violet-800"
           >
@@ -487,19 +500,19 @@ function ImportPanel({
               <FileText className="h-6 w-6 text-violet-500" />
             )}
             <p className="text-[13px] font-medium text-foreground">
-              Dépose un PDF de bilan comptable, ou clique pour choisir
+              Dépose un PDF ou une photo/scan du bilan, ou clique pour choisir
             </p>
             <p className="text-[11.5px] text-muted-foreground">
-              PDF avec texte · analysé automatiquement (max 15 Mo)
+              PDF · JPG · PNG… — lus automatiquement par l'IA (max 15 Mo)
             </p>
             <input
               ref={fileRef}
               type="file"
-              accept="application/pdf,.pdf"
+              accept="application/pdf,.pdf,image/*"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
+                handleFiles(Array.from(e.target.files ?? []));
                 e.target.value = "";
               }}
             />

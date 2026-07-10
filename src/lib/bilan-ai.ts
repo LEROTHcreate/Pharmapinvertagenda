@@ -3,6 +3,23 @@ import { BILAN_FIELDS, computeBilanRatios, type BilanData } from "@/lib/bilan-fi
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
+// Modèle VISION Groq (lecture d'images/photos de bilans). Surchargeable par env
+// si Groq fait évoluer son catalogue multimodal.
+const GROQ_VISION_MODEL =
+  process.env.GROQ_VISION_MODEL?.trim() || "meta-llama/llama-4-scout-17b-16e-instruct";
+
+/** Extrait le 1er objet JSON d'une chaîne (tolère un préambule / des ```). */
+function safeJsonObject(str: string): Record<string, unknown> | null {
+  const start = str.indexOf("{");
+  const end = str.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(str.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 /** Appel Groq (chat, JSON forcé). Renvoie l'objet parsé ou null. */
 async function callGroqJson(
   system: string,
@@ -53,30 +70,84 @@ async function callGroqJson(
  * Ne renvoie que des CLÉS connues et des nombres (en euros).
  */
 export async function extractBilanFigures(text: string): Promise<BilanData> {
-  const fieldList = BILAN_FIELDS.map((f) => `- ${f.key} : ${f.label}${f.hint ? ` (${f.hint})` : ""}`).join("\n");
-  const system = [
-    "Tu es un expert-comptable. On te donne le TEXTE brut d'un bilan comptable /",
-    "compte de résultat d'une pharmacie (français). Extrait les montants EN EUROS",
-    "(nombres entiers, sans espaces ni symbole) pour les postes ci-dessous.",
-    "Réponds UNIQUEMENT en JSON : un objet { cle: nombre }.",
-    "N'inclus une clé QUE si tu trouves une valeur fiable dans le texte. Ignore",
-    "les pourcentages et les totaux N-1 (prends l'exercice le plus récent). Ne",
-    "devine pas : en cas de doute, omets la clé.",
+  const parsed = await callGroqJson(extractionSystemPrompt(), text.slice(0, 12000), 1200);
+  return toBilanData(parsed);
+}
+
+/** Instruction commune décrivant les postes à extraire (texte + vision). */
+function extractionSystemPrompt(): string {
+  const fieldList = BILAN_FIELDS.map(
+    (f) => `- ${f.key} : ${f.label}${f.hint ? ` (${f.hint})` : ""}`
+  ).join("\n");
+  return [
+    "Tu es un expert-comptable. On te fournit un bilan comptable / compte de",
+    "résultat d'une pharmacie (français), sous forme de texte OU d'image (photo,",
+    "scan). Extrait les montants EN EUROS (nombres entiers, sans espaces ni",
+    "symbole) pour les postes ci-dessous.",
+    "Réponds UNIQUEMENT en JSON : un objet { cle: nombre }, sans autre texte.",
+    "N'inclus une clé QUE si tu lis une valeur fiable. Ignore les pourcentages et",
+    "les colonnes N-1 (prends l'exercice le plus récent). En cas de doute, omets.",
     "",
     "Postes attendus (clé : signification) :",
     fieldList,
   ].join("\n");
+}
 
-  const parsed = await callGroqJson(system, text.slice(0, 12000), 1200);
+/** Filtre un objet brut vers des clés/valeurs de bilan valides. */
+function toBilanData(parsed: Record<string, unknown> | null): BilanData {
   if (!parsed) return {};
   const out: BilanData = {};
   const validKeys = new Set(BILAN_FIELDS.map((f) => f.key));
   for (const [k, v] of Object.entries(parsed)) {
-    if (validKeys.has(k as never) && typeof v === "number" && Number.isFinite(v)) {
-      out[k as keyof BilanData] = Math.round(v);
+    const n = typeof v === "number" ? v : typeof v === "string" ? Number(v.replace(/[^\d.-]/g, "")) : NaN;
+    if (validKeys.has(k as never) && Number.isFinite(n)) {
+      out[k as keyof BilanData] = Math.round(n);
     }
   }
   return out;
+}
+
+/**
+ * Extrait les postes financiers depuis une IMAGE (photo/scan de bilan) via un
+ * modèle vision Groq — pas besoin d'OCR séparé, le modèle lit et structure.
+ * `dataUrl` = image encodée en data URL (data:image/...;base64,...).
+ */
+export async function extractBilanFiguresFromImage(dataUrl: string): Promise<BilanData> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return {};
+  let res: Response;
+  try {
+    res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: GROQ_VISION_MODEL,
+        temperature: 0.1,
+        max_tokens: 1200,
+        messages: [
+          { role: "system", content: extractionSystemPrompt() },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Lis ce document de bilan et renvoie le JSON des montants." },
+              { type: "image_url", image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+  } catch {
+    return {};
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error("[bilan-ai] Groq vision", res.status, detail.slice(0, 300));
+    return {};
+  }
+  const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const content = data.choices?.[0]?.message?.content;
+  return content ? toBilanData(safeJsonObject(content)) : {};
 }
 
 export type BilanRecommendation = {
