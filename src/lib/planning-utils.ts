@@ -179,6 +179,10 @@ export function computeOvertimeCells(
  *   (seuls les `counterIds` sont comptés).
  *
  * ECHANGE (texturé) = personne pas présente → toujours hors effectif.
+ *
+ * COMMANDE (réception/gestion des commandes) = travail de back-office : la
+ * personne n'est PAS au comptoir → exclue du décompte d'effectif, même pour un
+ * rôle comptoir (un préparateur qui gère les commandes ne sert pas les patients).
  */
 export function staffingForSlot(
   isoDate: string,
@@ -193,6 +197,8 @@ export function staffingForSlot(
   for (const id of ids) {
     const e = index.get(id)?.get(isoDate)?.get(timeSlot);
     if (e?.type !== ScheduleType.TASK || isNonWorkedTask(e.taskCode)) continue;
+    // COMMANDE = back-office, pas une présence comptoir → jamais compté.
+    if (e.taskCode === "COMMANDE") continue;
     // Rôle comptoir sur une vraie tâche → compte.
     // OU n'importe qui en REMPLACEMENT (il couvre le comptoir) → compte.
     if (counter.has(id) || e.taskCode === "REMPLACEMENT") count++;

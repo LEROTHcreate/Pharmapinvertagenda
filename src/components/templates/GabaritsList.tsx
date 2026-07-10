@@ -19,6 +19,7 @@ import {
   Star,
   Tag,
   Trash2,
+  UserCheck,
   Users,
   X,
 } from "lucide-react";
@@ -65,6 +66,15 @@ export type GabaritRow = {
   amplitude: { start: string; end: string } | null;
   /** Nombre de jours de la semaine réellement travaillés (0-6). */
   daysCovered: number;
+  /** Effectif comptoir minimum (règles planning) pendant les heures travaillées.
+   *  null = aucune présence comptoir dans le gabarit. */
+  staffingMin: number | null;
+  /** Effectif comptoir maximum simultané. */
+  staffingPeak: number;
+  /** Nombre de créneaux (heures travaillées) sous le seuil d'effectif. */
+  understaffedSlots: number;
+  /** Niveau de couleur du staffingMin vs seuil (ok/warning/critical). */
+  staffingLevel: "ok" | "warning" | "critical" | null;
 };
 
 const TYPES: WeekType[] = ["S1", "S2"];
@@ -78,11 +88,14 @@ export function GabaritsList({
   rows,
   currentWeekStart,
   employees = [],
+  minStaff = 4,
 }: {
   rows: GabaritRow[];
   currentWeekStart: string;
   /** Équipe active — pour l'import Excel (matching des prénoms + rôle/poste). */
   employees?: ImportDialogEmployee[];
+  /** Seuil d'effectif minimum de l'officine (tooltip effectif comptoir). */
+  minStaff?: number;
 }) {
   const router = useRouter();
   const [busyDelete, setBusyDelete] = useState<string | null>(null);
@@ -203,6 +216,7 @@ export function GabaritsList({
         <GabaritCard
           key={g.id}
           row={g}
+          minStaff={minStaff}
           editing={editingId === g.id}
           busyDelete={busyDelete === g.id}
           settingDefault={settingDefault === g.id}
@@ -489,6 +503,7 @@ export function GabaritsList({
 
 function GabaritCard({
   row,
+  minStaff,
   editing,
   busyDelete,
   settingDefault,
@@ -500,6 +515,7 @@ function GabaritCard({
   onToggleDefault,
 }: {
   row: GabaritRow;
+  minStaff: number;
   editing: boolean;
   busyDelete: boolean;
   settingDefault: boolean;
@@ -576,6 +592,31 @@ function GabaritCard({
                   >
                     <CalendarDays className="h-3 w-3" />
                     {row.daysCovered} j
+                  </span>
+                )}
+                {/* Effectif comptoir (règles planning : pharmaciens/préparateurs/
+                    étudiants sur une vraie tâche, REMPLACEMENT compté, ECHANGE &
+                    COMMANDE exclus) — min pendant les heures travaillées. */}
+                {row.staffingMin !== null && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium",
+                      row.staffingLevel === "ok" &&
+                        "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+                      row.staffingLevel === "warning" &&
+                        "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
+                      row.staffingLevel === "critical" &&
+                        "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300"
+                    )}
+                    title={`Effectif comptoir minimum pendant les heures travaillées : ${row.staffingMin} (pic ${row.staffingPeak}). Règles du planning (pharmaciens/préparateurs/étudiants, remplacements comptés, échange & commande exclus).${
+                      row.understaffedSlots > 0
+                        ? ` ${row.understaffedSlots} créneau${row.understaffedSlots > 1 ? "x" : ""} sous le seuil de ${minStaff}.`
+                        : ` Toujours ≥ ${minStaff}.`
+                    }`}
+                  >
+                    <UserCheck className="h-3 w-3" />
+                    Comptoir {row.staffingMin}
+                    {row.staffingPeak > row.staffingMin ? `–${row.staffingPeak}` : ""}
                   </span>
                 )}
               </div>
