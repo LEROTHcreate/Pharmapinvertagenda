@@ -663,11 +663,13 @@ export function TemplateView({
   );
 
   return (
-    <div className="p-2 md:px-4 md:py-2.5 space-y-2.5">
-      {/* En-tête */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Button asChild variant="outline" size="sm">
+    <div className="p-2 md:px-4 md:py-2 space-y-2">
+      {/* En-tête — TOUT sur une seule ligne, aligné verticalement (items-center) :
+          Retour · badge S1/S2 · « Édition » · nom · catégorie · note. Fini le
+          stack sur 2 lignes → moins de hauteur perdue, grille visible en entier. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+          <Button asChild variant="outline" size="sm" className="shrink-0">
             {/* La confirmation « modifs non enregistrées » est gérée globalement
                 par l'intercepteur de clics (garde-fou navigation ci-dessus). */}
             <Link href="/gabarits">
@@ -675,49 +677,40 @@ export function TemplateView({
               Retour
             </Link>
           </Button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
-                {weekType}
-              </span>
-              <span className="text-[11px] text-zinc-400">
-                {templateId ? "Édition" : "Nouveau gabarit"}
-              </span>
-            </div>
-            {/* Nom à gauche, puis Catégorie + Note CÔTE À CÔTE (paire 50/50) :
-                l'en-tête tient sur une ligne → un maximum de hauteur pour la
-                grille. Sur mobile, le nom passe au-dessus de la paire. */}
-            <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <Input
-                type="text"
-                placeholder={`Nom du gabarit (ex : ${weekType} standard)`}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={80}
-                className="h-8 w-auto min-w-[120px] shrink-0 sm:max-w-[200px] border-0 border-b border-zinc-200 bg-transparent px-0 text-lg font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-xl"
-              />
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <input
-                  type="text"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  maxLength={40}
-                  placeholder="Catégorie (ex : Vacances scolaires)"
-                  className="h-8 w-1/2 min-w-0 rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                />
-                <input
-                  type="text"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  maxLength={280}
-                  placeholder="Note (à quoi sert ce gabarit ?)"
-                  className="h-8 w-1/2 min-w-0 rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                />
-              </div>
-            </div>
+          <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+            {weekType}
+          </span>
+          <span className="hidden shrink-0 text-[11px] text-zinc-400 lg:inline">
+            {templateId ? "Édition" : "Nouveau gabarit"}
+          </span>
+          <Input
+            type="text"
+            placeholder={`Nom du gabarit (ex : ${weekType} standard)`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={80}
+            className="h-8 w-auto min-w-[100px] shrink-0 sm:max-w-[190px] border-0 border-b border-zinc-200 bg-transparent px-0 text-base font-bold tracking-tight shadow-none focus-visible:border-violet-500 focus-visible:ring-0 md:text-lg"
+          />
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              maxLength={40}
+              placeholder="Catégorie (ex : Vacances scolaires)"
+              className="h-8 w-1/2 min-w-0 rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            />
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={280}
+              placeholder="Note (à quoi sert ce gabarit ?)"
+              className="h-8 w-1/2 min-w-0 rounded-lg border border-border bg-card px-2.5 text-[12.5px] outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {/* Imprimer le gabarit (A4, nouvel onglet) : la semaine entière OU le
               seul jour affiché. Uniquement pour un gabarit ENREGISTRÉ (on
               imprime l'état en base). */}
