@@ -441,11 +441,19 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
             )}
             CSV
           </button>
-          {/* Export PDF — impression navigateur (Enregistrer au format PDF) */}
+          {/* Export PDF — rapport A4 dédié (paysage) : masse salariale + détail
+              par collaborateur + totaux, prêt à transmettre à l'expert-comptable.
+              Ouvre une page imprimable qui déclenche « Enregistrer en PDF ». */}
           <button
-            onClick={() => window.print()}
+            onClick={() =>
+              window.open(
+                `/remuneration/imprimer?month=${month}`,
+                "_blank",
+                "noopener"
+              )
+            }
             disabled={lines.length === 0}
-            title="Imprimer / enregistrer en PDF la synthèse du mois"
+            title="Rapport PDF du mois (récap + détail par collaborateur)"
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 h-9 text-[12.5px] font-medium text-foreground/80 hover:bg-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Printer className="h-3.5 w-3.5" />
