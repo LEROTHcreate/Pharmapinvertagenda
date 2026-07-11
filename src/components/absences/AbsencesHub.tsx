@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck, CalendarOff, ClipboardList } from "lucide-react";
+import { CalendarCheck, CalendarOff, ClipboardList, Palmtree } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
 import { isAdminLevel } from "@/lib/permissions";
@@ -11,8 +11,14 @@ import {
   CreneauxView,
   type EmployeeRef,
 } from "@/components/creneaux/CreneauxView";
+import { CpBalancesView } from "@/components/conges/CpBalancesView";
+import type { CpBalance } from "@/lib/conges-paies";
 
-export type AbsencesHubTab = "absences" | "disponibilites" | "creneaux";
+export type AbsencesHubTab =
+  | "absences"
+  | "disponibilites"
+  | "creneaux"
+  | "conges";
 
 type Props = {
   currentUser: { role: UserRole; employeeId: string | null };
@@ -21,14 +27,14 @@ type Props = {
   canManage: boolean;
   /** Collaborateurs actifs (pour l'onglet Créneaux à couvrir). */
   employees: EmployeeRef[];
+  /** Soldes CP — non nul UNIQUEMENT pour le titulaire (onglet réservé). */
+  cpData: CpBalance[] | null;
 };
 
 /**
- * Regroupe les trois facettes de « qui est là / pas là / à remplacer » dans une
- * même page à onglets :
- *  · Absences — demandes & validations ;
- *  · Disponibilités — souhaits / indisponibilités ;
- *  · Créneaux à couvrir — trous de planning à pourvoir (volontariat + assignation).
+ * Regroupe les facettes de « qui est là / pas là / à remplacer » dans une même
+ * page à onglets : Absences · Disponibilités · Créneaux à couvrir. Un 4ᵉ onglet
+ * « Congés (CP) » n'apparaît QUE pour le titulaire (soldes = donnée sensible).
  * Enchaînement naturel : une absence crée un trou → on le comble selon les dispos.
  */
 export function AbsencesHub({
@@ -36,9 +42,11 @@ export function AbsencesHub({
   initialTab = "absences",
   canManage,
   employees,
+  cpData,
 }: Props) {
   const [tab, setTab] = useState<AbsencesHubTab>(initialTab);
   const isAdmin = isAdminLevel(currentUser.role);
+  const showConges = cpData != null; // titulaire uniquement
 
   const tabs: {
     key: AbsencesHubTab;
@@ -48,6 +56,9 @@ export function AbsencesHub({
     { key: "absences", label: "Absences", icon: CalendarOff },
     { key: "disponibilites", label: "Disponibilités", icon: CalendarCheck },
     { key: "creneaux", label: "Créneaux à couvrir", icon: ClipboardList },
+    ...(showConges
+      ? [{ key: "conges" as const, label: "Congés (CP)", icon: Palmtree }]
+      : []),
   ];
 
   const subtitle =
@@ -57,9 +68,11 @@ export function AbsencesHub({
         : "Vos demandes d'absence et leur statut"
       : tab === "disponibilites"
         ? "Indisponibilités et préférences à prendre en compte dans le planning"
-        : canManage
-          ? "Signalez les trous à pourvoir et assignez les volontaires"
-          : "Positionnez-vous sur les créneaux à couvrir";
+        : tab === "conges"
+          ? "Soldes de congés payés par collaborateur (réservé au titulaire)"
+          : canManage
+            ? "Signalez les trous à pourvoir et assignez les volontaires"
+            : "Positionnez-vous sur les créneaux à couvrir";
 
   return (
     <div className="p-3 md:p-4 space-y-4">
@@ -101,6 +114,8 @@ export function AbsencesHub({
           isAdmin={isAdmin}
           hasEmployee={!!currentUser.employeeId}
         />
+      ) : tab === "conges" && cpData ? (
+        <CpBalancesView data={cpData} onGoToAbsences={() => setTab("absences")} />
       ) : (
         <CreneauxView
           canManage={canManage}

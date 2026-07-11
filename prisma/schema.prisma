@@ -346,6 +346,15 @@ model Employee {
   lastProfessionalInterviewDate DateTime? // Dernier entretien professionnel
   dpcLastDate                   DateTime? // Dernière action DPC (pharmacien)
 
+  // ─── Congés payés (compteur indicatif, visible titulaire uniquement) ──────
+  // Solde CP de RÉFÉRENCE (en jours) connu à `cpBalanceBaseDate` — permet de
+  // partir du vrai solde à l'adoption de l'app (les CP pris avant ne sont pas
+  // enregistrés). Ensuite : solde = base + 2,5 j/mois acquis − jours de congé
+  // pris depuis la date de base. Null = pas de base saisie (part de 0 à
+  // l'embauche, à ajuster).
+  cpBalanceBase     Float? // Solde CP de référence (jours)
+  cpBalanceBaseDate DateTime? @db.Date // Date à laquelle ce solde était exact
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
