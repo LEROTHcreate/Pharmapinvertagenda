@@ -9,6 +9,7 @@ import {
   toIsoDate,
   weekDays,
   weekTypeFor,
+  weekUnderstaffing,
 } from "./planning-utils";
 
 /** Fabrique une entry TASK minimale pour les tests d'effectif. */
@@ -156,6 +157,51 @@ describe("planning-utils", () => {
         task("prep1", "COMMANDE"), // préparateur qui gère les commandes → hors comptoir
       ]);
       expect(staffingForSlot(DATE, SLOT, counter, index, all)).toBe(1);
+    });
+  });
+
+  describe("weekUnderstaffing", () => {
+    const DATE = "2026-07-08";
+    /** Entrée TASK COMPTOIR sur un créneau précis. */
+    function taskAt(employeeId: string, slot: string): ScheduleEntryDTO {
+      return {
+        id: `${employeeId}-${slot}`,
+        employeeId,
+        date: DATE,
+        timeSlot: slot,
+        type: ScheduleType.TASK,
+        taskCode: "COMPTOIR" as ScheduleEntryDTO["taskCode"],
+        absenceCode: null,
+        notes: null,
+      };
+    }
+
+    it("remonte les créneaux sous le seuil dans l'enveloppe de travail", () => {
+      // ph1 09:00→10:00, ph2 seulement 09:00 → 09:30 tombe à 1 (seuil 2).
+      const index = indexEntriesByEmployee([
+        taskAt("ph1", "09:00"),
+        taskAt("ph1", "09:30"),
+        taskAt("ph2", "09:00"),
+      ]);
+      const res = weekUnderstaffing([DATE], ["ph1", "ph2"], index, 2);
+      expect(res).toHaveLength(1);
+      expect(res[0].dayIndex).toBe(0);
+      expect(res[0].holes).toEqual([
+        { from: "09:30", to: "10:00", level: "warning", minCount: 1 },
+      ]);
+    });
+
+    it("ignore un jour sans personne au comptoir (avant ouverture / fermé)", () => {
+      const index = indexEntriesByEmployee([]);
+      expect(weekUnderstaffing([DATE], ["ph1"], index, 2)).toEqual([]);
+    });
+
+    it("classe en critical quand bien en dessous du seuil", () => {
+      // Un seul présent, seuil 4 → 1 < 4-1 → critical.
+      const index = indexEntriesByEmployee([taskAt("ph1", "09:00")]);
+      const res = weekUnderstaffing([DATE], ["ph1"], index, 4);
+      expect(res[0].holes[0].level).toBe("critical");
+      expect(res[0].holes[0].minCount).toBe(1);
     });
   });
 });

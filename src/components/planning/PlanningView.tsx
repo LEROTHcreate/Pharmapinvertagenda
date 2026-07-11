@@ -15,7 +15,9 @@ import {
   toIsoDate,
   weekDays,
   weekTypeFor,
+  weekUnderstaffing,
 } from "@/lib/planning-utils";
+import { CoverageRecap } from "@/components/planning/CoverageRecap";
 import { TIME_SLOTS } from "@/types";
 import type { CellKey, ParsedCell as DnDParsedCell } from "@/components/planning/PlanningGrid";
 import { MyDayView } from "@/components/planning/MyDayView";
@@ -731,6 +733,28 @@ export function PlanningView({
   const weekKind = weekTypeFor(monday);
 
   const index = useMemo(() => indexEntriesByEmployee(entries), [entries]);
+
+  // ─── Récap couverture : créneaux en sous-effectif de la semaine ──────
+  // Effectif "comptoir" = pharmaciens + préparateurs + étudiants (cf. colonne
+  // EFF). Les REMPLACEMENT de n'importe quel rôle comptent aussi (allStaffIds).
+  const counterStaffIds = useMemo(
+    () =>
+      employees
+        .filter(
+          (e) =>
+            e.status === "PHARMACIEN" ||
+            e.status === "PREPARATEUR" ||
+            e.status === "ETUDIANT"
+        )
+        .map((e) => e.id),
+    [employees]
+  );
+  const allStaffIds = useMemo(() => employees.map((e) => e.id), [employees]);
+  const coverageDays = useMemo(
+    () =>
+      weekUnderstaffing(dayDates, counterStaffIds, index, minStaff, allStaffIds),
+    [dayDates, counterStaffIds, index, minStaff, allStaffIds]
+  );
 
   const overtimeCells = useMemo(
     () => computeOvertimeCells(employees, dayDates, TIME_SLOTS, index),
@@ -1967,6 +1991,18 @@ export function PlanningView({
         </div>
       </div>
 
+
+      {/* Récap couverture — créneaux en sous-effectif de la semaine, cliquables
+          pour sauter au jour. Admin uniquement (il construit le planning) ;
+          rien si tout est couvert. */}
+      {isAdmin && (
+        <CoverageRecap
+          days={coverageDays}
+          weekDayLabels={WEEK_DAYS}
+          minStaff={minStaff}
+          onJump={setDayIndex}
+        />
+      )}
 
       {/* Pastille festive « jour d'événement » — en TÊTE du jour sélectionné
           (visible, contrairement à un bandeau en bas). Animation discrète. */}

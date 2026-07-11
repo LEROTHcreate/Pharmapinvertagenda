@@ -216,6 +216,103 @@ export function staffingLevel(count: number, minStaff: number): StaffingLevel {
   return "critical";
 }
 
+/** Un « trou » de couverture : une plage horaire contiguë sous le seuil. */
+export type CoverageHole = {
+  from: string; // "HH:MM" début (inclus)
+  to: string; // "HH:MM" fin (exclus)
+  level: Exclude<StaffingLevel, "ok">; // pire niveau sur la plage
+  minCount: number; // effectif le plus bas sur la plage
+};
+
+/** Couverture d'un jour = ses trous (vide si tout est OK). */
+export type DayCoverage = {
+  date: string;
+  dayIndex: number; // 0=Lun … 5=Sam (position dans weekDates)
+  holes: CoverageHole[];
+};
+
+/** Fin d'un créneau "HH:MM" → +30 min (pour borner une plage). */
+function slotEnd(slot: string): string {
+  const [h, m] = slot.split(":").map(Number);
+  const t = h * 60 + m + 30;
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Récapitule les créneaux en SOUS-EFFECTIF de la semaine (calé sur la colonne
+ * EFF de la grille : effectif comptoir < seuil `minStaff`).
+ *
+ * Pour chaque jour, on ne considère que l'« enveloppe de travail » (du premier
+ * au dernier créneau où au moins une personne comptoir est en poste) → on évite
+ * les faux positifs avant l'ouverture / après la fermeture. Les créneaux sous
+ * le seuil y sont regroupés en plages contiguës, avec le pire niveau et
+ * l'effectif minimum de chaque plage.
+ *
+ * `allIds` (optionnel) : fait compter les REMPLACEMENT de n'importe quel rôle,
+ * comme `staffingForSlot`.
+ */
+export function weekUnderstaffing(
+  weekDates: string[],
+  counterIds: string[],
+  index: Map<string, EmployeeDayMap>,
+  minStaff: number,
+  allIds?: string[]
+): DayCoverage[] {
+  const out: DayCoverage[] = [];
+
+  weekDates.forEach((date, dayIndex) => {
+    // Effectif comptoir par créneau (1 seul passage), puis enveloppe de travail.
+    const counts = TIME_SLOTS.map((slot) =>
+      staffingForSlot(date, slot, counterIds, index, allIds)
+    );
+    let first = -1;
+    let last = -1;
+    for (let i = 0; i < counts.length; i++) {
+      if (counts[i] > 0) {
+        if (first === -1) first = i;
+        last = i;
+      }
+    }
+    if (first === -1) return; // journée sans personne au comptoir → ignorée
+
+    const holes: CoverageHole[] = [];
+    let cur:
+      | { fromIdx: number; toIdx: number; level: Exclude<StaffingLevel, "ok">; minCount: number }
+      | null = null;
+    for (let i = first; i <= last; i++) {
+      const level = staffingLevel(counts[i], minStaff);
+      if (level === "ok") {
+        if (cur) {
+          holes.push({
+            from: TIME_SLOTS[cur.fromIdx],
+            to: slotEnd(TIME_SLOTS[cur.toIdx]),
+            level: cur.level,
+            minCount: cur.minCount,
+          });
+          cur = null;
+        }
+      } else if (cur) {
+        cur.toIdx = i;
+        cur.minCount = Math.min(cur.minCount, counts[i]);
+        if (level === "critical") cur.level = "critical";
+      } else {
+        cur = { fromIdx: i, toIdx: i, level, minCount: counts[i] };
+      }
+    }
+    if (cur) {
+      holes.push({
+        from: TIME_SLOTS[cur.fromIdx],
+        to: slotEnd(TIME_SLOTS[cur.toIdx]),
+        level: cur.level,
+        minCount: cur.minCount,
+      });
+    }
+    if (holes.length > 0) out.push({ date, dayIndex, holes });
+  });
+
+  return out;
+}
+
 /** Retourne la valeur affichable d'une cellule (libellé) */
 export function cellLabel(
   type: ScheduleType,
