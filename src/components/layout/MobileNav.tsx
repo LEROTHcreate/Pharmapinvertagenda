@@ -92,6 +92,7 @@ export function MobileNav({
   pendingUsersCount = 0,
   pendingSwapsCount = 0,
   pendingAbsencesCount = 0,
+  openShiftsCount = 0,
   unreadSwapMessages = 0,
   unreadTextMessages = 0,
   canViewPayroll = false,
@@ -103,6 +104,8 @@ export function MobileNav({
   pendingUsersCount?: number;
   pendingSwapsCount?: number;
   pendingAbsencesCount?: number;
+  /** Créneaux à couvrir ouverts — badge visible par tous (appel à l'action). */
+  openShiftsCount?: number;
   unreadSwapMessages?: number;
   unreadTextMessages?: number;
   canViewPayroll?: boolean;
@@ -149,8 +152,8 @@ export function MobileNav({
                     ? pendingUsersCount
                     : item.key === "messages"
                       ? messagesBadgeCount
-                      : item.key === "absences" && isAdmin
-                        ? pendingAbsencesCount
+                      : item.key === "absences"
+                        ? openShiftsCount + (isAdmin ? pendingAbsencesCount : 0)
                         : 0;
                 const showBadge = badgeCount > 0;
                 const badgeTone =

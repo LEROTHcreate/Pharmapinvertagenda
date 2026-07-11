@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import {
   getMessagesUnreadCounts,
   getPayrollUserContext,
+  getOpenShiftsCount,
   getPendingAbsencesCount,
   getPendingSwapsCount,
   getPendingUsersCount,
@@ -74,6 +75,7 @@ export default async function DashboardLayout({
     pendingUsersCount,
     pendingSwapsCount,
     pendingAbsencesCount,
+    openShiftsCount,
     messagesUnread,
     payrollUserCtx,
   ] = await Promise.all([
@@ -87,6 +89,8 @@ export default async function DashboardLayout({
     isAdmin
       ? getPendingAbsencesCount(session.user.pharmacyId)
       : Promise.resolve(0),
+    // Non gaté admin : les collaborateurs voient aussi les créneaux ouverts.
+    getOpenShiftsCount(session.user.pharmacyId),
     getMessagesUnreadCounts(session.user.id),
     // Récupère le flag canAccessPayroll + status Employee pour décider
     // si l'item Rémunération doit apparaître dans la sidebar.
@@ -119,6 +123,7 @@ export default async function DashboardLayout({
         pendingUsersCount={pendingUsersCount}
         pendingSwapsCount={pendingSwapsCount}
         pendingAbsencesCount={pendingAbsencesCount}
+        openShiftsCount={openShiftsCount}
         unreadSwapMessages={messagesUnread.swap}
         unreadTextMessages={messagesUnread.text}
         canViewPayroll={canSeePayroll}
@@ -131,6 +136,7 @@ export default async function DashboardLayout({
         pendingUsersCount={pendingUsersCount}
         pendingSwapsCount={pendingSwapsCount}
         pendingAbsencesCount={pendingAbsencesCount}
+        openShiftsCount={openShiftsCount}
         unreadSwapMessages={messagesUnread.swap}
         unreadTextMessages={messagesUnread.text}
         canViewPayroll={canSeePayroll}
@@ -158,6 +164,7 @@ export default async function DashboardLayout({
       <MobileTabBar
         userRole={session.user.role}
         pendingAbsencesCount={pendingAbsencesCount}
+        openShiftsCount={openShiftsCount}
         pendingSwapsCount={pendingSwapsCount}
         unreadSwapMessages={messagesUnread.swap}
         unreadTextMessages={messagesUnread.text}

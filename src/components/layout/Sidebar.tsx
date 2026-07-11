@@ -93,6 +93,7 @@ export function Sidebar({
   pendingUsersCount = 0,
   pendingSwapsCount = 0,
   pendingAbsencesCount = 0,
+  openShiftsCount = 0,
   unreadSwapMessages = 0,
   unreadTextMessages = 0,
   canViewPayroll = false,
@@ -104,6 +105,8 @@ export function Sidebar({
   pendingUsersCount?: number;
   pendingSwapsCount?: number;
   pendingAbsencesCount?: number;
+  /** Créneaux à couvrir ouverts — badge visible par tous (appel à l'action). */
+  openShiftsCount?: number;
   /** Messages SWAP_REQUEST non lus reçus par l'utilisateur (badge rouge). */
   unreadSwapMessages?: number;
   /** Messages TEXT non lus reçus par l'utilisateur (badge bleu). */
@@ -185,8 +188,8 @@ export function Sidebar({
               ? pendingUsersCount
               : item.key === "messages"
                 ? messagesBadgeCount
-                : item.key === "absences" && isAdmin
-                  ? pendingAbsencesCount
+                : item.key === "absences"
+                  ? openShiftsCount + (isAdmin ? pendingAbsencesCount : 0)
                   : 0;
           const showBadge = badgeCount > 0;
           // Tonalité du badge : rouge pour les demandes d'absence (urgent),

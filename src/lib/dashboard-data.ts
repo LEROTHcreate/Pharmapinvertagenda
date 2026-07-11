@@ -62,6 +62,26 @@ export const getPendingAbsencesCount = (pharmacyId: string) =>
   )();
 
 /**
+ * Compte les créneaux à couvrir OUVERTS (non pourvus), aujourd'hui ou à venir.
+ * Sert de badge d'appel à l'action sur l'entrée « Absences & remplacements »
+ * (visible par tous — les collaborateurs se positionnent). Le résultat est un
+ * nombre ; la date « aujourd'hui » reste interne → pas de Date sérialisée en
+ * cache (cf. piège unstable_cache + Date).
+ */
+export const getOpenShiftsCount = (pharmacyId: string) =>
+  unstable_cache(
+    async () => {
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      return prisma.openShift.count({
+        where: { pharmacyId, status: "OPEN", date: { gte: today } },
+      });
+    },
+    ["open-shifts-count", pharmacyId],
+    { tags: [`open-shifts:${pharmacyId}`], revalidate: 30 }
+  )();
+
+/**
  * Compte les messages non lus reçus par l'utilisateur, ventilés par type.
  *  - `swap`  = messages SWAP_REQUEST (badge rouge — demande de créneau)
  *  - `text`  = messages TEXT (badge bleu — message classique)

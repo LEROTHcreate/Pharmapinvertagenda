@@ -51,12 +51,15 @@ const TABS: TabItem[] = [
 export function MobileTabBar({
   userRole,
   pendingAbsencesCount = 0,
+  openShiftsCount = 0,
   unreadSwapMessages = 0,
   unreadTextMessages = 0,
   pendingSwapsCount = 0,
 }: {
   userRole: UserRole;
   pendingAbsencesCount?: number;
+  /** Créneaux à couvrir ouverts — badge visible par tous (appel à l'action). */
+  openShiftsCount?: number;
   unreadSwapMessages?: number;
   unreadTextMessages?: number;
   pendingSwapsCount?: number;
@@ -94,9 +97,11 @@ export function MobileTabBar({
           //   - Absences (admin uniquement) : rouge — urgent à valider
           //   - Messages : rouge si swap pending, sinon bleu
           //   - Autres : pas de badge pour l'instant
+          // Absences & remplacements : créneaux ouverts (tous) + demandes
+          // d'absence à valider (admin) → un seul compteur d'actions à traiter.
           const badgeCount =
-            tab.key === "absences" && isAdmin
-              ? pendingAbsencesCount
+            tab.key === "absences"
+              ? openShiftsCount + (isAdmin ? pendingAbsencesCount : 0)
               : tab.key === "messages"
                 ? messagesBadge
                 : 0;
