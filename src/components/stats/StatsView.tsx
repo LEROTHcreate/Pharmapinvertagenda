@@ -358,6 +358,21 @@ export function StatsView({
     [employees]
   );
 
+  // Composition de l'équipe par métier : effectif + heures planifiées cumulées
+  // par statut (trié par heures décroissantes) → « où est le poids de l'équipe ».
+  const teamComposition = useMemo(() => {
+    const map = new Map<EmployeeStatus, { count: number; hours: number }>();
+    for (const e of employees) {
+      const cur = map.get(e.status) ?? { count: 0, hours: 0 };
+      cur.count += 1;
+      cur.hours += e.taskHours;
+      map.set(e.status, cur);
+    }
+    return Array.from(map.entries())
+      .map(([status, v]) => ({ status, ...v }))
+      .sort((a, b) => b.hours - a.hours);
+  }, [employees]);
+
   // ─── Points d'attention : highlights auto pour les dirigeants ──────
   // On surface les cas extrêmes utiles à un titulaire : qui accumule le plus
   // d'HS (coût + fatigue), qui est le plus sous-employé (optimisation), qui a
@@ -593,11 +608,21 @@ export function StatsView({
         </div>
       )}
 
-      {/* Répartition du temps par activité — où passe le temps de l'équipe.
-          Vue OPÉRATIONNELLE propre à Statistiques (ni Pilotage ni Rémunération
-          ne montrent la ventilation par poste). */}
-      {activityBreakdown.length > 0 && (
-        <ActivityBreakdownCard data={activityBreakdown} />
+      {/* Distributions équipe — où passe le temps (par activité) et où est le
+          poids de l'équipe (par métier). Vues OPÉRATIONNELLES propres à
+          Statistiques (ni Pilotage ni Rémunération ne les montrent). */}
+      {(activityBreakdown.length > 0 || teamComposition.length > 1) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {activityBreakdown.length > 0 && (
+            <ActivityBreakdownCard data={activityBreakdown} />
+          )}
+          {teamComposition.length > 1 && (
+            <TeamCompositionCard
+              data={teamComposition}
+              totalHours={totals.task}
+            />
+          )}
+        </div>
       )}
 
       {/* Évolution de la charge équipe (semaine par semaine) */}
@@ -944,6 +969,55 @@ function ActivityBreakdownCard({ data }: { data: ActivityStat[] }) {
               </div>
               <span className="w-24 shrink-0 text-right font-mono text-[12px] tabular-nums text-zinc-600">
                 {a.hours.toFixed(0)}h
+                <span className="ml-1 text-zinc-400">
+                  {Math.round(share * 100)}%
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Composition de l'équipe par métier : effectif + part des heures planifiées. */
+function TeamCompositionCard({
+  data,
+  totalHours,
+}: {
+  data: Array<{ status: EmployeeStatus; count: number; hours: number }>;
+  totalHours: number;
+}) {
+  const max = Math.max(...data.map((d) => d.hours), 1);
+  const totalCount = data.reduce((s, d) => s + d.count, 0);
+  return (
+    <div className="rounded-2xl border border-zinc-200/70 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-[12px] font-semibold uppercase tracking-wide text-zinc-500">
+          Composition de l&apos;équipe
+        </h2>
+        <span className="text-[11px] text-zinc-400">
+          {totalCount} collaborateur{totalCount > 1 ? "s" : ""} · part des heures
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {data.map((c) => {
+          const share = totalHours > 0 ? c.hours / totalHours : 0;
+          return (
+            <li key={c.status} className="flex items-center gap-3">
+              <span className="flex w-28 shrink-0 items-baseline gap-1 text-[12.5px] text-zinc-700">
+                <span className="truncate">{STATUS_LABELS[c.status]}</span>
+                <span className="text-[11px] text-zinc-400">({c.count})</span>
+              </span>
+              <div className="relative h-4 flex-1 overflow-hidden rounded-md bg-zinc-100">
+                <div
+                  className="h-full rounded-md bg-violet-500"
+                  style={{ width: `${Math.max(2, (c.hours / max) * 100)}%` }}
+                />
+              </div>
+              <span className="w-24 shrink-0 text-right font-mono text-[12px] tabular-nums text-zinc-600">
+                {c.hours.toFixed(0)}h
                 <span className="ml-1 text-zinc-400">
                   {Math.round(share * 100)}%
                 </span>
