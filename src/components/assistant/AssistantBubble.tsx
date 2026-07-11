@@ -8,6 +8,8 @@ import { HygieLogo } from "@/components/assistant/HygieLogo";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type PendingAction = { tool: string; args: Record<string, unknown>; summary: string };
+/** Bulle surgissante : un conseil simple ou un insight de données (avec lien). */
+type Nudge = { text: string; href?: string };
 
 /** Découpe en forme de croix (croix de pharmacie) — branches ~32% d'épaisseur. */
 const CROSS_CLIP =
@@ -48,9 +50,15 @@ export function AssistantBubble({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<PendingAction | null>(null);
-  // Petit conseil qui surgit tout seul de temps en temps (quand la bulle est
-  // fermée) puis disparaît après quelques secondes.
-  const [nudge, setNudge] = useState<string | null>(null);
+  // Petit conseil / insight qui surgit tout seul de temps en temps (quand la
+  // bulle est fermée) puis disparaît. Peut porter un lien (insight de données).
+  const [nudge, setNudge] = useState<Nudge | null>(null);
+  // Insights « proactifs » calculés côté serveur sur les vraies données de
+  // l'officine (sous-effectif, absences à valider, heures sup). Lus via un ref
+  // dans le planificateur de nudges pour éviter de re-souscrire le timer.
+  const [insights, setInsights] = useState<Nudge[]>([]);
+  const insightsRef = useRef<Nudge[]>([]);
+  insightsRef.current = insights;
   // Animation de clic sur la croix (tournoie + rebondit) avant d'ouvrir le chat.
   const [popping, setPopping] = useState(false);
   // Erreur réseau de la dernière requête (bannière + réessai), null sinon.
@@ -153,6 +161,23 @@ export function AssistantBubble({
     setTimeout(() => inputRef.current?.focus(), 50);
   }
 
+  // Charge les insights proactifs (admin) au montage. Best-effort : silencieux
+  // si l'utilisateur n'est pas admin (renvoie []) ou en cas d'échec.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/assistant/insights")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { insights?: Nudge[] }) => {
+        if (!cancelled && Array.isArray(data.insights)) setInsights(data.insights);
+      })
+      .catch(() => {
+        /* pas d'insights → la bulle garde ses conseils habituels */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Interactions aléatoires : quand la bulle est fermée, Hygie glisse parfois un
   // petit conseil/coup de pouce qui reste quelques secondes puis s'efface, à des
   // intervalles irréguliers (jamais spammé). Toute ouverture le masque.
@@ -166,18 +191,25 @@ export function AssistantBubble({
     let hideTimer: ReturnType<typeof setTimeout>;
     let nextTimer: ReturnType<typeof setTimeout>;
     let lastIdx = -1;
-    // Tire un conseil : ~1 fois sur 4 un message lié au MOMENT de la journée
-    // (calculé à l'affichage), sinon le répertoire — jamais deux fois le même
-    // d'affilée.
-    function pick(): string {
+    let insightCount = 0; // combien d'insights déjà surgis (rotation)
+    // Tire une bulle : PRIORITÉ aux insights de données (le 1er nudge + ~1/3 des
+    // suivants), sinon un message lié au moment de la journée (~1/4), sinon le
+    // répertoire de conseils — jamais deux fois le même conseil d'affilée.
+    function pick(): Nudge {
+      const ins = insightsRef.current;
+      if (ins.length > 0 && (insightCount === 0 || Math.random() < 0.35)) {
+        const n = ins[insightCount % ins.length];
+        insightCount++;
+        return n;
+      }
       if (Math.random() < 0.28) {
         const t = timeOfDayNudge();
-        if (t) return t;
+        if (t) return { text: t };
       }
       let i = Math.floor(Math.random() * tips.length);
       if (tips.length > 1 && i === lastIdx) i = (i + 1) % tips.length;
       lastIdx = i;
-      return tips[i];
+      return { text: tips[i] };
     }
     function schedule(first: boolean) {
       // 1er conseil ~20-40 s après l'arrivée, puis toutes les ~1,5-3 min.
@@ -365,18 +397,27 @@ export function AssistantBubble({
             <button
               type="button"
               onClick={() => {
+                const href = nudge.href;
                 setNudge(null);
-                setOpen(true);
+                // Insight avec lien → on emmène directement sur la page
+                // concernée (planning, absences…). Sinon on ouvre le chat.
+                if (href) goTo(href);
+                else setOpen(true);
               }}
               className="block w-full pr-4 text-left"
             >
               <span className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                <HygieLogo className="h-3 w-3" />
+                {nudge.href ? "💡" : <HygieLogo className="h-3 w-3" />}
                 Hygie
               </span>
               <span className="text-[12.5px] leading-snug text-foreground">
-                {nudge}
+                {nudge.text}
               </span>
+              {nudge.href && (
+                <span className="mt-0.5 block text-[10.5px] font-medium text-emerald-600 dark:text-emerald-400">
+                  Voir →
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -469,6 +510,36 @@ export function AssistantBubble({
               messages[messages.length - 1]?.role !== "assistant" && (
                 <Bubble role="assistant" content="…" typing onNavigate={goTo} />
               )}
+
+            {/* Insights proactifs « Cette semaine » — constats sur les vraies
+                données (sous-effectif, absences à valider, heures sup), chacun
+                cliquable → page concernée. Affichés en tête, avant les
+                suggestions, quand aucune conversation en cours. */}
+            {showSuggestions && insights.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <p className="flex items-center gap-1 px-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                  💡 Cette semaine
+                </p>
+                {insights.map((ins, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      if (ins.href) goTo(ins.href);
+                      else setOpen(true);
+                    }}
+                    className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-left text-[12.5px] text-emerald-900 transition-colors hover:bg-emerald-100 dark:border-emerald-800/60 dark:bg-emerald-950/25 dark:text-emerald-100 dark:hover:bg-emerald-900/40"
+                  >
+                    <span className="min-w-0 flex-1">{ins.text}</span>
+                    {ins.href && (
+                      <span className="mt-0.5 shrink-0 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                        →
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Suggestions de départ (cliquables) */}
             {showSuggestions && (
