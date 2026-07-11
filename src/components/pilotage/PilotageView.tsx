@@ -20,7 +20,11 @@ import type { HrDashboard, HrMonthStat } from "@/lib/hr-dashboard";
 import { HiringSimulator } from "@/components/payroll/HiringSimulator";
 import { BarTrend } from "@/components/charts/BarTrend";
 import { MarketGauge } from "@/components/market/MarketGauge";
-import { SECTOR_META } from "@/lib/sector-benchmark";
+import {
+  SECTOR_META,
+  SIZE_LABELS,
+  officineSizeFromAnnualRevenue,
+} from "@/lib/sector-benchmark";
 import { REFERENCE_META } from "@/lib/payroll-reference";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +94,10 @@ export function PilotageView({
     avgMonthlyRevenue != null && fte > 0.05
       ? (avgMonthlyRevenue * 12) / fte
       : null;
+  // Taille d'officine (CA HT annualisé) → repères marché à CA comparable.
+  const officineSize = officineSizeFromAnnualRevenue(
+    avgMonthlyRevenue != null ? avgMonthlyRevenue * 12 : null
+  );
   // Structure d'équipe : effectif actif, ETP moyen, coût employeur moyen / ETP.
   const headcount = employees.length;
   const avgMonthlyCost = mean(months.map((m) => m.cost));
@@ -202,7 +210,9 @@ export function PilotageView({
             </span>
           </h2>
           <span className="text-[11px] text-muted-foreground">
-            Secteur officine · indicatif
+            {officineSize
+              ? `${cap(SIZE_LABELS[officineSize])} · repères à CA comparable`
+              : "Secteur officine · indicatif"}
           </span>
         </div>
         <div className="grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
@@ -211,6 +221,7 @@ export function PilotageView({
             <MarketGauge
               sectorKey="payrollToRevenue"
               value={avgPayrollToRevenue}
+              size={officineSize}
             />
           ) : (
             <MarketPlaceholder
@@ -219,7 +230,11 @@ export function PilotageView({
             />
           )}
           {revenuePerFte != null ? (
-            <MarketGauge sectorKey="revenuePerFte" value={revenuePerFte} />
+            <MarketGauge
+              sectorKey="revenuePerFte"
+              value={revenuePerFte}
+              size={officineSize}
+            />
           ) : (
             <MarketPlaceholder
               label="Productivité (CA HT / ETP)"
@@ -539,6 +554,11 @@ function MarketPlaceholder({ label, hint }: { label: string; hint: string }) {
 function fmtSectorDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+}
+
+/** Met la première lettre en majuscule. */
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function CrossLink({ href, label }: { href: string; label: string }) {

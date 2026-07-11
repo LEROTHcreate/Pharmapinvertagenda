@@ -29,6 +29,7 @@ import { computeInsights, type Insight } from "@/lib/payroll-insights";
 import {
   REFERENCE_META,
   REGION_LABELS,
+  REGION_ORDER,
   type Region,
 } from "@/lib/payroll-reference";
 import { AbsenceImpactPanel } from "@/components/payroll/AbsenceImpactPanel";
@@ -92,13 +93,6 @@ function overtimePeriodsTitle(line: {
 }
 
 const REGION_KEY = "pp_payroll_region";
-const REGIONS: Region[] = [
-  "NATIONAL",
-  "IDF",
-  "GRANDE_METROPOLE",
-  "PROVINCE",
-  "RURAL",
-];
 
 type Totals = {
   grossEmployer: number;
@@ -385,7 +379,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
               aria-label="Région pour le benchmark"
               className="bg-transparent outline-none font-medium text-foreground/80 cursor-pointer pr-1"
             >
-              {REGIONS.map((r) => (
+              {REGION_ORDER.map((r) => (
                 <option key={r} value={r}>
                   {REGION_LABELS[r]}
                 </option>
@@ -519,6 +513,35 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
           <TotalCard label="Coût total officine" value={totals.totalEmployerCost} tone="violet" big />
         </div>
       )}
+
+      {/* Structure du coût officine — où va chaque euro : net perçu, charges
+          salariales, charges patronales. + coût horaire moyen. */}
+      {totals &&
+        (() => {
+          const net = Math.max(0, totals.netEstimated);
+          const salariales = Math.max(
+            0,
+            totals.grossEmployer - totals.netEstimated
+          );
+          const patronales = Math.max(0, totals.socialContributionsEmployer);
+          const sum = net + salariales + patronales;
+          if (sum <= 0) return null;
+          const workedHours = lines.reduce(
+            (s, l) =>
+              s + l.taskHoursRegular + l.overtimeHours25 + l.overtimeHours50,
+            0
+          );
+          const hourly =
+            workedHours > 0 ? totals.totalEmployerCost / workedHours : null;
+          return (
+            <CostStructureCard
+              net={net}
+              salariales={salariales}
+              patronales={patronales}
+              hourly={hourly}
+            />
+          );
+        })()}
 
       {/* Positionnement des rémunérations vs marché (agrégé) — angle propre à
           Rémunération : niveaux de paie individuels + conformité conventionnelle.
@@ -702,40 +725,54 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
         )}
       </div>
 
-      {/* Sous-totaux par statut (coût officine) — vue titulaire */}
-      {!loading && statusSubtotals.length > 1 && (
-        <div className="rounded-2xl border border-border bg-card p-3">
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-            Coût par statut
-          </h3>
-          <ul className="space-y-1">
-            {statusSubtotals.map((s) => (
-              <li
-                key={s.status}
-                className="flex items-center justify-between gap-3 text-[12.5px]"
-              >
-                <span className="text-zinc-700 dark:text-foreground">
-                  {STATUS_LABELS[s.status]}{" "}
-                  <span className="text-[11px] text-muted-foreground">
-                    ({s.count})
-                  </span>
-                </span>
-                <span className="flex items-baseline gap-3 font-mono tabular-nums">
-                  <span className="text-emerald-700" title="Net total du statut">
-                    net {fmt(s.net)}
-                  </span>
-                  <span
-                    className="font-semibold text-violet-900 dark:text-violet-300"
-                    title="Coût officine total du statut"
-                  >
-                    {fmt(s.cost)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Sous-totaux par statut (coût officine) — vue titulaire, avec barres
+          proportionnelles au coût pour repérer d'un coup d'œil les postes lourds. */}
+      {!loading &&
+        statusSubtotals.length > 1 &&
+        (() => {
+          const maxCost = Math.max(...statusSubtotals.map((s) => s.cost), 1);
+          return (
+            <div className="rounded-2xl border border-border bg-card p-3.5">
+              <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                Coût par statut
+              </h3>
+              <ul className="space-y-2.5">
+                {statusSubtotals.map((s) => (
+                  <li key={s.status} className="space-y-1">
+                    <div className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                      <span className="text-zinc-700 dark:text-foreground">
+                        {STATUS_LABELS[s.status]}{" "}
+                        <span className="text-[11px] text-muted-foreground">
+                          ({s.count})
+                        </span>
+                      </span>
+                      <span className="flex items-baseline gap-3 font-mono tabular-nums">
+                        <span
+                          className="text-emerald-700 dark:text-emerald-400"
+                          title="Net total du statut"
+                        >
+                          net {fmt(s.net)}
+                        </span>
+                        <span
+                          className="font-semibold text-violet-900 dark:text-violet-300"
+                          title="Coût officine total du statut"
+                        >
+                          {fmt(s.cost)}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-violet-500"
+                        style={{ width: `${(s.cost / maxCost) * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
 
       <p className="text-[11px] text-muted-foreground italic">
         * Maladie = heures payées par l'employeur après 3 jours de carence (sous condition d'ancienneté ≥ 1 an,
@@ -1019,6 +1056,89 @@ function Metric({ label, value, strong }: { label: string; value: string; strong
       <p className={cn("font-mono tabular-nums mt-0.5", strong ? "text-xl font-semibold text-violet-900" : "text-base text-zinc-800")}>
         {value}
       </p>
+    </div>
+  );
+}
+
+/* ─── Structure du coût officine (barre décomposée + coût horaire) ──── */
+function CostStructureCard({
+  net,
+  salariales,
+  patronales,
+  hourly,
+}: {
+  net: number;
+  salariales: number;
+  patronales: number;
+  hourly: number | null;
+}) {
+  const total = net + salariales + patronales;
+  const segs = [
+    { key: "net", label: "Net perçu", value: net, color: "#10b981" },
+    {
+      key: "sal",
+      label: "Charges salariales",
+      value: salariales,
+      color: "#f59e0b",
+    },
+    {
+      key: "pat",
+      label: "Charges patronales",
+      value: patronales,
+      color: "#8b5cf6",
+    },
+  ];
+  const pctOf = (v: number) => (total > 0 ? Math.round((v / total) * 100) : 0);
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3.5 sm:p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[13px] font-semibold text-zinc-800 dark:text-foreground">
+          Structure du coût officine
+        </h2>
+        {hourly != null && (
+          <span className="text-[12px] text-muted-foreground">
+            Coût horaire moyen :{" "}
+            <strong className="font-mono tabular-nums text-foreground">
+              {hourly.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} €/h
+            </strong>
+          </span>
+        )}
+      </div>
+      {/* Barre décomposée */}
+      <div className="flex h-5 w-full gap-[2px] overflow-hidden rounded-lg">
+        {segs.map((s) =>
+          s.value > 0 ? (
+            <div
+              key={s.key}
+              className="h-full first:rounded-l-lg last:rounded-r-lg"
+              style={{
+                width: `${(s.value / total) * 100}%`,
+                backgroundColor: s.color,
+              }}
+              title={`${s.label} : ${fmt(s.value)} (${pctOf(s.value)} %)`}
+            />
+          ) : null
+        )}
+      </div>
+      {/* Légende chiffrée */}
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {segs.map((s) => (
+          <div key={s.key} className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className="h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ backgroundColor: s.color }}
+            />
+            <span className="text-[12px] text-muted-foreground">{s.label}</span>
+            <span className="ml-auto font-mono text-[12.5px] tabular-nums text-foreground">
+              {fmt(s.value)}
+              <span className="ml-1 text-[11px] text-muted-foreground">
+                {pctOf(s.value)} %
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

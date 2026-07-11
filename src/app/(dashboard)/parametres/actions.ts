@@ -9,6 +9,7 @@ import { updatePharmacyInput, type UpdatePharmacyInput } from "@/validators/phar
 import { DASHBOARD_CACHE_TAGS } from "@/lib/dashboard-data";
 import { canEditPayroll, isSuperAdmin } from "@/lib/payroll-permissions";
 import { uploadImageIfDataUrl } from "@/lib/storage";
+import { REGION_ORDER } from "@/lib/payroll-reference";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -87,7 +88,7 @@ export async function updatePharmacy(input: UpdatePharmacyInput): Promise<Action
    en FRACTION (0.22 = 22 %). Null = on retombe sur les défauts du moteur. */
 const payrollSettingsInput = z.object({
   payrollRegion: z
-    .enum(["NATIONAL", "IDF", "GRANDE_METROPOLE", "PROVINCE", "RURAL"])
+    .enum(REGION_ORDER as unknown as [string, ...string[]])
     .nullable(),
   payrollContribEmployee: z.number().min(0).max(1).nullable(),
   payrollContribEmployer: z.number().min(0).max(1).nullable(),

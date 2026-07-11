@@ -18,6 +18,8 @@ import {
   Scale,
   ArrowUp,
   ArrowDown,
+  LineChart,
+  Download,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -78,6 +80,7 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [compare, setCompare] = useState(false);
+  const [evolution, setEvolution] = useState(false);
 
   async function load(selectId?: string) {
     const res = await fetch("/api/bilan");
@@ -117,6 +120,20 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
     setAnalysis(null);
     setDirty(true);
     setCompare(false);
+    setEvolution(false);
+  }
+
+  /** Ouvre le rapport imprimable/PDF (enregistre d'abord si besoin). */
+  async function exportReport() {
+    if (!draft) return;
+    const w = window.open("", "_blank");
+    let id = draft.id;
+    if (dirty || !id) id = await save();
+    if (!id) {
+      w?.close();
+      return;
+    }
+    if (w) w.location.href = `/bilan/imprimer?id=${id}`;
   }
 
   function setField(key: BilanFieldKey, value: string, which: Which) {
@@ -211,6 +228,17 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
     [draft]
   );
 
+  // Années couvertes (data N + dataPrev N-1 de tous les bilans) → active le
+  // graphe d'évolution dès qu'au moins 2 exercices sont disponibles.
+  const yearsCount = useMemo(() => {
+    const s = new Set<number>();
+    for (const b of bilans ?? []) {
+      if (Object.keys(b.data).length > 0) s.add(b.year);
+      if (b.dataPrev && Object.keys(b.dataPrev).length > 0) s.add(b.year - 1);
+    }
+    return s.size;
+  }, [bilans]);
+
   return (
     <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-6">
       {/* En-tête */}
@@ -228,10 +256,27 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {yearsCount >= 2 && (
+            <button
+              onClick={() => {
+                setEvolution((v) => !v);
+                setCompare(false);
+              }}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-medium transition-colors",
+                evolution ? "border-violet-300 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300" : "border-border text-foreground/80 hover:bg-muted/50"
+              )}
+            >
+              <LineChart className="h-4 w-4" /> Évolution
+            </button>
+          )}
           {bilans && bilans.length > 1 && (
             <button
-              onClick={() => setCompare((v) => !v)}
+              onClick={() => {
+                setCompare((v) => !v);
+                setEvolution(false);
+              }}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-medium transition-colors",
                 compare ? "border-violet-300 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300" : "border-border text-foreground/80 hover:bg-muted/50"
@@ -277,6 +322,9 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
         </div>
       )}
 
+      {/* Graphe d'évolution pluriannuel */}
+      {evolution && bilans && yearsCount >= 2 && <EvolutionChart bilans={bilans} />}
+
       {/* Comparaison des ratios */}
       {compare && bilans && bilans.length > 1 && <CompareTable bilans={bilans} />}
 
@@ -288,7 +336,8 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
       ) : !draft ? (
         <EmptyState onCreate={newBilan} />
       ) : (
-        !compare && (
+        !compare &&
+        !evolution && (
           <div className="grid gap-5 xl:grid-cols-3">
             {/* Colonne saisie / import */}
             <div className="space-y-5 xl:col-span-2">
@@ -296,6 +345,7 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
                 draft={draft}
                 setMeta={setMeta}
                 onSave={save}
+                onExport={exportReport}
                 onRemoveSelf={() => {
                   const b = bilans.find((x) => x.id === draft.id);
                   if (b) remove(b);
@@ -368,6 +418,7 @@ function MetaBar({
   draft,
   setMeta,
   onSave,
+  onExport,
   onRemoveSelf,
   saving,
   dirty,
@@ -375,10 +426,12 @@ function MetaBar({
   draft: Draft;
   setMeta: (p: Partial<Draft>) => void;
   onSave: () => void;
+  onExport: () => void;
   onRemoveSelf: () => void;
   saving: boolean;
   dirty: boolean;
 }) {
+  const hasData = Object.keys(draft.data).length > 0;
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4">
       <label className="flex flex-col gap-1 text-[12px] font-medium text-muted-foreground">
@@ -418,6 +471,14 @@ function MetaBar({
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {dirty ? "Enregistrer" : "Enregistré"}
+        </button>
+        <button
+          onClick={onExport}
+          disabled={saving || !hasData}
+          title="Exporter en PDF (postes, ratios et analyse)"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[13px] font-medium text-foreground/80 hover:bg-muted/50 disabled:opacity-50"
+        >
+          <Download className="h-4 w-4" /> Exporter PDF
         </button>
         {draft.id && (
           <button
@@ -853,6 +914,118 @@ function AnalysisPanel({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+type Metric = { key: string; label: string; type: "field" | "ratio" };
+const EVOLUTION_METRICS: Metric[] = [
+  { key: "chiffreAffaires", label: "CA HT", type: "field" },
+  { key: "margeCommerciale", label: "Marge comm.", type: "field" },
+  { key: "valeurAjoutee", label: "Valeur ajoutée", type: "field" },
+  { key: "ebe", label: "EBE", type: "field" },
+  { key: "resultatNet", label: "Résultat net", type: "field" },
+  { key: "tauxEbe", label: "Taux d'EBE", type: "ratio" },
+  { key: "tauxMarge", label: "Taux de marge", type: "ratio" },
+];
+
+function EvolutionChart({ bilans }: { bilans: Bilan[] }) {
+  const [metricKey, setMetricKey] = useState<string>("ebe");
+  const metric = EVOLUTION_METRICS.find((m) => m.key === metricKey) ?? EVOLUTION_METRICS[0];
+
+  // Timeline year → données (les valeurs « N » d'un bilan priment sur les « N-1 »).
+  const byYear = useMemo(() => {
+    const map = new Map<number, BilanData>();
+    for (const b of bilans) {
+      if (b.dataPrev && Object.keys(b.dataPrev).length > 0) {
+        const y = b.year - 1;
+        map.set(y, { ...b.dataPrev, ...(map.get(y) ?? {}) });
+      }
+    }
+    for (const b of bilans) {
+      if (Object.keys(b.data).length > 0) {
+        const y = b.year;
+        map.set(y, { ...(map.get(y) ?? {}), ...b.data });
+      }
+    }
+    return map;
+  }, [bilans]);
+
+  const years = useMemo(() => [...byYear.keys()].sort((a, b) => a - b), [byYear]);
+
+  const valueAt = (year: number): number | null => {
+    const d = byYear.get(year) ?? {};
+    if (metric.type === "field") {
+      const v = d[metric.key as BilanFieldKey];
+      return typeof v === "number" ? v : null;
+    }
+    const r = computeBilanRatios(d).find((x) => x.key === metric.key);
+    return r?.raw ?? null;
+  };
+  const fmt = (v: number) => (metric.type === "field" ? eur(v) : `${(v * 100).toFixed(1).replace(".", ",")} %`);
+
+  const points = years.map((y) => ({ year: y, value: valueAt(y) }));
+  const present = points.filter((p) => p.value != null) as { year: number; value: number }[];
+  const max = Math.max(1, ...present.map((p) => Math.abs(p.value)));
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[13px] font-semibold text-foreground">Évolution sur {years.length} exercices</h2>
+        <div className="flex flex-wrap gap-1">
+          {EVOLUTION_METRICS.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setMetricKey(m.key)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11.5px] font-medium transition-colors",
+                m.key === metricKey
+                  ? "border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+                  : "border-border text-muted-foreground hover:bg-muted/50"
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {present.length === 0 ? (
+        <p className="py-10 text-center text-[13px] text-muted-foreground">
+          Aucune donnée « {metric.label} » sur ces exercices.
+        </p>
+      ) : (
+        <div className="flex items-end gap-3 overflow-x-auto pb-1" style={{ minHeight: 200 }}>
+          {points.map((p) => {
+            const h = p.value != null ? Math.max(4, (Math.abs(p.value) / max) * 160) : 0;
+            const neg = (p.value ?? 0) < 0;
+            return (
+              <div key={p.year} className="flex min-w-[56px] flex-1 flex-col items-center justify-end gap-1">
+                <span className="text-[11px] font-semibold tabular-nums text-foreground">
+                  {p.value != null ? fmt(p.value) : "—"}
+                </span>
+                <div
+                  className={cn(
+                    "w-full max-w-[64px] rounded-t-md transition-all",
+                    p.value == null
+                      ? "bg-muted"
+                      : neg
+                        ? "bg-rose-400 dark:bg-rose-500"
+                        : "bg-violet-500 dark:bg-violet-500"
+                  )}
+                  style={{ height: p.value != null ? h : 4 }}
+                  title={`${p.year} : ${p.value != null ? fmt(p.value) : "—"}`}
+                />
+                <span className="text-[11px] font-medium tabular-nums text-muted-foreground">{p.year}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-muted-foreground/70">
+        Chaque barre = un exercice. Les données proviennent des bilans saisis (colonnes N et N-1
+        fusionnées sur l'axe des années).
+      </p>
     </div>
   );
 }
