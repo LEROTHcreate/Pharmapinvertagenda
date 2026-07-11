@@ -139,7 +139,7 @@ export function MobileNav({
                 // Rémunération ET Pilotage RH affichent des données de paie
                 // sensibles (coûts, budget, simulateur) → réservés aux titulaires
                 // autorisés au module paie, comme la garde de leurs pages.
-                if (n.key === "remuneration" || n.key === "pilotage" || n.key === "bilan")
+                if (n.key === "remuneration" || n.key === "pilotage")
                   return canViewPayroll;
                 return !n.adminOnly || isAdmin || (n.manager === true && isManager);
               }).map((item) => {

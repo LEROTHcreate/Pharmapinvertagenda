@@ -3,29 +3,18 @@ import { z } from "zod";
 import { withErrorHandling } from "@/lib/api-handler";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canViewPayroll } from "@/lib/payroll-permissions";
+import { isAdminLevel } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Vérifie que l'utilisateur a accès au module financier (titulaire autorisé). */
+/** Accès au module Bilan : titulaires (ADMIN) + créateur (CREATEUR) uniquement. */
 async function requireBilanAccess(userId: string) {
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      role: true,
-      employeeId: true,
-      canAccessPayroll: true,
-      employee: { select: { status: true } },
-    },
+    select: { role: true },
   });
-  if (!me) return false;
-  return canViewPayroll({
-    role: me.role,
-    employeeId: me.employeeId,
-    canAccessPayroll: me.canAccessPayroll,
-    employeeStatus: me.employee?.status ?? null,
-  });
+  return !!me && isAdminLevel(me.role);
 }
 
 const upsertSchema = z.object({

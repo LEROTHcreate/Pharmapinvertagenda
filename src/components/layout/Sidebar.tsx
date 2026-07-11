@@ -173,8 +173,9 @@ export function Sidebar({
           // (super-admin OU titulaire autorisé au module paie) — ils exposent
           // des données de paie (coûts, budget, simulateur). Aligné sur la garde
           // serveur de leurs pages (évite un item de menu qui redirige).
-          if (n.key === "remuneration" || n.key === "pilotage" || n.key === "bilan")
+          if (n.key === "remuneration" || n.key === "pilotage")
             return canViewPayroll;
+          // Bilan : titulaires (ADMIN) + créateur → règle adminOnly standard.
           return !n.adminOnly || isAdmin || (n.manager === true && isManager);
         }).map((item) => {
           const active = pathname.startsWith(item.href);

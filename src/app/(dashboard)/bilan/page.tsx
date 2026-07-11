@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canViewPayroll } from "@/lib/payroll-permissions";
+import { isAdminLevel } from "@/lib/permissions";
 import { BilanView } from "@/components/bilan/BilanView";
 
 export const dynamic = "force-dynamic";
@@ -17,23 +17,14 @@ export default async function BilanPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
+  // Réservé aux titulaires (ADMIN) + créateur (CREATEUR). Données financières
+  // sensibles → jamais accessibles aux manageurs/collaborateurs.
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: {
-      role: true,
-      employeeId: true,
-      canAccessPayroll: true,
-      employee: { select: { status: true } },
-    },
+    select: { role: true },
   });
   if (!me) redirect("/login");
-  const allowed = canViewPayroll({
-    role: me.role,
-    employeeId: me.employeeId,
-    canAccessPayroll: me.canAccessPayroll,
-    employeeStatus: me.employee?.status ?? null,
-  });
-  if (!allowed) redirect("/planning");
+  if (!isAdminLevel(me.role)) redirect("/planning");
 
   const pharmacy = await prisma.pharmacy.findUnique({
     where: { id: session.user.pharmacyId },

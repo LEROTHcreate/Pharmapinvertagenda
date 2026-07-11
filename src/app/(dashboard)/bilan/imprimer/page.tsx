@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canViewPayroll } from "@/lib/payroll-permissions";
+import { isAdminLevel } from "@/lib/permissions";
 import { BilanReportSheet } from "@/components/bilan/BilanReportSheet";
 import type { BilanData } from "@/lib/bilan-fields";
 
@@ -22,17 +22,9 @@ export default async function BilanReportPage({
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { role: true, employeeId: true, canAccessPayroll: true, employee: { select: { status: true } } },
+    select: { role: true },
   });
-  const allowed =
-    me &&
-    canViewPayroll({
-      role: me.role,
-      employeeId: me.employeeId,
-      canAccessPayroll: me.canAccessPayroll,
-      employeeStatus: me.employee?.status ?? null,
-    });
-  if (!allowed) redirect("/planning");
+  if (!me || !isAdminLevel(me.role)) redirect("/planning");
 
   const id = searchParams.id;
   if (!id) redirect("/bilan");

@@ -81,24 +81,34 @@ function extractionSystemPrompt(): string {
     (f) => `- ${f.key} : ${f.label}${f.hint ? ` (${f.hint})` : ""}`
   ).join("\n");
   return [
-    "Tu es un expert-comptable. On te fournit un bilan comptable / liasse fiscale",
-    "d'une pharmacie (français, souvent plusieurs pages), sous forme de texte OU",
-    "d'image. Extrait les montants EN EUROS (nombres entiers signés, sans espaces",
-    "ni symbole) pour les postes ci-dessous, pour l'exercice N (le plus récent) ET",
-    "pour l'exercice N-1 (colonne précédente) quand ils figurent.",
+    "Tu es un expert-comptable. On te fournit le TEXTE (ou l'image) d'une liasse",
+    "fiscale / bilan comptable d'une pharmacie (français, plusieurs pages). Extrait",
+    "les montants EN EUROS pour l'exercice N (le plus récent) ET pour l'exercice N-1",
+    "(la colonne précédente) pour les postes listés plus bas.",
     "",
-    "Priorité aux tableaux de SYNTHÈSE s'ils existent : « Analyse de votre",
-    "entreprise », « Soldes intermédiaires de gestion », « Bilan » (indicateurs",
-    "financiers), « Compte de résultat ». Ne prends PAS le détail compte par compte.",
-    "Pour le personnel : sépare bien les SALAIRES + charges sociales des SALARIÉS",
-    "(chargesPersonnel) de la RÉMUNÉRATION DES DIRIGEANTS / charges de l'exploitant",
-    "(remunerationDirigeants) quand le dossier les distingue.",
+    "IMPORTANT — le texte vient d'un PDF MULTI-COLONNES et peut être :",
+    "• DÉSORDONNÉ : une liste de libellés d'un côté, puis plus loin des blocs de",
+    "  nombres. Les nombres d'un même bloc suivent l'ordre des libellés.",
+    "• INLINE : « LIBELLÉ  montant_N  [%]  montant_N-1 » sur une même ligne.",
+    "Privilégie les lignes INLINE (les plus fiables) et les tableaux « Analyse de",
+    "votre entreprise », « Soldes intermédiaires de gestion », « Compte de résultat »,",
+    "« Bilan / indicateurs financiers ». La MÊME valeur revient souvent plusieurs",
+    "fois dans le document : sers-t'en pour fiabiliser tes mappings.",
     "",
-    "Réponds UNIQUEMENT en JSON, avec DEUX objets :",
+    "Format des nombres : ils contiennent des espaces (5 387 004) et parfois un signe",
+    "moins FINAL (2 127- = -2127). Renvoie des entiers signés, sans espaces ni symbole.",
+    "Les charges/coûts sont des montants positifs ; un résultat peut être négatif.",
+    "Pour le personnel : sépare les SALAIRES + charges sociales des SALARIÉS",
+    "(chargesPersonnel) de la RÉMUNÉRATION DES DIRIGEANTS / charges de l'exploitant /",
+    "gérants TNS (remunerationDirigeants) quand le dossier les distingue.",
+    "",
+    "Sois RAISONNABLEMENT AFFIRMATIF : remplis une clé dès que tu peux l'identifier",
+    "de façon plausible (n'omets que si vraiment introuvable). Ignore les colonnes de",
+    "pourcentage et d'écart.",
+    "",
+    "Réponds UNIQUEMENT en JSON, deux objets :",
     '{ "n": { cle: nombre, ... }, "n1": { cle: nombre, ... } }',
-    "n = exercice le plus récent, n1 = exercice précédent. N'inclus une clé QUE si",
-    "tu lis une valeur fiable ; en cas de doute, omets-la. Les charges/pertes sont",
-    "des nombres positifs (montants), les résultats peuvent être négatifs.",
+    "(n = exercice le plus récent, n1 = exercice précédent).",
     "",
     "Postes attendus (clé : signification) :",
     fieldList,
@@ -111,7 +121,18 @@ function toBilanData(parsed: unknown): BilanData {
   const out: BilanData = {};
   const validKeys = new Set(BILAN_FIELDS.map((f) => f.key));
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    const n = typeof v === "number" ? v : typeof v === "string" ? Number(v.replace(/[^\d.-]/g, "")) : NaN;
+    let n: number;
+    if (typeof v === "number") {
+      n = v;
+    } else if (typeof v === "string") {
+      // Format comptable FR : espaces + éventuel signe moins FINAL (« 2 127- »).
+      const s = v.trim();
+      const negTrailing = /-\s*$/.test(s);
+      const cleaned = s.replace(/[^\d.]/g, "");
+      n = cleaned === "" ? NaN : Number(cleaned) * (negTrailing || s.trimStart().startsWith("-") ? -1 : 1);
+    } else {
+      n = NaN;
+    }
     if (validKeys.has(k as never) && Number.isFinite(n)) {
       out[k as keyof BilanData] = Math.round(n);
     }
@@ -136,7 +157,9 @@ function toBothYears(parsed: Record<string, unknown> | null): ExtractedBilan {
  * ses tableaux de synthèse.
  */
 export async function extractBilanFigures(text: string): Promise<ExtractedBilan> {
-  const parsed = await callGroqJson(extractionSystemPrompt(), text.slice(0, 45000), 1600);
+  // Fenêtre large : dans une liasse, les tableaux de synthèse « inline » les plus
+  // exploitables (SIG détaillés, compte de résultat) sont profonds dans le PDF.
+  const parsed = await callGroqJson(extractionSystemPrompt(), text.slice(0, 120000), 1800);
   return toBothYears(parsed);
 }
 
