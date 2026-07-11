@@ -19,6 +19,60 @@ const GROQ_VISION_MODEL =
 export type ExtractedBilan = { data: BilanData; dataPrev: BilanData };
 
 /**
+ * Réduit le texte d'une liasse (souvent 60+ pages, 150k+ caractères) aux SEULES
+ * sections denses en montants exploitables, dans un budget de caractères serré.
+ *
+ * Pourquoi : le tier Groq est plafonné à ~12 000 tokens/minute. Envoyer toute la
+ * liasse (≈ 55 000 tokens) est rejeté (413). On cible donc, PAR PRIORITÉ, les
+ * tableaux qui contiennent l'essentiel N + N-1 (soldes intermédiaires de gestion
+ * détaillés, analyse de l'entreprise, compte de résultat, indicateurs bilan).
+ */
+function condenseBilanText(text: string, maxChars = 18000): string {
+  if (text.length <= maxChars) return text;
+  const upper = text.toUpperCase();
+  // Ordre = PRIORITÉ (le plus riche d'abord). `win` = caractères capturés depuis
+  // le titre de section.
+  const SECTIONS: Array<{ needles: string[]; win: number }> = [
+    {
+      needles: [
+        "DETAIL SOLDES INTERMEDIAIRES",
+        "DÉTAIL SOLDES INTERMÉDIAIRES",
+        "SOLDES INTERMEDIAIRES DE GESTION",
+        "SOLDES INTERMÉDIAIRES DE GESTION",
+      ],
+      win: 15000,
+    },
+    { needles: ["ANALYSE DE VOTRE ENTREPRISE"], win: 4500 },
+    { needles: ["COMPTE DE RESULTAT", "COMPTE DE RÉSULTAT"], win: 5000 },
+    { needles: ["INDICATEURS FINANCIERS", "BILAN AU ", "BILAN ACTIF", "BILAN PASSIF"], win: 3500 },
+  ];
+  let out = "";
+  const used: Array<[number, number]> = [];
+  for (const sec of SECTIONS) {
+    if (out.length >= maxChars) break;
+    let idx = -1;
+    for (const nd of sec.needles) {
+      const i = upper.indexOf(nd);
+      if (i >= 0) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) continue;
+    // Ignore si déjà couvert par une section précédente.
+    if (used.some(([s, e]) => idx >= s - 200 && idx < e)) continue;
+    const start = Math.max(0, idx - 100);
+    const end = Math.min(text.length, idx + sec.win);
+    const budget = maxChars - out.length;
+    out += text.slice(start, Math.min(end, start + budget)) + "\n\n";
+    used.push([start, end]);
+  }
+  // Repli : si aucune section reconnue, on prend le début (contient souvent la
+  // page « Analyse de votre entreprise »).
+  return out.length >= 200 ? out.slice(0, maxChars) : text.slice(0, maxChars);
+}
+
+/**
  * Parse la réponse JSON d'un modèle, en tolérant : un préambule / des ```,
  * et — si `sanitizeNumbers` — les nombres écrits AVEC ESPACES (« 5 387 004 »),
  * fréquents quand le modèle recopie des montants comptables. Ces espaces rendent
@@ -181,10 +235,11 @@ function toBothYears(parsed: Record<string, unknown> | null): ExtractedBilan {
  * ses tableaux de synthèse.
  */
 export async function extractBilanFigures(text: string): Promise<ExtractedBilan> {
-  // Fenêtre large : dans une liasse (60+ pages), les tableaux « inline » les plus
-  // exploitables (SIG détaillés, compte de résultat détaillé) sont profonds dans
-  // le PDF. Mode JSON non strict (le modèle recopie des montants avec espaces).
-  const parsed = await callGroqJson(extractionSystemPrompt(), text.slice(0, 200000), 1800, {
+  // On CONDENSE aux sections denses (budget serré) pour rester sous le plafond
+  // Groq (~12k tokens/min). Mode JSON non strict (le modèle recopie des montants
+  // avec espaces → sinon rejet 400/413).
+  const condensed = condenseBilanText(text);
+  const parsed = await callGroqJson(extractionSystemPrompt(), condensed, 1500, {
     jsonObjectMode: false,
   });
   return toBothYears(parsed);
