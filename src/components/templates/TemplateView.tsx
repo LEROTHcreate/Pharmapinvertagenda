@@ -36,7 +36,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { WEEK_DAYS, WEEK_DAYS_SHORT } from "@/types";
+import { WEEK_DAYS, WEEK_DAYS_SHORT, TIME_SLOTS } from "@/types";
 import type { EmployeeDTO, ScheduleEntryDTO } from "@/types";
 import { indexEntriesByEmployee } from "@/lib/planning-utils";
 import { PlanningGrid, type CellKey } from "@/components/planning/PlanningGrid";
@@ -662,6 +662,77 @@ export function TemplateView({
     [multiSelection]
   );
 
+  // ─── Ajustement à l'écran (comme le planning) ────────────────────────
+  // Sur desktop, on comprime la hauteur des lignes pour que TOUTE la journée
+  // (7h30-20h) tienne sans défilement, quelle que soit la taille de la fenêtre.
+  // Répliqué depuis PlanningView (même CSS `table[data-fit]`).
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  const [isDesktopWidth, setIsDesktopWidth] = useState(false);
+  const [fit, setFit] = useState<{ maxHeight: number; rowHeight: number } | null>(
+    null
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktopWidth(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!isDesktopWidth) {
+      setFit(null);
+      return;
+    }
+    function recompute() {
+      const el = gridWrapRef.current;
+      if (!el || typeof window === "undefined") return;
+      const top = el.getBoundingClientRect().top;
+      const bottomMargin = 10;
+      const maxHeight = Math.max(
+        200,
+        Math.round(window.innerHeight - top - bottomMargin)
+      );
+      const numSlots = TIME_SLOTS.length;
+      const thead = el.querySelector("thead");
+      const headerH = thead
+        ? Math.round(thead.getBoundingClientRect().height)
+        : 64;
+      // Déduit la ligne de fermeture « 20:00 » + une marge de sécurité pour
+      // que la grille tienne VRAIMENT sans scroll ; plancher 11 px (lisible).
+      const CLOSING_ROW_H = 16;
+      const SAFETY = 6;
+      const rowHeight = Math.min(
+        52,
+        Math.max(
+          11,
+          Math.floor((maxHeight - headerH - CLOSING_ROW_H - SAFETY) / numSlots)
+        )
+      );
+      // Guard anti-boucle : ne met à jour que si la valeur change vraiment.
+      setFit((prev) =>
+        prev && prev.maxHeight === maxHeight && prev.rowHeight === rowHeight
+          ? prev
+          : { maxHeight, rowHeight }
+      );
+    }
+    recompute();
+    window.addEventListener("resize", recompute);
+    let ro: ResizeObserver | null = null;
+    let raf = 0;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(recompute);
+      });
+      ro.observe(document.body);
+    }
+    return () => {
+      window.removeEventListener("resize", recompute);
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
+  }, [isDesktopWidth]);
+
   return (
     <div className="p-2 md:px-4 md:py-2 space-y-2">
       {/* En-tête — TOUT sur une seule ligne, aligné verticalement (items-center) :
@@ -902,18 +973,23 @@ export function TemplateView({
         </div>
       </div>
 
-      {/* Grille (réutilise PlanningGrid avec dates factices) */}
-      <PlanningGrid
-        employees={employees}
-        date={selectedDay}
-        weekDates={dayDates}
-        index={index}
-        canEdit={true}
-        minStaff={minStaff}
-        selection={multiSelection}
-        onSelectionChange={setMultiSelection}
-        onCellClick={handleCellClick}
-      />
+      {/* Grille (réutilise PlanningGrid avec dates factices). Le wrapper porte
+          le ref mesuré pour l'ajustement à l'écran (fit), comme le planning. */}
+      <div ref={gridWrapRef}>
+        <PlanningGrid
+          employees={employees}
+          date={selectedDay}
+          weekDates={dayDates}
+          index={index}
+          canEdit={true}
+          minStaff={minStaff}
+          selection={multiSelection}
+          onSelectionChange={setMultiSelection}
+          onCellClick={handleCellClick}
+          fitHeight={fit?.maxHeight}
+          fitRowHeight={fit?.rowHeight}
+        />
+      </div>
 
       {/* Modaux */}
       {selection && selectedEmployee && (
