@@ -18,24 +18,43 @@ const GROQ_VISION_MODEL =
 /** Jeu de valeurs des deux exercices extraits d'un document. */
 export type ExtractedBilan = { data: BilanData; dataPrev: BilanData };
 
-/** Extrait le 1er objet JSON d'une chaîne (tolère un préambule / des ```). */
-function safeJsonObject(str: string): Record<string, unknown> | null {
-  const start = str.indexOf("{");
-  const end = str.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
+/**
+ * Parse la réponse JSON d'un modèle, en tolérant : un préambule / des ```,
+ * et — si `sanitizeNumbers` — les nombres écrits AVEC ESPACES (« 5 387 004 »),
+ * fréquents quand le modèle recopie des montants comptables. Ces espaces rendent
+ * le JSON invalide : on les retire ENTRE CHIFFRES avant de parser.
+ */
+function parseModelJson(content: string | null | undefined, sanitizeNumbers: boolean): Record<string, unknown> | null {
+  if (!content) return null;
+  let s = content;
+  const a = s.indexOf("{");
+  const b = s.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  s = s.slice(a, b + 1);
+  if (sanitizeNumbers) {
+    // Retire les espaces (normaux, insécables, fins) placés entre deux chiffres.
+    s = s.replace(/(\d)[\s  ]+(?=\d)/g, "$1");
+  }
   try {
-    return JSON.parse(str.slice(start, end + 1)) as Record<string, unknown>;
+    return JSON.parse(s) as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
-/** Appel Groq (chat, JSON forcé). Renvoie l'objet parsé ou null. */
+/**
+ * Appel Groq (chat). Par défaut en mode JSON strict (`json_object`), sûr pour du
+ * texte. Pour l'EXTRACTION on désactive ce mode : le modèle recopie souvent les
+ * montants avec des espaces, ce que le validateur JSON strict de Groq REJETTE
+ * (HTTP 400) → on parse nous-mêmes en nettoyant les espaces (`sanitizeNumbers`).
+ */
 async function callGroqJson(
   system: string,
   user: string,
-  maxTokens = 1500
+  maxTokens = 1500,
+  opts: { jsonObjectMode?: boolean; sanitizeNumbers?: boolean } = {}
 ): Promise<Record<string, unknown> | null> {
+  const { jsonObjectMode = true, sanitizeNumbers = false } = opts;
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return null;
   let res: Response;
@@ -47,13 +66,13 @@ async function callGroqJson(
         model: GROQ_MODEL,
         temperature: 0.2,
         max_tokens: maxTokens,
-        response_format: { type: "json_object" },
+        ...(jsonObjectMode ? { response_format: { type: "json_object" } } : {}),
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
         ],
       }),
-      signal: AbortSignal.timeout(40000),
+      signal: AbortSignal.timeout(45000),
     });
   } catch {
     return null;
@@ -61,18 +80,23 @@ async function callGroqJson(
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     console.error("[bilan-ai] Groq", res.status, detail.slice(0, 300));
+    // Récupération : en mode JSON strict, un 400 « json_validate_failed » renvoie
+    // le brouillon dans `failed_generation` → on le nettoie et on le parse.
+    if (res.status === 400) {
+      try {
+        const gen = (JSON.parse(detail)?.error?.failed_generation as string) ?? "";
+        const recovered = parseModelJson(gen, true);
+        if (recovered) return recovered;
+      } catch {
+        /* ignore */
+      }
+    }
     return null;
   }
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) return null;
-  try {
-    return JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    return safeJsonObject(content);
-  }
+  return parseModelJson(data.choices?.[0]?.message?.content, sanitizeNumbers || !jsonObjectMode);
 }
 
 /** Instruction commune décrivant les postes à extraire (texte + vision). */
@@ -157,9 +181,12 @@ function toBothYears(parsed: Record<string, unknown> | null): ExtractedBilan {
  * ses tableaux de synthèse.
  */
 export async function extractBilanFigures(text: string): Promise<ExtractedBilan> {
-  // Fenêtre large : dans une liasse, les tableaux de synthèse « inline » les plus
-  // exploitables (SIG détaillés, compte de résultat) sont profonds dans le PDF.
-  const parsed = await callGroqJson(extractionSystemPrompt(), text.slice(0, 120000), 1800);
+  // Fenêtre large : dans une liasse (60+ pages), les tableaux « inline » les plus
+  // exploitables (SIG détaillés, compte de résultat détaillé) sont profonds dans
+  // le PDF. Mode JSON non strict (le modèle recopie des montants avec espaces).
+  const parsed = await callGroqJson(extractionSystemPrompt(), text.slice(0, 200000), 1800, {
+    jsonObjectMode: false,
+  });
   return toBothYears(parsed);
 }
 
@@ -202,8 +229,7 @@ export async function extractBilanFiguresFromImage(dataUrl: string): Promise<Ext
     return { data: {}, dataPrev: {} };
   }
   const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = data.choices?.[0]?.message?.content;
-  return toBothYears(content ? safeJsonObject(content) : null);
+  return toBothYears(parseModelJson(data.choices?.[0]?.message?.content, true));
 }
 
 export type BilanRecommendation = {
