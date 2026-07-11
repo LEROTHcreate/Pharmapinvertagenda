@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
+    "db:check": "node scripts/db-drift-check.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:pinvert": "tsx prisma/seed.ts pin-vert",
     "db:seed:template": "tsx prisma/seed.ts template",
