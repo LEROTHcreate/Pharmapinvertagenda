@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Vote,
   FileSpreadsheet,
+  ClipboardCheck,
   ChevronRight,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth-actions";
@@ -36,6 +37,7 @@ type NavKey =
   | "accueil"
   | "planning"
   | "infos"
+  | "checklist"
   | "gabarits"
   | "employes"
   | "absences"
@@ -64,6 +66,7 @@ const NAV: NavItem[] = [
   { key: "accueil", href: "/accueil", label: "Accueil", icon: Home },
   { key: "planning", href: "/planning", label: "Planning", icon: Calendar },
   { key: "infos", href: "/infos", label: "Infos & conseils", icon: Lightbulb },
+  { key: "checklist", href: "/checklist", label: "Checklist", icon: ClipboardCheck },
   { key: "gabarits", href: "/gabarits", label: "Gabarits", icon: LayoutTemplate, adminOnly: true, manager: true },
   // Équipe : visible par TOUS (lecture) ; édition (rôles, fiches, événements)
   // réservée aux titulaires, gatée dans la page + serveur.

@@ -192,6 +192,8 @@ model Pharmacy {
   polls              Poll[]
   trainings          Training[]
   bilans             Bilan[]
+  checklistItems     ChecklistItem[]
+  checklistChecks    ChecklistCheck[]
 
   @@map("pharmacies")
 }
@@ -911,4 +913,56 @@ model Bilan {
 
   @@index([pharmacyId, year])
   @@map("bilans")
+}
+
+/// Moment de la checklist quotidienne (ouverture ou fermeture de l'officine).
+enum ChecklistMoment {
+  OUVERTURE
+  FERMETURE
+}
+
+/// Élément de la checklist quotidienne (modèle configurable par officine) —
+/// ex. « Désactiver l'alarme », « Relever la température du frigo ».
+model ChecklistItem {
+  id        String          @id @default(cuid())
+  label     String
+  moment    ChecklistMoment
+  // Ordre d'affichage dans le moment concerné.
+  order     Int             @default(0)
+  // Demande un relevé chiffré/texte (ex. température) → champ note mis en avant.
+  needsNote Boolean         @default(false)
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  pharmacyId String
+  pharmacy   Pharmacy         @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  checks     ChecklistCheck[]
+
+  @@index([pharmacyId, moment, order])
+  @@map("checklist_items")
+}
+
+/// Coche d'un élément pour une DATE donnée — trace qui a validé et quand.
+/// Une ligne par (item, date) ; `done=false` = explicitement décoché.
+model ChecklistCheck {
+  id            String   @id @default(cuid())
+  date          DateTime @db.Date
+  done          Boolean  @default(true)
+  note          String? // Relevé (ex. « 4,2 °C ») ou remarque.
+  checkedById   String? // User ayant coché (référence libre).
+  checkedByName String? // Nom figé (affichage même si le compte change).
+  checkedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  itemId String
+  item   ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, date])
+  @@index([pharmacyId, date])
+  @@map("checklist_checks")
 }
