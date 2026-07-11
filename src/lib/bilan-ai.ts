@@ -2,6 +2,8 @@ import { GROQ_MODEL } from "@/lib/assistant/knowledge";
 import {
   BILAN_FIELDS,
   computeBilanRatios,
+  computeEbeRetraite,
+  computeValuation,
   fieldEvolution,
   type BilanData,
 } from "@/lib/bilan-fields";
@@ -240,7 +242,10 @@ export async function analyzeBilan(
     "Commente les TENDANCES marquantes (CA, marge, EBE, résultat, endettement,",
     "trésorerie, poids du personnel dirigeants inclus) et cherche les CAUSES",
     "plausibles d'une variation forte. Distingue la rémunération des dirigeants de",
-    "la masse salariale des salariés.",
+    "la masse salariale des salariés. Raisonne en EBE RETRAITÉ (EBE + rémunération",
+    "des dirigeants) pour juger la vraie rentabilité et la valeur du fonds ; si une",
+    "fourchette de valorisation est fournie, tu peux la citer en la présentant comme",
+    "indicative (à confirmer par un professionnel).",
     "",
     "Réponds UNIQUEMENT en JSON avec ce schéma exact :",
     "{",
@@ -260,6 +265,27 @@ export async function analyzeBilan(
     "N'invente aucun chiffre absent. Français, ton professionnel et clair.",
   ].join("\n");
 
+  // EBE retraité + valorisation indicative (méthode officine).
+  const ebeR = computeEbeRetraite(data);
+  const val = computeValuation(data);
+  const valuationLines: string[] = [];
+  if (ebeR != null) {
+    const ebeRPrev = hasPrev ? computeEbeRetraite(prev) : null;
+    valuationLines.push(
+      `EBE retraité (EBE + rémunération dirigeants): ${eur(ebeR)}${ebeRPrev != null ? ` (N-1: ${eur(ebeRPrev)})` : ""}`
+    );
+  }
+  if (val) {
+    valuationLines.push(
+      `Valorisation indicative du fonds — multiple EBE retraité (${val.ebeMultLow}×-${val.ebeMultHigh}×): ${eur(val.ebeLow)} à ${eur(val.ebeHigh)}`
+    );
+    if (val.caLow != null && val.caHigh != null) {
+      valuationLines.push(
+        `Valorisation indicative — % du CA HT (${Math.round(val.caPctLow * 100)}-${Math.round(val.caPctHigh * 100)}%): ${eur(val.caLow)} à ${eur(val.caHigh)}`
+      );
+    }
+  }
+
   const user = [
     `Bilan « ${ctx.label} » — exercice ${ctx.year} (${ctx.kind === "ESTIMATION" ? "estimation/prévisionnel" : "chiffres réels"})${hasPrev ? ", avec comparaison N-1" : ""}.`,
     "",
@@ -268,6 +294,7 @@ export async function analyzeBilan(
     "",
     "Ratios calculés :",
     ratioLines || "(non calculables)",
+    ...(valuationLines.length > 0 ? ["", "Rentabilité retraitée & valorisation :", ...valuationLines] : []),
   ].join("\n");
 
   const parsed = await callGroqJson(system, user, 2200);

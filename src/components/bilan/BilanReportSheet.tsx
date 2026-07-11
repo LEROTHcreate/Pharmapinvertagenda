@@ -6,6 +6,8 @@ import {
   BILAN_FIELDS,
   BILAN_GROUPS,
   computeBilanRatios,
+  computeEbeRetraite,
+  computeValuation,
   fieldEvolution,
   type BilanData,
 } from "@/lib/bilan-fields";
@@ -49,6 +51,8 @@ export function BilanReportSheet({
   const hasPrev = Object.keys(bilan.dataPrev).length > 0;
   const ratios = computeBilanRatios(bilan.data);
   const ratiosPrev = hasPrev ? computeBilanRatios(bilan.dataPrev) : [];
+  const ebeR = computeEbeRetraite(bilan.data);
+  const val = computeValuation(bilan.data);
   const a = bilan.analysis;
 
   return (
@@ -195,6 +199,44 @@ export function BilanReportSheet({
           </tbody>
         </table>
       </section>
+
+      {/* EBE retraité & valorisation */}
+      {ebeR != null && val && (
+        <section className="avoid-break mb-5 rounded-lg border border-emerald-300 bg-emerald-50 p-3">
+          <h2 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-800">
+            EBE retraité &amp; valorisation indicative
+          </h2>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11.5px]">
+            <span>EBE retraité (EBE + rémunération dirigeants)</span>
+            <span className="text-right font-bold tabular-nums">
+              {eur(ebeR)}
+              {val.tauxEbeRetraite != null && (
+                <span className="font-normal text-zinc-500"> · {(val.tauxEbeRetraite * 100).toFixed(1).replace(".", ",")} % du CA</span>
+              )}
+            </span>
+            <span>
+              Valeur du fonds — multiple d'EBE retraité ({val.ebeMultLow}×–{val.ebeMultHigh}×)
+            </span>
+            <span className="text-right font-semibold tabular-nums">
+              {eur(val.ebeLow)} — {eur(val.ebeHigh)}
+            </span>
+            {val.caLow != null && val.caHigh != null && (
+              <>
+                <span>
+                  Valeur du fonds — % du CA HT ({Math.round(val.caPctLow * 100)}–{Math.round(val.caPctHigh * 100)} %)
+                </span>
+                <span className="text-right font-semibold tabular-nums">
+                  {eur(val.caLow)} — {eur(val.caHigh)}
+                </span>
+              </>
+            )}
+          </div>
+          <p className="mt-1.5 text-[9.5px] text-emerald-800/70">
+            Estimation très indicative (hors immobilier, stock et trésorerie) ; une valorisation
+            réelle dépend de l'emplacement, du bail et de la patientèle, et requiert un professionnel.
+          </p>
+        </section>
+      )}
 
       {/* Forces & vigilance */}
       {a && (a.forces.length > 0 || a.vigilance.length > 0) && (

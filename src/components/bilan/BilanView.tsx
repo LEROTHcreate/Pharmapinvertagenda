@@ -27,6 +27,8 @@ import {
   BILAN_FIELDS,
   BILAN_GROUPS,
   computeBilanRatios,
+  computeEbeRetraite,
+  computeValuation,
   fieldEvolution,
   type BilanData,
   type BilanFieldKey,
@@ -374,6 +376,7 @@ export function BilanView({ pharmacyName }: { pharmacyName: string }) {
             {/* Colonne ratios + analyse */}
             <div className="space-y-5">
               <RatiosPanel ratios={ratios} ratiosPrev={ratiosPrev} />
+              <ValuationPanel data={draft.data} dataPrev={draft.dataPrev} />
               <AnalysisPanel
                 analysis={analysis}
                 analyzing={analyzing}
@@ -791,6 +794,88 @@ function RatiosPanel({ ratios, ratiosPrev }: { ratios: BilanRatio[]; ratiosPrev:
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function ValuationPanel({ data, dataPrev }: { data: BilanData; dataPrev: BilanData }) {
+  const val = computeValuation(data);
+  const ebeRPrev = computeEbeRetraite(dataPrev);
+  if (!val) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <h2 className="text-[13px] font-semibold text-foreground">EBE retraité &amp; valorisation</h2>
+        <p className="mt-2 text-[12.5px] text-muted-foreground">
+          Renseigne l'<strong>EBE</strong> et la <strong>rémunération des dirigeants</strong> pour
+          estimer l'EBE retraité et une valorisation indicative du fonds.
+        </p>
+      </div>
+    );
+  }
+  const range = (a: number, b: number) => `${eur(a)} — ${eur(b)}`;
+  let ebeTrend: "up" | "down" | null = null;
+  if (ebeRPrev != null && ebeRPrev !== 0) ebeTrend = val.ebeRetraite >= ebeRPrev ? "up" : "down";
+
+  return (
+    <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/30 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/10">
+      <h2 className="text-[13px] font-semibold text-foreground">EBE retraité &amp; valorisation</h2>
+
+      {/* EBE retraité */}
+      <div className="mt-2.5 flex items-baseline justify-between gap-2">
+        <span className="text-[12.5px] text-foreground/80" title="EBE + rémunération des dirigeants (charges TNS incluses)">
+          EBE retraité
+        </span>
+        <span className="flex items-center gap-1.5">
+          {ebeTrend && (
+            <span className={cn(ebeTrend === "up" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+              {ebeTrend === "up" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
+            </span>
+          )}
+          <span className="text-[15px] font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+            {eur(val.ebeRetraite)}
+          </span>
+        </span>
+      </div>
+      {val.tauxEbeRetraite != null && (
+        <p className="text-right text-[11px] text-muted-foreground">
+          {(val.tauxEbeRetraite * 100).toFixed(1).replace(".", ",")} % du CA
+          {ebeRPrev != null && <span className="text-muted-foreground/60"> · N-1 : {eur(ebeRPrev)}</span>}
+        </p>
+      )}
+
+      {/* Fourchettes de valorisation */}
+      <div className="mt-3 space-y-2 border-t border-emerald-200/50 pt-3 dark:border-emerald-900/40">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+          Valorisation indicative du fonds
+        </p>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[12px] text-foreground/80">
+            Multiple d'EBE retraité{" "}
+            <span className="text-muted-foreground/60">({val.ebeMultLow}×–{val.ebeMultHigh}×)</span>
+          </span>
+          <span className="text-[12.5px] font-semibold tabular-nums text-foreground">
+            {range(val.ebeLow, val.ebeHigh)}
+          </span>
+        </div>
+        {val.caLow != null && val.caHigh != null && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] text-foreground/80">
+              % du CA HT{" "}
+              <span className="text-muted-foreground/60">
+                ({Math.round(val.caPctLow * 100)}–{Math.round(val.caPctHigh * 100)} %)
+              </span>
+            </span>
+            <span className="text-[12.5px] font-semibold tabular-nums text-foreground">
+              {range(val.caLow, val.caHigh)}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <p className="mt-2.5 text-[10.5px] leading-snug text-muted-foreground/70">
+        Estimation très indicative (hors immobilier, stock et trésorerie). Une valorisation réelle
+        dépend de l'emplacement, du bail, de la patientèle et exige un professionnel.
+      </p>
     </div>
   );
 }

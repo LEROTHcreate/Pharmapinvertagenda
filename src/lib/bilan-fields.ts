@@ -260,6 +260,68 @@ export function computeBilanRatios(d: BilanData): BilanRatio[] {
   return out;
 }
 
+/**
+ * EBE RETRAITÉ (officine) = EBE + rémunération des dirigeants (rémunération +
+ * charges sociales TNS des titulaires). C'est la vraie mesure de rentabilité et
+ * la base de valorisation : elle neutralise le choix de rémunération du gérant.
+ * Renvoie null si l'EBE n'est pas connu.
+ */
+export function computeEbeRetraite(d: BilanData): number | null {
+  const ebe = num(d, "ebe");
+  if (ebe == null) return null;
+  return ebe + (num(d, "remunerationDirigeants") ?? 0);
+}
+
+export type BilanValuation = {
+  /** EBE retraité (€). */
+  ebeRetraite: number;
+  /** EBE retraité / CA (rentabilité « vraie »), null si CA inconnu. */
+  tauxEbeRetraite: number | null;
+  /** Fourchette de valorisation du fonds par multiple d'EBE retraité (€). */
+  ebeLow: number;
+  ebeMid: number;
+  ebeHigh: number;
+  /** Multiples appliqués (bas / médian / haut). */
+  ebeMultLow: number;
+  ebeMultHigh: number;
+  /** Fourchette par % du CA (méthode secondaire, sur CA HT), null si CA inconnu. */
+  caLow: number | null;
+  caMid: number | null;
+  caHigh: number | null;
+  caPctLow: number;
+  caPctHigh: number;
+};
+
+/**
+ * Valorisation INDICATIVE du fonds de commerce d'une officine, à partir de
+ * l'EBE retraité (méthode principale) et du CA (méthode secondaire). Fourchettes
+ * volontairement larges : une valorisation réelle exige un professionnel
+ * (expert-comptable / transactionnaire). Renvoie null si EBE inconnu.
+ */
+export function computeValuation(d: BilanData): BilanValuation | null {
+  const ebeR = computeEbeRetraite(d);
+  if (ebeR == null) return null;
+  const ca = num(d, "chiffreAffaires");
+  const ebeMultLow = 4.5;
+  const ebeMultHigh = 6.5;
+  const caPctLow = 0.75;
+  const caPctHigh = 0.95;
+  return {
+    ebeRetraite: ebeR,
+    tauxEbeRetraite: ca && ca !== 0 ? ebeR / ca : null,
+    ebeLow: ebeR * ebeMultLow,
+    ebeMid: ebeR * ((ebeMultLow + ebeMultHigh) / 2),
+    ebeHigh: ebeR * ebeMultHigh,
+    ebeMultLow,
+    ebeMultHigh,
+    caLow: ca != null ? ca * caPctLow : null,
+    caMid: ca != null ? ca * ((caPctLow + caPctHigh) / 2) : null,
+    caHigh: ca != null ? ca * caPctHigh : null,
+    caPctLow,
+    caPctHigh,
+  };
+}
+
 /** Variation relative N vs N-1 d'un poste (null si non calculable). */
 export function fieldEvolution(
   data: BilanData,
