@@ -29,6 +29,7 @@ import { computeInsights, type Insight } from "@/lib/payroll-insights";
 import {
   REFERENCE_META,
   REGION_LABELS,
+  REGION_ORDER,
   type Region,
 } from "@/lib/payroll-reference";
 import { AbsenceImpactPanel } from "@/components/payroll/AbsenceImpactPanel";
@@ -92,13 +93,6 @@ function overtimePeriodsTitle(line: {
 }
 
 const REGION_KEY = "pp_payroll_region";
-const REGIONS: Region[] = [
-  "NATIONAL",
-  "IDF",
-  "GRANDE_METROPOLE",
-  "PROVINCE",
-  "RURAL",
-];
 
 type Totals = {
   grossEmployer: number;
@@ -385,7 +379,7 @@ export function PayrollView({ initialMonth }: { initialMonth: string }) {
               aria-label="Région pour le benchmark"
               className="bg-transparent outline-none font-medium text-foreground/80 cursor-pointer pr-1"
             >
-              {REGIONS.map((r) => (
+              {REGION_ORDER.map((r) => (
                 <option key={r} value={r}>
                   {REGION_LABELS[r]}
                 </option>

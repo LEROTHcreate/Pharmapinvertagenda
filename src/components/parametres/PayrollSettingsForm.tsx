@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import { updatePayrollSettings } from "@/app/(dashboard)/parametres/actions";
 import { DEFAULT_PAYROLL_RATES } from "@/lib/payroll-calc";
-import { REGION_LABELS, type Region } from "@/lib/payroll-reference";
+import { REGION_LABELS, REGION_ORDER, type Region } from "@/lib/payroll-reference";
 
 type Initial = {
   region: Region;
@@ -19,14 +19,6 @@ type Initial = {
   /** Budget annuel de masse salariale (coût employeur total, €), null = non défini. */
   annualBudget: number | null;
 };
-
-const REGIONS: Region[] = [
-  "NATIONAL",
-  "IDF",
-  "GRANDE_METROPOLE",
-  "PROVINCE",
-  "RURAL",
-];
 
 const DEFAULT_EMPLOYEE_PCT = Math.round(
   DEFAULT_PAYROLL_RATES.socialContributionsEmployee * 100
@@ -127,7 +119,7 @@ export function PayrollSettingsForm({ initial }: { initial: Initial }) {
               disabled={isPending}
               className="h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm"
             >
-              {REGIONS.map((r) => (
+              {REGION_ORDER.map((r) => (
                 <option key={r} value={r}>
                   {REGION_LABELS[r]}
                 </option>

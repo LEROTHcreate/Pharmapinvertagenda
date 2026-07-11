@@ -199,26 +199,74 @@ export const SECTOR_AVERAGE_MONTHLY: Record<EmployeeStatus, number | null> = {
   LIVREUR: 1900,
 };
 
-/* ─── Multiplicateurs régionaux (indicatifs) ───────────────────────── */
-export type Region =
-  | "NATIONAL"
-  | "IDF"
-  | "GRANDE_METROPOLE"
-  | "PROVINCE"
-  | "RURAL";
+/* ─── Zones de référence régionales (indicatives) ───────────────────
+   Régions administratives françaises + Outre-mer, plus quelques tiers
+   « génériques » (grande métropole / province / rural) pour qui ne veut pas
+   préciser sa région. Les écarts sont des ORDRES DE GRANDEUR du marché officine
+   (coût de la vie / tension salariale), pas une norme légale. REGION_ORDER est
+   la source UNIQUE (UI + validation). */
+export const REGION_ORDER = [
+  "NATIONAL",
+  "IDF",
+  "AURA",
+  "BOURGOGNE_FRANCHE_COMTE",
+  "BRETAGNE",
+  "CENTRE_VAL_DE_LOIRE",
+  "CORSE",
+  "GRAND_EST",
+  "HAUTS_DE_FRANCE",
+  "NORMANDIE",
+  "NOUVELLE_AQUITAINE",
+  "OCCITANIE",
+  "PAYS_DE_LA_LOIRE",
+  "PACA",
+  "OUTRE_MER",
+  "GRANDE_METROPOLE",
+  "PROVINCE",
+  "RURAL",
+] as const;
+
+export type Region = (typeof REGION_ORDER)[number];
 
 export const REGION_LABELS: Record<Region, string> = {
-  NATIONAL: "National",
+  NATIONAL: "National (moyenne France)",
   IDF: "Île-de-France",
-  GRANDE_METROPOLE: "Grande métropole",
-  PROVINCE: "Province",
-  RURAL: "Zone rurale",
+  AURA: "Auvergne-Rhône-Alpes",
+  BOURGOGNE_FRANCHE_COMTE: "Bourgogne-Franche-Comté",
+  BRETAGNE: "Bretagne",
+  CENTRE_VAL_DE_LOIRE: "Centre-Val de Loire",
+  CORSE: "Corse",
+  GRAND_EST: "Grand Est",
+  HAUTS_DE_FRANCE: "Hauts-de-France",
+  NORMANDIE: "Normandie",
+  NOUVELLE_AQUITAINE: "Nouvelle-Aquitaine",
+  OCCITANIE: "Occitanie",
+  PAYS_DE_LA_LOIRE: "Pays de la Loire",
+  PACA: "Provence-Alpes-Côte d'Azur",
+  OUTRE_MER: "Outre-mer (DROM)",
+  GRANDE_METROPOLE: "Grande métropole (générique)",
+  PROVINCE: "Province (générique)",
+  RURAL: "Zone rurale (générique)",
 };
 
-/** Écart régional observé sur les salaires d'officine (indicatif). */
+/** Écart régional indicatif sur les salaires d'officine (ordre de grandeur
+ *  marché / coût de la vie ; base 1,00 = moyenne nationale). */
 export const REGION_MULTIPLIER: Record<Region, number> = {
   NATIONAL: 1.0,
   IDF: 1.12, // Paris/IDF : +10 à 15 % vs moyenne nationale
+  AURA: 1.04, // Auvergne-Rhône-Alpes (Lyon)
+  BOURGOGNE_FRANCHE_COMTE: 0.97,
+  BRETAGNE: 0.99,
+  CENTRE_VAL_DE_LOIRE: 0.99,
+  CORSE: 1.06, // Coût de la vie insulaire
+  GRAND_EST: 0.99,
+  HAUTS_DE_FRANCE: 0.98,
+  NORMANDIE: 0.98,
+  NOUVELLE_AQUITAINE: 1.0, // Bordeaux
+  OCCITANIE: 1.0, // Toulouse / Montpellier
+  PAYS_DE_LA_LOIRE: 1.0, // Nantes
+  PACA: 1.05, // Marseille / Nice / Côte d'Azur
+  OUTRE_MER: 1.1, // DROM — majoration vie chère
   GRANDE_METROPOLE: 1.04,
   PROVINCE: 0.98,
   RURAL: 0.96,
