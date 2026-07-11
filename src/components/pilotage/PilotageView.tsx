@@ -19,6 +19,7 @@ import {
 import type { HrDashboard, HrMonthStat } from "@/lib/hr-dashboard";
 import { HiringSimulator } from "@/components/payroll/HiringSimulator";
 import { BarTrend } from "@/components/charts/BarTrend";
+import { forecastTotal, type ForecastPoint } from "@/lib/payroll-forecast";
 import { MarketGauge } from "@/components/market/MarketGauge";
 import {
   SECTOR_META,
@@ -55,6 +56,7 @@ export function PilotageView({
   annualBudget,
   employerRate,
   currentMonth,
+  forecast,
 }: {
   data: HrDashboard;
   /** Budget annuel de masse salariale (réglé dans Paramètres) — null si absent. */
@@ -63,14 +65,19 @@ export function PilotageView({
   employerRate: number;
   /** Mois courant "YYYY-MM" (SMIC de référence du simulateur). */
   currentMonth: string;
+  /** Prévision de masse salariale sur 12 mois (fins de contrat incluses). */
+  forecast: ForecastPoint[];
 }) {
   const { months, employees } = data;
   const cur = months[months.length - 1];
   const prev = months[months.length - 2];
   const first = months[0];
-  // Projection annuelle = coût employeur du mois courant × 12 (hypothèse simple,
-  // cohérente avec Rémunération).
+  // Projection annuelle « naïve » = coût du mois courant × 12.
   const annualProjection = cur.cost * 12;
+  // Prévision fine sur 12 mois (décroche aux fins de contrat). Retenue comme
+  // projection de référence si disponible ; sinon repli sur × 12.
+  const annualForecast = forecastTotal(forecast);
+  const projected = annualForecast > 0 ? annualForecast : annualProjection;
 
   // ─── Agrégats « positionnement marché » (moyennes sur la période) ─────
   const revMonths = months.filter(
@@ -360,12 +367,59 @@ export function PilotageView({
           <Percent className="h-4 w-4 text-violet-500" /> Prévisionnel &amp; décisions
         </h2>
 
+        {/* Prévision de masse salariale sur 12 mois (fins de contrat incluses) */}
+        {annualForecast > 0 && (
+          <Panel
+            title="Masse salariale — prévision 12 mois"
+            hint="Coût employeur mensuel projeté ; décroche aux fins de contrat / départs connus."
+          >
+            <BarTrend
+              height={140}
+              series={[
+                { key: "cost", label: "Coût projeté", color: CHART.cost },
+              ]}
+              data={forecast.map((f) => ({
+                key: f.key,
+                label: f.label,
+                values: { cost: f.cost },
+              }))}
+              topLabel={(_, total) => `${Math.round(total / 1000)}k`}
+              format={(n) => eur(n)}
+            />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[12.5px]">
+              <span className="text-muted-foreground">
+                Total projeté 12 mois :{" "}
+                <strong className="tabular-nums text-foreground">
+                  {eur(annualForecast)}
+                </strong>
+              </span>
+              {Math.abs(annualForecast - annualProjection) >= 500 && (
+                <span className="text-muted-foreground">
+                  soit{" "}
+                  <strong
+                    className={cn(
+                      "tabular-nums",
+                      annualForecast < annualProjection
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-amber-600 dark:text-amber-400"
+                    )}
+                  >
+                    {annualForecast < annualProjection ? "−" : "+"}
+                    {eur(Math.abs(annualProjection - annualForecast))}
+                  </strong>{" "}
+                  vs coût du mois × 12 (fins de contrat)
+                </span>
+              )}
+            </div>
+          </Panel>
+        )}
+
         {/* Projection annuelle vs budget */}
         {annualBudget != null && annualBudget > 0 ? (
           (() => {
-            const over = annualProjection > annualBudget;
-            const ratio = Math.round((annualProjection / annualBudget) * 100);
-            const gap = Math.abs(annualProjection - annualBudget);
+            const over = projected > annualBudget;
+            const ratio = Math.round((projected / annualBudget) * 100);
+            const gap = Math.abs(projected - annualBudget);
             return (
               <div
                 className={cn(
@@ -384,7 +438,7 @@ export function PilotageView({
                   Budget annuel : {eur(annualBudget)}
                 </span>
                 <span className="tabular-nums">
-                  Projection {eur(annualProjection)} ·{" "}
+                  Projection {eur(projected)} ·{" "}
                   {over ? "dérive projetée" : "marge"} :{" "}
                   <strong>
                     {over ? "+" : "−"}
@@ -400,9 +454,10 @@ export function PilotageView({
             <span className="text-muted-foreground">
               Projection annuelle ≈{" "}
               <strong className="tabular-nums text-foreground">
-                {eur(annualProjection)}
-              </strong>{" "}
-              (coût du mois × 12). Définis un budget annuel pour suivre la dérive.
+                {eur(projected)}
+              </strong>
+              {annualForecast > 0 ? " (prévision 12 mois)" : " (coût du mois × 12)"}.
+              Définis un budget annuel pour suivre la dérive.
             </span>
             <Link
               href="/parametres"
@@ -417,7 +472,7 @@ export function PilotageView({
         <HiringSimulator
           month={currentMonth}
           employerRate={employerRate}
-          currentAnnualProjection={annualProjection}
+          currentAnnualProjection={projected}
           annualBudget={annualBudget}
         />
       </section>

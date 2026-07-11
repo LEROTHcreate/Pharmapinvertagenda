@@ -8,6 +8,7 @@ import {
   type PayrollRates,
 } from "@/lib/payroll-calc";
 import { computeHrDashboard, lastMonths } from "@/lib/hr-dashboard";
+import { forecastPayroll } from "@/lib/payroll-forecast";
 import { toIsoDate } from "@/lib/planning-utils";
 import type { ScheduleEntryDTO } from "@/types";
 import { PilotageView } from "@/components/pilotage/PilotageView";
@@ -62,6 +63,8 @@ export default async function PilotagePage() {
         monthlyGrossSalary: true,
         coefficient: true,
         hireDate: true,
+        contractEndDate: true,
+        departureDate: true,
       },
     }),
     prisma.scheduleEntry.findMany({
@@ -139,12 +142,37 @@ export default async function PilotagePage() {
   // simulateur d'embauche.
   const cur = data.months[data.months.length - 1];
 
+  // Prévision de masse salariale sur 12 mois : run-rate mensuel par salarié
+  // (moyenne récente) qui décroche aux fins de contrat / départs datés.
+  const endDateById = new Map(
+    employees.map((e) => {
+      const ends = [e.contractEndDate, e.departureDate].filter(
+        (d): d is Date => d != null
+      );
+      const end = ends.length
+        ? new Date(Math.min(...ends.map((d) => d.getTime())))
+        : null;
+      return [e.id, end] as const;
+    })
+  );
+  const nMonths = months.length || 1;
+  const forecastEmployees = data.employees.map((e) => ({
+    monthlyCost: e.cost / nMonths,
+    endDate: endDateById.get(e.id) ?? null,
+  }));
+  const nowRef = new Date();
+  const forecastFrom = new Date(
+    Date.UTC(nowRef.getFullYear(), nowRef.getMonth() + 1, 1)
+  );
+  const forecast = forecastPayroll(forecastEmployees, forecastFrom, 12);
+
   return (
     <PilotageView
       data={data}
       annualBudget={pharmacy?.payrollAnnualBudget ?? null}
       employerRate={rates.socialContributionsEmployer}
       currentMonth={cur.key}
+      forecast={forecast}
     />
   );
 }
